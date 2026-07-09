@@ -1,0 +1,21 @@
+{
+  "name": "@daypilot/operator-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "tsc && vite build",
+    "lint": "echo placeholder lint",
+    "test": "echo placeholder test"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "typescript": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "@daypilot/ui-bridge": "workspace:*"
+  },
+  "devDependencies": {}
+}

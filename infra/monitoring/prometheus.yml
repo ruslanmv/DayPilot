@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: daypilot-api-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api-gateway:8080"]
+  - job_name: daypilot-orchestrator
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["orchestrator:8002"]
+  - job_name: daypilot-knowledge
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["knowledge-service:8004"]
+  - job_name: daypilot-model-serving
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["model-serving:8005"]
+  - job_name: daypilot-voice-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["voice-gateway:8006"]
+  - job_name: daypilot-observability
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["observability:8010"]

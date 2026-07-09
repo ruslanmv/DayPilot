@@ -1,0 +1,18 @@
+{
+  "name": "@daypilot/ui-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "scripts": {
+    "build": "tsc --emitDeclarationOnly false",
+    "lint": "echo placeholder lint",
+    "test": "echo placeholder test"
+  },
+  "dependencies": {
+    "typescript": "latest",
+    "react": "latest",
+    "@daypilot/shared-types": "workspace:*"
+  }
+}

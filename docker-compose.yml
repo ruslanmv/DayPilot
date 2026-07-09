@@ -1,0 +1,129 @@
+name: daypilot-enterprise
+
+x-python-service: &python-service
+  env_file: .env.example
+  restart: unless-stopped
+  volumes:
+    - ./local_data:/app/local_data
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  api-gateway:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: infra/docker/api-gateway.Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      orchestrator:
+        condition: service_started
+      mcp-host:
+        condition: service_started
+      knowledge-service:
+        condition: service_started
+      model-serving:
+        condition: service_started
+      voice-gateway:
+        condition: service_started
+
+  orchestrator:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: infra/docker/orchestrator.Dockerfile
+    ports:
+      - "8002:8002"
+
+  mcp-host:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: infra/docker/mcp-host.Dockerfile
+    ports:
+      - "8003:8003"
+
+  knowledge-service:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: infra/docker/knowledge-service.Dockerfile
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  model-serving:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: infra/docker/model-serving.Dockerfile
+    ports:
+      - "8005:8005"
+    profiles: ["runtime"]
+
+  voice-gateway:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: infra/docker/voice-gateway.Dockerfile
+    ports:
+      - "8006:8006"
+    profiles: ["runtime"]
+
+  observability:
+    <<: *python-service
+    build:
+      context: .
+      dockerfile: infra/docker/observability.Dockerfile
+    ports:
+      - "8010:8010"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-daypilot}
+      POSTGRES_USER: ${POSTGRES_USER:-daypilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-daypilot}
+    ports:
+      - "5432:5432"
+    volumes:
+      - daypilot_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-daypilot} -d ${POSTGRES_DB:-daypilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  qdrant:
+    image: qdrant/qdrant:v1.11.0
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - daypilot_qdrant:/qdrant/storage
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    profiles: ["observability"]
+
+volumes:
+  daypilot_postgres:
+  daypilot_qdrant:

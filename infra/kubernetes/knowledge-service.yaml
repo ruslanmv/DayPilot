@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: knowledge-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: knowledge-service
+  template:
+    metadata:
+      labels:
+        app: knowledge-service
+    spec:
+      containers:
+        - name: knowledge-service
+          image: ghcr.io/ruslanmv/daypilot-knowledge-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8004
+          envFrom:
+            - configMapRef:
+                name: daypilot-config
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8004
+            initialDelaySeconds: 20
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: knowledge-service
+spec:
+  selector:
+    app: knowledge-service
+  ports:
+    - port: 8004
+      targetPort: 8004

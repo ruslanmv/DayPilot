@@ -1,0 +1,15 @@
+.env
+.env.local
+.venv/
+node_modules/
+dist/
+build/
+target/
+__pycache__/
+*.pyc
+.DS_Store
+local_data/sqlite/*.db
+local_data/vector_index/*
+local_data/documents/*
+local_data/traces/*
+!local_data/**/.gitkeep

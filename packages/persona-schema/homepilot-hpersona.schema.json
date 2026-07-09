@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://daypilot.ruslanmv.com/schemas/homepilot-hpersona.schema.json",
+  "title": "HomePilot .hpersona Manifest for DayPilot Import",
+  "type": "object",
+  "required": [
+    "kind",
+    "schema_version",
+    "package_version",
+    "project_type",
+    "content_rating",
+    "contents"
+  ],
+  "properties": {
+    "kind": {
+      "const": "homepilot.persona"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "package_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "project_type": {
+      "const": "persona"
+    },
+    "source_homepilot_version": {
+      "type": "string"
+    },
+    "content_rating": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "contents": {
+      "type": "object"
+    },
+    "capability_summary": {
+      "type": "object"
+    }
+  }
+}

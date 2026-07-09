@@ -1,0 +1,18 @@
+@import "../../../packages/ui-bridge/src/space-bridge.css";
+
+:root {
+  color-scheme: dark;
+  background: #080c14;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}

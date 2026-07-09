@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "DayPilot Enterprise",
+  "version": "0.1.0",
+  "identifier": "com.ruslanmv.daypilot",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @daypilot/operator-web dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm --filter @daypilot/operator-web build",
+    "frontendDist": "../../operator-web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "DayPilot Enterprise",
+        "width": 1440,
+        "height": 960
+      }
+    ]
+  }
+}

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DayPilot Premium Minimalist Portal</title>
+  <style>
+    :root {
+      --bg: #080c14;
+      --surface: #111625;
+      --surface-2: #151b2b;
+      --border: rgba(255,255,255,.06);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --blue: #007aff;
+      --cyan: #00f0ff;
+      --purple: #af52de;
+      --orange: #ff9500;
+      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+      --font-mono: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 10%, rgba(0,122,255,.12), transparent 28rem), linear-gradient(180deg, var(--bg), #090d16);
+      color: var(--text);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    .app { height: 100vh; display: grid; grid-template-columns: 210px 1fr; }
+    aside { border-right: 1px solid var(--border); background: rgba(17,22,37,.38); backdrop-filter: blur(28px); padding: 22px 14px; }
+    .brand { padding: 0 8px 18px; border-bottom: 1px solid var(--border); }
+    .eyebrow { color: var(--cyan); font: 700 10px/1 var(--font-mono); letter-spacing: .18em; text-transform: uppercase; }
+    h1 { margin: 8px 0 0; font-size: 20px; letter-spacing: -.04em; }
+    .sync { margin-top: 8px; color: var(--muted); font: 11px/1.4 var(--font-mono); }
+    nav { margin-top: 18px; display: grid; gap: 6px; }
+    nav button { border: 1px solid transparent; background: transparent; color: var(--muted); text-align: left; border-radius: 999px; padding: 10px 12px; cursor: pointer; }
+    nav button.active { color: var(--text); background: rgba(0,122,255,.1); border-color: var(--border); }
+    main { min-width: 0; display: flex; flex-direction: column; }
+    header { height: 72px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid var(--border); }
+    header h2 { margin:0; font-size:16px; font-weight:600; letter-spacing:-.02em; }
+    header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+    .pill { border:1px solid var(--border); border-radius:999px; padding:8px 10px; color:var(--muted); font:11px/1 var(--font-mono); }
+    .view { flex:1; min-height:0; display:none; }
+    .view.active { display:block; }
+    #bridge.active { display:grid; grid-template-columns:minmax(0,1fr) 410px; }
+    .chat { min-height:0; border-right:1px solid var(--border); display:flex; flex-direction:column; }
+    .feed { flex:1; overflow:auto; padding:34px clamp(20px,6vw,72px); display:flex; flex-direction:column; gap:16px; }
+    .message { width:min(660px,88%); }
+    .message.user { align-self:flex-end; }
+    .label { color:var(--muted); font:11px/1.2 var(--font-mono); margin-bottom:6px; }
+    .message.user .label { text-align:right; }
+    .bubble { border:1px solid var(--border); background:rgba(17,22,37,.55); border-radius:18px; padding:15px 17px; line-height:1.5; font-size:14px; }
+    .message.user .bubble { background:rgba(0,122,255,.16); border-color:rgba(0,122,255,.24); }
+    .input-wrap { padding:18px clamp(20px,6vw,72px) 24px; background:linear-gradient(180deg, transparent, rgba(8,12,20,.94) 35%); }
+    form { display:flex; align-items:center; gap:10px; border:1px solid rgba(255,255,255,.11); background:rgba(17,22,37,.88); border-radius:20px; padding:8px 8px 8px 16px; box-shadow:0 24px 60px rgba(0,0,0,.25); }
+    input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:var(--text); font-size:14px; }
+    form button { border:0; border-radius:999px; background:var(--blue); color:white; padding:9px 14px; font-weight:700; cursor:pointer; }
+    .strategy { display:flex; min-height:0; flex-direction:column; background:rgba(9,13,22,.35); }
+    .section-head { height:64px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); padding:0 18px; }
+    .section-head h3 { margin:0; font-size:15px; }
+    .section-head span { color:var(--muted); font:11px/1 var(--font-mono); }
+    .blocks { overflow:auto; padding:16px; display:grid; gap:12px; align-content:start; }
+    .block,.cal-card,.ledger-card { border:1px solid var(--border); background:rgba(17,22,37,.62); border-radius:16px; transition:.18s ease; }
+    .block { padding:15px; cursor:pointer; text-align:left; color:inherit; }
+    .block:hover,.cal-card:hover,.ledger-card:hover { transform:translateY(-1px); border-color:rgba(255,255,255,.13); background:rgba(21,27,43,.9); }
+    .time { color:var(--blue); font:11px/1.3 var(--font-mono); margin-bottom:7px; }
+    .title { font-weight:650; letter-spacing:-.01em; font-size:14px; }
+    .meta { margin-top:9px; display:flex; gap:7px; flex-wrap:wrap; color:var(--muted); font:11px/1 var(--font-mono); }
+    .tag { border:1px solid var(--border); border-radius:999px; padding:4px 7px; }
+    .tag.agent { color:var(--purple); background:rgba(175,82,222,.12); } .tag.user { color:var(--blue); background:rgba(0,122,255,.12); } .tag.critical { color:var(--orange); }
+    .calendar-tools { height:76px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid var(--border); }
+    .toggle { border:1px solid var(--border); border-radius:999px; padding:3px; display:flex; background:rgba(255,255,255,.04); }
+    .toggle button { border:0; background:transparent; color:var(--muted); border-radius:999px; padding:8px 12px; cursor:pointer; }
+    .toggle button.active { background:var(--surface-2); color:var(--text); }
+    .calendar-area { height:calc(100% - 76px); overflow:auto; padding:22px; }
+    .day-grid { border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+    .row { display:grid; grid-template-columns:78px 1fr; min-height:74px; border-bottom:1px solid var(--border); }
+    .row:last-child { border-bottom:0; }
+    .hour { border-right:1px solid var(--border); color:var(--muted); font:11px/1 var(--font-mono); padding:14px; text-align:right; }
+    .cell { padding:8px; display:flex; gap:8px; }
+    .cal-card { padding:11px; min-width:240px; cursor:pointer; }
+    .cal-card.agent { box-shadow:inset 3px 0 0 var(--purple); } .cal-card.user { box-shadow:inset 3px 0 0 var(--blue); }
+    .week-grid { min-width:850px; display:grid; grid-template-columns:64px repeat(7, 1fr); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+    .wh,.wt,.wc { min-height:72px; border-right:1px solid rgba(255,255,255,.035); border-bottom:1px solid rgba(255,255,255,.035); }
+    .wh,.wt { display:grid; place-items:center; color:var(--muted); background:rgba(17,22,37,.76); font:11px/1.2 var(--font-mono); text-align:center; }
+    .wc { padding:7px; display:grid; gap:6px; align-content:start; }
+    .chip { border:1px solid var(--border); background:rgba(17,22,37,.8); color:var(--text); border-radius:10px; padding:7px; font-size:11px; text-align:left; cursor:pointer; }
+    .tasks { height:100%; display:grid; grid-template-columns:1fr 1fr; gap:18px; padding:22px; overflow:auto; }
+    .col { border:1px solid var(--border); border-radius:18px; background:rgba(17,22,37,.28); overflow:hidden; }
+    .col h3 { margin:0; padding:18px; border-bottom:1px solid var(--border); font-size:15px; }
+    .cards { padding:16px; display:grid; gap:12px; }
+    .ledger-card { padding:14px; cursor:pointer; }
+    .ledger-card p { color:var(--muted); font-size:12px; line-height:1.45; }
+    .drawer { position:fixed; top:0; right:0; width:min(440px,92vw); height:100vh; transform:translateX(105%); background:rgba(17,22,37,.97); backdrop-filter:blur(28px); border-left:1px solid var(--border); box-shadow:-30px 0 80px rgba(0,0,0,.42); transition:.28s cubic-bezier(.4,0,.2,1); padding:24px; z-index:10; }
+    .drawer.open { transform:translateX(0); }
+    .drawer-head { display:flex; justify-content:space-between; gap:16px; align-items:start; }
+    .x { width:34px; height:34px; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--text); border-radius:50%; cursor:pointer; }
+    .drawer-section { border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,.03); padding:14px; margin-top:14px; }
+    .drawer-section h4 { margin:0 0 8px; color:var(--muted); font:11px/1 var(--font-mono); letter-spacing:.13em; text-transform:uppercase; }
+    .drawer-section p { margin:0; line-height:1.5; font-size:14px; }
+    @media(max-width:900px){ .app{grid-template-columns:1fr}.app aside{display:flex;gap:12px;overflow:auto;border-right:0;border-bottom:1px solid var(--border)}.brand{border:0;min-width:170px}nav{margin:0;grid-auto-flow:column;align-content:center}#bridge.active{grid-template-columns:1fr}.chat{border-right:0}.strategy{min-height:420px}.tasks{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand"><div class="eyebrow">DayPilot</div><h1>Command Bridge</h1><div class="sync">● LOCAL SYNC · HOMEPILOT READY</div></div>
+      <nav>
+        <button class="active" onclick="setView('bridge',this)">Command Bridge</button>
+        <button onclick="setView('calendar',this)">Calendar Core</button>
+        <button onclick="setView('tasks',this)">Task Ledger</button>
+      </nav>
+    </aside>
+    <main>
+      <header><div><h2 id="viewTitle">Strategic Feed</h2><p>Chat-first planning, schedule blocks, and context-on-demand telemetry.</p></div><div class="pill">OBSIDIAN · APPLE BLUE</div></header>
+      <section class="view active" id="bridge">
+        <div class="chat"><div class="feed" id="feed"></div><div class="input-wrap"><form onsubmit="submitDirective(event)"><span class="muted">⌘</span><input id="directive" placeholder="Ask DayPilot to schedule, rebalance, summarize, or delegate…"><button>Send</button></form></div></div>
+        <aside class="strategy"><div class="section-head"><h3>Today's Strategy</h3><span id="count"></span></div><div class="blocks" id="blocks"></div></aside>
+      </section>
+      <section class="view" id="calendar"><div class="calendar-tools"><div><h2>Temporal Matrix Distribution</h2><p>Day and week horizons for AI-arranged activities.</p></div><div class="toggle"><button id="dayBtn" class="active" onclick="renderCalendar('day')">Day Horizon</button><button id="weekBtn" onclick="renderCalendar('week')">Week Horizon</button></div></div><div class="calendar-area" id="calendarArea"></div></section>
+      <section class="view" id="tasks"><div class="tasks"><div class="col"><h3>Commander Assignments</h3><div class="cards" id="commander"></div></div><div class="col"><h3>Autonomous Agents (.H)</h3><div class="cards" id="agents"></div></div></div></section>
+    </main>
+  </div>
+  <aside class="drawer" id="drawer"><div class="drawer-head"><div><div class="eyebrow">Context Telemetry</div><h1 id="drawerTitle">Task</h1></div><button class="x" onclick="drawer.classList.remove('open')">×</button></div><div class="drawer-section"><h4>Execution Frame</h4><p id="drawerTime"></p></div><div class="drawer-section"><h4>Vector Context</h4><p id="drawerContext"></p></div></aside>
+  <script>
+    const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const hours=['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00'];
+    const slots=['09:00','11:00','14:00','16:00','18:00'];
+    let messages=[{role:'DayPilot',time:'08:12',body:'Welcome back, Commander. I balanced today around one inbox sweep, one protected deep-work block, and quiet autonomous preparation.'}];
+    let tasks=[
+      {id:101,day:'Monday',start:'09:00',end:'10:30',title:'Inbox Sweep & Contract Telemetry',owner:'agent',executor:'Sec-Core',priority:'critical',context:'Parsing compliance emails and matching clauses through Matrix RAG. No Commander interruption unless a blocker appears.'},
+      {id:102,day:'Monday',start:'11:00',end:'13:00',title:'Refactor Model Execution Boundaries',owner:'user',executor:'Commander',priority:'high',context:'Protected deep-work block for vLLM, Ollama, and approval boundary design.'},
+      {id:103,day:'Tuesday',start:'14:00',end:'16:00',title:'GitPilot Dependency Patch Review',owner:'agent',executor:'Git-Core',priority:'high',context:'Autonomous patch preparation staged for review before repository writes.'},
+      {id:104,day:'Thursday',start:'16:00',end:'16:45',title:'Team Architecture Meeting Prep',owner:'user',executor:'Commander',priority:'high',context:'AI-prepared brief with decision points, related files, and expected outcomes.'}
+    ];
+    const feed=document.getElementById('feed'), blocks=document.getElementById('blocks'), drawer=document.getElementById('drawer');
+    function setView(id,btn){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); viewTitle.textContent=id==='bridge'?'Strategic Feed':id==='calendar'?'Temporal Matrix':'Operational Ledger'; if(id==='calendar')renderCalendar('day'); if(id==='tasks')renderTasks(); }
+    function renderFeed(){ feed.innerHTML=messages.map(m=>`<div class="message ${m.role==='Commander'?'user':''}"><div class="label">${m.role} · ${m.time}</div><div class="bubble">${m.body}</div></div>`).join(''); feed.scrollTop=feed.scrollHeight; }
+    function blockHtml(t){ return `<button class="block" onclick="openDrawer(${t.id})"><div class="time">${t.start}–${t.end} · ${t.day}</div><div class="title">${t.title}</div><div class="meta"><span class="tag ${t.owner==='user'?'user':'agent'}">${t.owner==='user'?'COMMANDER':'.HPERSONA'}</span><span class="tag ${t.priority==='critical'?'critical':''}">${t.priority.toUpperCase()}</span><span>${t.executor}</span></div></button>` }
+    function renderBlocks(){ const today=tasks.filter(t=>['Monday','Thursday'].includes(t.day)); count.textContent=today.length+' blocks'; blocks.innerHTML=today.map(blockHtml).join(''); }
+    function renderCalendar(mode){ dayBtn.classList.toggle('active',mode==='day'); weekBtn.classList.toggle('active',mode==='week'); if(mode==='day'){ calendarArea.innerHTML=`<div class="day-grid">${hours.map(h=>`<div class="row"><div class="hour">${h}</div><div class="cell">${tasks.filter(t=>t.start.slice(0,2)===h.slice(0,2)).map(t=>`<button class="cal-card ${t.owner}" onclick="openDrawer(${t.id})"><div class="title">${t.title}</div><div class="meta"><span>${t.start}–${t.end}</span><span>${t.executor}</span></div></button>`).join('')||'<span class="muted">quiet buffer</span>'}</div></div>`).join('')}</div>` } else { calendarArea.innerHTML=`<div class="week-grid"><div class="wh"></div>${days.map(d=>`<div class="wh">${d.slice(0,3)}<br>Active</div>`).join('')}${slots.map(s=>`<div class="wt">${s}</div>${days.map(d=>`<div class="wc">${tasks.filter(t=>t.day===d&&t.start.slice(0,2)===s.slice(0,2)).map(t=>`<button class="chip" onclick="openDrawer(${t.id})">${t.title}</button>`).join('')}</div>`).join('')}`).join('')}</div>` } }
+    function renderTasks(){ commander.innerHTML=tasks.filter(t=>t.owner==='user').map(t=>`<div class="ledger-card" onclick="openDrawer(${t.id})"><div class="title">${t.title}</div><div class="meta"><span>${t.start}–${t.end}</span><span>${t.executor}</span></div><p>${t.context}</p></div>`).join(''); agents.innerHTML=tasks.filter(t=>t.owner==='agent').map(t=>`<div class="ledger-card" onclick="openDrawer(${t.id})"><div class="title">${t.title}</div><div class="meta"><span>${t.start}–${t.end}</span><span>${t.executor}</span></div><p>${t.context}</p></div>`).join(''); }
+    function submitDirective(e){ e.preventDefault(); const input=document.getElementById('directive'); const text=input.value.trim(); if(!text)return; const time=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); messages.push({role:'Commander',time,body:text},{role:'DayPilot',time,body:'Directive processed. I updated strategy blocks, calendar allocation, and separated Commander work from autonomous .hpersona preparation.'}); tasks.unshift({id:Date.now(),day:'Thursday',start:/18|6pm|evening/i.test(text)?'18:00':'12:00',end:/18|6pm|evening/i.test(text)?'19:00':'13:00',title:text.length>62?text.slice(0,59)+'...':text,owner:'user',executor:'Commander',priority:/critical|urgent/i.test(text)?'critical':'high',context:'Manual assignment from Strategic Feed. AI protected this block and moved background work away from it.'}); tasks.unshift({id:Date.now()+1,day:'Thursday',start:'12:00',end:'12:30',title:'Autonomous context preparation',owner:'agent',executor:'Sec-Core',priority:'medium',context:'Sec-Core collects email, notes, and repo context related to the directive; writes remain approval-gated.'}); input.value=''; renderAll(); }
+    function openDrawer(id){ const t=tasks.find(x=>x.id===id); drawerTitle.textContent=t.title; drawerTime.textContent=`${t.day} · ${t.start}–${t.end} · ${t.executor}`; drawerContext.textContent=t.context; drawer.classList.add('open'); }
+    function renderAll(){ renderFeed(); renderBlocks(); renderTasks(); }
+    renderAll();
+  </script>
+</body>
+</html>

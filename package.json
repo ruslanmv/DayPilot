@@ -1,0 +1,17 @@
+{
+  "name": "daypilot-enterprise",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DayPilot Enterprise monorepo: governed AI operator workspace with HomePilot persona integration.",
+  "scripts": {
+    "dev:web": "pnpm --filter @daypilot/operator-web dev",
+    "dev:mobile": "pnpm --filter @daypilot/mobile-pwa dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

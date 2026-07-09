@@ -1,0 +1,27 @@
+{
+  "version": "v3-premium-minimalist-portal",
+  "date": "2026-07-09",
+  "design_philosophy": "Space Bridge Minimalism: Apple-like clarity with ChatGPT-like conversational control and context-on-demand telemetry.",
+  "added_files": [
+    "docs/ux-space-bridge-minimalist-portal.md",
+    "packages/ui-bridge/src/minimalPortal.tsx",
+    "packages/ui-bridge/src/spaceBridgeData.ts",
+    "packages/ui-bridge/src/space-bridge.css",
+    "examples/ui/daypilot-premium-minimalist-portal.html"
+  ],
+  "modified_files": [
+    "packages/ui-bridge/src/index.tsx",
+    "packages/shared-types/src/index.ts",
+    "apps/operator-web/src/styles.css",
+    "apps/mobile-pwa/src/styles.css",
+    "README.md"
+  ],
+  "capabilities": [
+    "chat-first strategic feed",
+    "clickable strategy blocks",
+    "right-edge telemetry drawer",
+    "day/week calendar horizons",
+    "commander vs autonomous .hpersona task ledger",
+    "state-isolated command handling that updates chat, calendar, strategy, and ledger simultaneously"
+  ]
+}

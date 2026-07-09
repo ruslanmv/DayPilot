@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "additions": [
+    "infra/docker/{api-gateway,orchestrator,mcp-host,knowledge-service,model-serving,voice-gateway,observability}.Dockerfile",
+    "docker-compose.yml multi-service orchestration",
+    "infra/kubernetes/*.yaml manifests",
+    "infra/terraform/*.tf AWS bootstrap",
+    "alembic.ini and alembic/ migrations",
+    "services/knowledge-service/daypilot_knowledge/db SQLAlchemy persistence layer",
+    "FastAPI apps and metrics endpoints for all Python services",
+    "packages/ui-bridge/src/components atomic React components",
+    "expanded tests under tests/"
+  ]
+}

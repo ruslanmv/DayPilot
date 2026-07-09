@@ -1,0 +1,8 @@
+name: Deploy Gateway Placeholder
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Deploy daypilot.ruslanmv.com gateway placeholder"

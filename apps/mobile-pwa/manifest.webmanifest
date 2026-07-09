@@ -1,0 +1,9 @@
+{
+  "name": "DayPilot Mobile",
+  "short_name": "DayPilot",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05070d",
+  "theme_color": "#00d9ff",
+  "icons": []
+}

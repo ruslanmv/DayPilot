@@ -1,0 +1,41 @@
+{
+  "version": "0.1.0",
+  "tools": [
+    {
+      "name": "daypilot.homepilot.preview_hpersona",
+      "risk": "low",
+      "write": false,
+      "requires_approval": false
+    },
+    {
+      "name": "daypilot.homepilot.import_hpersona",
+      "risk": "medium",
+      "write": true,
+      "requires_approval": true
+    },
+    {
+      "name": "daypilot.email.draft_reply",
+      "risk": "medium",
+      "write": true,
+      "requires_approval": true
+    },
+    {
+      "name": "daypilot.calendar.create_event_draft",
+      "risk": "medium",
+      "write": true,
+      "requires_approval": true
+    },
+    {
+      "name": "daypilot.knowledge.search_private_memory",
+      "risk": "low",
+      "write": false,
+      "requires_approval": false
+    },
+    {
+      "name": "daypilot.github.propose_patch",
+      "risk": "high",
+      "write": true,
+      "requires_approval": true
+    }
+  ]
+}

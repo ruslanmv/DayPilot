@@ -1,0 +1,87 @@
+{
+  "kind": "homepilot.persona",
+  "schema_version": 2,
+  "package_version": 2,
+  "persona_id": "atlas_research_assistant",
+  "name": "Atlas",
+  "role": "Research Assistant",
+  "tools": [
+    "web_search",
+    "document_analysis",
+    "citation_manager"
+  ],
+  "content_rating": "sfw",
+  "has_avatar": true,
+  "safe_install_state": "INSTALLED_DISABLED",
+  "dependencies": {
+    "tools": {
+      "schema_version": 1,
+      "personality_tools": {
+        "description": "Simple tool IDs from PersonalityAgent.allowed_tools",
+        "tools": [
+          "web_search",
+          "document_analysis",
+          "citation_manager"
+        ]
+      },
+      "forge_tools": {
+        "description": "Tool references from Context Forge / MCP",
+        "tools": []
+      },
+      "tool_schemas": [],
+      "capability_summary": {
+        "required": [],
+        "optional": []
+      }
+    },
+    "mcp_servers": {
+      "schema_version": 1,
+      "servers": []
+    },
+    "models": {
+      "schema_version": 1,
+      "image_models": [],
+      "llm_hint": {
+        "min_capability": "7b",
+        "recommended": "llama3:8b",
+        "note": "Any 7B+ instruction-tuned model works"
+      }
+    }
+  },
+  "policy": {
+    "install_state": "INSTALLED_DISABLED",
+    "source": "homepilot.hpersona",
+    "persona_id": "atlas_research_assistant",
+    "default_write_enabled": false,
+    "require_human_approval": true,
+    "mapped_tools": [
+      {
+        "homepilot_tool": "web_search",
+        "daypilot_namespace": "daypilot.homepilot.web_search",
+        "write_enabled": false,
+        "requires_approval": true
+      },
+      {
+        "homepilot_tool": "document_analysis",
+        "daypilot_namespace": "daypilot.homepilot.document_analysis",
+        "write_enabled": false,
+        "requires_approval": true
+      },
+      {
+        "homepilot_tool": "citation_manager",
+        "daypilot_namespace": "daypilot.homepilot.citation_manager",
+        "write_enabled": false,
+        "requires_approval": true
+      }
+    ],
+    "blocked_actions": [
+      "send_email",
+      "delete_email",
+      "create_calendar_event",
+      "send_message",
+      "place_call",
+      "execute_shell",
+      "write_repository"
+    ]
+  }
+}

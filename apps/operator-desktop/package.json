@@ -1,0 +1,16 @@
+{
+  "name": "@daypilot/operator-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "lint": "echo placeholder lint",
+    "test": "echo placeholder test"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "latest",
+    "@tauri-apps/cli": "latest"
+  }
+}
