@@ -4,148 +4,666 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DayPilot Premium Minimalist Portal</title>
+  <meta name="application-name" content="DayPilot Pro // Obsidian Minimalist Portal" />
+  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
     :root {
-      --bg: #080c14;
-      --surface: #111625;
-      --surface-2: #151b2b;
-      --border: rgba(255,255,255,.06);
+      --bg: #090c15;
+      --bg-deep: #080c14;
+      --surface: #121723;
+      --surface-2: #151b2a;
+      --surface-3: #1a2133;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-strong: rgba(255, 255, 255, 0.105);
       --text: #f8fafc;
       --muted: #94a3b8;
-      --blue: #007aff;
-      --cyan: #00f0ff;
-      --purple: #af52de;
-      --orange: #ff9500;
-      --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
-      --font-mono: SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --dim: #64748b;
+      --faint: #475569;
+      --focus: #2563eb;
+      --meeting: #8b5cf6;
+      --admin: #10b981;
+      --break: #475569;
+      --orange: #f59e0b;
+      --cyan: #22d3ee;
+      --shadow: 0 24px 90px rgba(0, 0, 0, 0.42);
+      --sans: -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --ease: cubic-bezier(0.22, 1, 0.36, 1);
     }
+
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      height: 100vh;
-      overflow: hidden;
-      background: radial-gradient(circle at 20% 10%, rgba(0,122,255,.12), transparent 28rem), linear-gradient(180deg, var(--bg), #090d16);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(37, 99, 235, 0.09), transparent 32%),
+        radial-gradient(circle at 88% 10%, rgba(139, 92, 246, 0.08), transparent 36%),
+        linear-gradient(180deg, var(--bg-deep), var(--bg));
       color: var(--text);
-      font-family: var(--font-sans);
+      font-family: var(--sans);
+      overflow: hidden;
       -webkit-font-smoothing: antialiased;
+      text-rendering: geometricPrecision;
     }
-    .app { height: 100vh; display: grid; grid-template-columns: 210px 1fr; }
-    aside { border-right: 1px solid var(--border); background: rgba(17,22,37,.38); backdrop-filter: blur(28px); padding: 22px 14px; }
-    .brand { padding: 0 8px 18px; border-bottom: 1px solid var(--border); }
-    .eyebrow { color: var(--cyan); font: 700 10px/1 var(--font-mono); letter-spacing: .18em; text-transform: uppercase; }
-    h1 { margin: 8px 0 0; font-size: 20px; letter-spacing: -.04em; }
-    .sync { margin-top: 8px; color: var(--muted); font: 11px/1.4 var(--font-mono); }
-    nav { margin-top: 18px; display: grid; gap: 6px; }
-    nav button { border: 1px solid transparent; background: transparent; color: var(--muted); text-align: left; border-radius: 999px; padding: 10px 12px; cursor: pointer; }
-    nav button.active { color: var(--text); background: rgba(0,122,255,.1); border-color: var(--border); }
-    main { min-width: 0; display: flex; flex-direction: column; }
-    header { height: 72px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid var(--border); }
-    header h2 { margin:0; font-size:16px; font-weight:600; letter-spacing:-.02em; }
-    header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
-    .pill { border:1px solid var(--border); border-radius:999px; padding:8px 10px; color:var(--muted); font:11px/1 var(--font-mono); }
-    .view { flex:1; min-height:0; display:none; }
-    .view.active { display:block; }
-    #bridge.active { display:grid; grid-template-columns:minmax(0,1fr) 410px; }
-    .chat { min-height:0; border-right:1px solid var(--border); display:flex; flex-direction:column; }
-    .feed { flex:1; overflow:auto; padding:34px clamp(20px,6vw,72px); display:flex; flex-direction:column; gap:16px; }
-    .message { width:min(660px,88%); }
-    .message.user { align-self:flex-end; }
-    .label { color:var(--muted); font:11px/1.2 var(--font-mono); margin-bottom:6px; }
-    .message.user .label { text-align:right; }
-    .bubble { border:1px solid var(--border); background:rgba(17,22,37,.55); border-radius:18px; padding:15px 17px; line-height:1.5; font-size:14px; }
-    .message.user .bubble { background:rgba(0,122,255,.16); border-color:rgba(0,122,255,.24); }
-    .input-wrap { padding:18px clamp(20px,6vw,72px) 24px; background:linear-gradient(180deg, transparent, rgba(8,12,20,.94) 35%); }
-    form { display:flex; align-items:center; gap:10px; border:1px solid rgba(255,255,255,.11); background:rgba(17,22,37,.88); border-radius:20px; padding:8px 8px 8px 16px; box-shadow:0 24px 60px rgba(0,0,0,.25); }
-    input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:var(--text); font-size:14px; }
-    form button { border:0; border-radius:999px; background:var(--blue); color:white; padding:9px 14px; font-weight:700; cursor:pointer; }
-    .strategy { display:flex; min-height:0; flex-direction:column; background:rgba(9,13,22,.35); }
-    .section-head { height:64px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); padding:0 18px; }
-    .section-head h3 { margin:0; font-size:15px; }
-    .section-head span { color:var(--muted); font:11px/1 var(--font-mono); }
-    .blocks { overflow:auto; padding:16px; display:grid; gap:12px; align-content:start; }
-    .block,.cal-card,.ledger-card { border:1px solid var(--border); background:rgba(17,22,37,.62); border-radius:16px; transition:.18s ease; }
-    .block { padding:15px; cursor:pointer; text-align:left; color:inherit; }
-    .block:hover,.cal-card:hover,.ledger-card:hover { transform:translateY(-1px); border-color:rgba(255,255,255,.13); background:rgba(21,27,43,.9); }
-    .time { color:var(--blue); font:11px/1.3 var(--font-mono); margin-bottom:7px; }
-    .title { font-weight:650; letter-spacing:-.01em; font-size:14px; }
-    .meta { margin-top:9px; display:flex; gap:7px; flex-wrap:wrap; color:var(--muted); font:11px/1 var(--font-mono); }
-    .tag { border:1px solid var(--border); border-radius:999px; padding:4px 7px; }
-    .tag.agent { color:var(--purple); background:rgba(175,82,222,.12); } .tag.user { color:var(--blue); background:rgba(0,122,255,.12); } .tag.critical { color:var(--orange); }
-    .calendar-tools { height:76px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; border-bottom:1px solid var(--border); }
-    .toggle { border:1px solid var(--border); border-radius:999px; padding:3px; display:flex; background:rgba(255,255,255,.04); }
-    .toggle button { border:0; background:transparent; color:var(--muted); border-radius:999px; padding:8px 12px; cursor:pointer; }
-    .toggle button.active { background:var(--surface-2); color:var(--text); }
-    .calendar-area { height:calc(100% - 76px); overflow:auto; padding:22px; }
-    .day-grid { border:1px solid var(--border); border-radius:16px; overflow:hidden; }
-    .row { display:grid; grid-template-columns:78px 1fr; min-height:74px; border-bottom:1px solid var(--border); }
-    .row:last-child { border-bottom:0; }
-    .hour { border-right:1px solid var(--border); color:var(--muted); font:11px/1 var(--font-mono); padding:14px; text-align:right; }
-    .cell { padding:8px; display:flex; gap:8px; }
-    .cal-card { padding:11px; min-width:240px; cursor:pointer; }
-    .cal-card.agent { box-shadow:inset 3px 0 0 var(--purple); } .cal-card.user { box-shadow:inset 3px 0 0 var(--blue); }
-    .week-grid { min-width:850px; display:grid; grid-template-columns:64px repeat(7, 1fr); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
-    .wh,.wt,.wc { min-height:72px; border-right:1px solid rgba(255,255,255,.035); border-bottom:1px solid rgba(255,255,255,.035); }
-    .wh,.wt { display:grid; place-items:center; color:var(--muted); background:rgba(17,22,37,.76); font:11px/1.2 var(--font-mono); text-align:center; }
-    .wc { padding:7px; display:grid; gap:6px; align-content:start; }
-    .chip { border:1px solid var(--border); background:rgba(17,22,37,.8); color:var(--text); border-radius:10px; padding:7px; font-size:11px; text-align:left; cursor:pointer; }
-    .tasks { height:100%; display:grid; grid-template-columns:1fr 1fr; gap:18px; padding:22px; overflow:auto; }
-    .col { border:1px solid var(--border); border-radius:18px; background:rgba(17,22,37,.28); overflow:hidden; }
-    .col h3 { margin:0; padding:18px; border-bottom:1px solid var(--border); font-size:15px; }
-    .cards { padding:16px; display:grid; gap:12px; }
-    .ledger-card { padding:14px; cursor:pointer; }
-    .ledger-card p { color:var(--muted); font-size:12px; line-height:1.45; }
-    .drawer { position:fixed; top:0; right:0; width:min(440px,92vw); height:100vh; transform:translateX(105%); background:rgba(17,22,37,.97); backdrop-filter:blur(28px); border-left:1px solid var(--border); box-shadow:-30px 0 80px rgba(0,0,0,.42); transition:.28s cubic-bezier(.4,0,.2,1); padding:24px; z-index:10; }
-    .drawer.open { transform:translateX(0); }
-    .drawer-head { display:flex; justify-content:space-between; gap:16px; align-items:start; }
-    .x { width:34px; height:34px; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--text); border-radius:50%; cursor:pointer; }
-    .drawer-section { border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,.03); padding:14px; margin-top:14px; }
-    .drawer-section h4 { margin:0 0 8px; color:var(--muted); font:11px/1 var(--font-mono); letter-spacing:.13em; text-transform:uppercase; }
-    .drawer-section p { margin:0; line-height:1.5; font-size:14px; }
-    @media(max-width:900px){ .app{grid-template-columns:1fr}.app aside{display:flex;gap:12px;overflow:auto;border-right:0;border-bottom:1px solid var(--border)}.brand{border:0;min-width:170px}nav{margin:0;grid-auto-flow:column;align-content:center}#bridge.active{grid-template-columns:1fr}.chat{border-right:0}.strategy{min-height:420px}.tasks{grid-template-columns:1fr} }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .mono { font-family: var(--mono); }
+
+    .app-shell {
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 268px 1fr;
+      background: rgba(6, 9, 16, 0.58);
+    }
+
+    .sidebar {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 22px 16px 18px;
+      border-right: 1px solid var(--border);
+      background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.35), rgba(2, 6, 23, 0.32)),
+        rgba(8, 12, 20, 0.86);
+      box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.015);
+      z-index: 8;
+    }
+
+    .traffic { display: flex; gap: 8px; margin: 0 0 28px 8px; }
+    .traffic span { width: 12px; height: 12px; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+    .traffic .red { background: #ff5f57; }
+    .traffic .yellow { background: #ffbd2e; }
+    .traffic .green { background: #28c840; }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 0 32px 8px;
+      letter-spacing: -0.04em;
+      font-size: 1.88rem;
+      font-weight: 560;
+    }
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      filter: drop-shadow(0 0 18px rgba(96, 165, 250, .2));
+    }
+
+    .nav-stack { display: grid; gap: 12px; }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      width: 100%;
+      min-height: 54px;
+      padding: 0 14px;
+      border: 1px solid transparent;
+      border-radius: 13px;
+      background: transparent;
+      color: #aab4c4;
+      cursor: pointer;
+      transition: transform .18s var(--ease), background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease);
+    }
+    .nav-btn i { width: 20px; height: 20px; stroke-width: 1.55; }
+    .nav-btn:hover { background: rgba(255,255,255,.025); color: #fff; transform: translateX(1px); }
+    .nav-btn.active {
+      color: #77a7ff;
+      background: linear-gradient(135deg, rgba(37, 99, 235, .24), rgba(37, 99, 235, .08));
+      border-color: rgba(59, 130, 246, .18);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.015), 0 12px 38px rgba(37, 99, 235, .12);
+    }
+
+    .sidebar-bottom { display: grid; gap: 12px; }
+    .profile-card, .sync-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012));
+      padding: 12px;
+      transition: border-color .18s var(--ease), transform .18s var(--ease);
+    }
+    .profile-card:hover, .sync-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+    .profile-card { display: grid; grid-template-columns: 44px 1fr 16px; gap: 11px; align-items: center; cursor: pointer; }
+    .avatar-img {
+      width: 44px; height: 44px; border-radius: 999px;
+      background:
+        radial-gradient(circle at 50% 32%, #f3d2bc 0 15%, transparent 16%),
+        radial-gradient(circle at 50% 28%, #1f2937 0 24%, transparent 25%),
+        linear-gradient(135deg, #fef3c7, #c7d2fe 46%, #111827 47% 100%);
+      box-shadow: inset 0 0 0 2px rgba(255,255,255,.18);
+      position: relative;
+      overflow: hidden;
+    }
+    .avatar-img::after {
+      content: ""; position: absolute; left: 12px; right: 12px; bottom: 6px; height: 16px; border-radius: 10px 10px 4px 4px; background: linear-gradient(135deg,#0f172a,#334155);
+    }
+    .profile-name { font-weight: 650; font-size: .88rem; }
+    .profile-role { color: var(--muted); font-size: .76rem; margin-top: 3px; }
+    .sync-row { display: flex; justify-content: space-between; align-items: center; font-size: .82rem; }
+    .live { color: #5eead4; font-weight: 650; }
+    .green-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--admin); box-shadow: 0 0 18px rgba(16,185,129,.85); display: inline-block; margin-right: 9px; }
+    .sync-sub { color: var(--muted); font-size: .76rem; margin: 8px 0 0 22px; }
+    .utility-row { display: flex; justify-content: space-around; color: #8d98aa; padding-top: 14px; }
+    .utility-row button { width: 36px; height: 36px; display: grid; place-items: center; border: 0; background: transparent; border-radius: 10px; cursor: pointer; color: inherit; }
+    .utility-row button:hover { color: #fff; background: rgba(255,255,255,.035); }
+    .utility-row i { width: 19px; height: 19px; stroke-width: 1.45; }
+
+    main { position: relative; min-width: 0; overflow: hidden; }
+    .view-panel {
+      position: absolute; inset: 0;
+      opacity: 0; pointer-events: none;
+      transform: translateY(8px) scale(.996);
+      transition: opacity .22s var(--ease), transform .22s var(--ease);
+    }
+    .view-panel.active { opacity: 1; pointer-events: auto; transform: none; }
+
+    .panel-frame {
+      height: 100%;
+      padding: 22px;
+      display: grid;
+      gap: 16px;
+    }
+    .command-grid { grid-template-columns: minmax(360px, 1fr) 390px; }
+    .calendar-grid { grid-template-columns: minmax(560px, 1fr) 370px; }
+    .tasks-grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+
+    .panel-card {
+      min-width: 0;
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.032), rgba(255,255,255,.012)),
+        rgba(18, 23, 35, .72);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.025);
+      overflow: hidden;
+    }
+    .card-header {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 22px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-title { display: flex; align-items: center; gap: 10px; font-size: 1rem; font-weight: 650; letter-spacing: -0.015em; }
+    .card-title i { width: 17px; height: 17px; color: #dbeafe; stroke-width: 1.55; }
+    .header-actions { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+
+    .command-left { display: grid; grid-template-rows: 1fr auto; }
+    .chat-feed { overflow: auto; padding: 26px 22px 8px; display: flex; flex-direction: column; gap: 19px; scrollbar-width: thin; }
+    .msg-row { display: flex; gap: 12px; max-width: 86%; animation: rise .28s var(--ease) both; }
+    .msg-row.user { margin-left: auto; flex-direction: row-reverse; }
+    .ai-avatar {
+      width: 34px; height: 34px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center;
+      background: radial-gradient(circle at 35% 30%, #93c5fd, #2563eb 44%, #7c3aed 100%);
+      box-shadow: 0 0 26px rgba(37,99,235,.38), inset 0 0 0 1px rgba(255,255,255,.18);
+    }
+    .ai-avatar i { width: 16px; height: 16px; color: white; }
+    .mini-user-avatar { width: 34px; height: 34px; border-radius: 50%; flex: 0 0 auto; background: linear-gradient(135deg,#f5d0b5,#e0e7ff 42%,#111827 43%); box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
+    .msg-stack { display: grid; gap: 6px; }
+    .bubble {
+      padding: 13px 15px;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
+      color: #dce3ef;
+      font-size: .88rem;
+      line-height: 1.55;
+      box-shadow: 0 14px 42px rgba(0,0,0,.16);
+    }
+    .user .bubble { background: linear-gradient(180deg, rgba(37,99,235,.10), rgba(37,99,235,.04)); border-color: rgba(59,130,246,.13); }
+    .timestamp { color: var(--faint); font: 11px var(--mono); padding: 0 4px; }
+    .user .timestamp { text-align: right; }
+    .composer-wrap { padding: 18px 22px 22px; background: linear-gradient(180deg, rgba(9,12,21,0), var(--bg) 42%); }
+    .composer {
+      min-height: 54px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid rgba(59,130,246,.18);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255,255,255,.038), rgba(255,255,255,.012));
+      box-shadow: 0 0 0 1px rgba(255,255,255,.012), 0 14px 50px rgba(37,99,235,.08);
+      padding: 0 14px;
+    }
+    .composer input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text); font-size: .88rem; }
+    .composer input::placeholder { color: #687386; }
+    .composer i { width: 17px; height: 17px; color: #9aa6ba; }
+    .verify { color: var(--faint); font-size: .72rem; margin: 10px 6px 0; }
+
+    .strategy-list { height: calc(100% - 64px); display: flex; flex-direction: column; gap: 12px; padding: 18px; overflow: auto; }
+    .strategy-card {
+      position: relative;
+      display: grid;
+      grid-template-columns: 78px 1fr auto;
+      align-items: center;
+      gap: 14px;
+      min-height: 92px;
+      padding: 16px 13px 16px 16px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.014));
+      cursor: pointer;
+      transition: transform .18s var(--ease), border-color .18s var(--ease), background .18s var(--ease), box-shadow .18s var(--ease);
+    }
+    .strategy-card:hover { transform: translateY(-2px); border-color: var(--border-strong); box-shadow: 0 16px 44px rgba(0,0,0,.25); }
+    .strategy-card::before { content: ""; position: absolute; left: 0; top: 16px; bottom: 16px; width: 3px; border-radius: 0 8px 8px 0; background: var(--accent); box-shadow: 0 0 22px color-mix(in srgb, var(--accent), transparent 55%); }
+    .time-stack { font: 13px var(--mono); display: grid; gap: 6px; }
+    .time-stack strong { font-size: 1.02rem; font-weight: 550; color: #fff; }
+    .time-stack span { color: var(--muted); }
+    .strategy-main { padding-left: 14px; border-left: 1px solid rgba(255,255,255,.045); min-width: 0; }
+    .strategy-title { display: flex; gap: 8px; align-items: center; font-weight: 650; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .strategy-title i { width: 15px; height: 15px; color: #aab4c4; }
+    .strategy-cat { margin-top: 10px; color: var(--muted); font-size: .75rem; }
+    .status-pill { justify-self: end; font-size: .72rem; font-family: var(--mono); border: 1px solid color-mix(in srgb, var(--status), transparent 70%); color: var(--status); border-radius: 7px; padding: 4px 8px; background: color-mix(in srgb, var(--status), transparent 91%); }
+    .schedule-link { margin-top: auto; min-height: 62px; display: flex; align-items: center; justify-content: space-between; color: #60a5fa; border: 1px solid var(--border); border-radius: 14px; padding: 0 16px; background: rgba(255,255,255,.012); cursor: pointer; }
+
+    .segmented { display: inline-flex; align-items: center; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.018); }
+    .segmented button { border: 0; border-radius: 8px; background: transparent; padding: 7px 12px; color: var(--muted); cursor: pointer; font-size: .8rem; }
+    .segmented button.active { color: #93c5fd; background: rgba(37,99,235,.18); box-shadow: inset 0 0 0 1px rgba(59,130,246,.20); }
+    .calendar-shell { display: grid; grid-template-rows: 64px 1fr; }
+    .calendar-body { position: relative; min-height: 0; padding: 18px 22px 24px; overflow: auto; }
+    .day-label { font-size: 1rem; font-weight: 600; margin: 0 0 16px 48px; color: #e2e8f0; }
+    .hour-grid { position: relative; height: 820px; display: grid; grid-template-rows: repeat(11, 1fr); }
+    .hour-row { display: grid; grid-template-columns: 58px 1fr; border-top: 1px dashed rgba(255,255,255,.055); }
+    .hour-label { font: 11px var(--mono); color: var(--muted); padding-top: 8px; }
+    .time-now { position: absolute; left: 58px; right: 14px; top: 42px; border-top: 1px dashed rgba(37,99,235,.48); z-index: 1; }
+    .time-now::before { content: ""; position: absolute; left: -4px; top: -4px; width: 7px; height: 7px; border-radius: 50%; background: var(--focus); box-shadow: 0 0 14px var(--focus); }
+    .event-card {
+      position: absolute; left: 72px; right: 18px;
+      min-height: 48px;
+      border: 1px solid color-mix(in srgb, var(--accent), transparent 68%);
+      border-left: 3px solid var(--accent);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--accent), transparent 82%), rgba(255,255,255,.018));
+      box-shadow: 0 16px 50px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.035);
+      cursor: pointer;
+      overflow: hidden;
+      transition: transform .18s var(--ease), border-color .18s var(--ease);
+      z-index: 2;
+    }
+    .event-card:hover { transform: translateX(2px); border-color: color-mix(in srgb, var(--accent), transparent 45%); }
+    .event-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .event-title { font-weight: 650; font-size: .87rem; }
+    .event-sub { margin-top: 6px; color: #bac4d3; font: 12px var(--mono); }
+    .event-card i { width: 16px; height: 16px; color: color-mix(in srgb, var(--accent), white 40%); }
+    .week-matrix { display: none; height: 820px; grid-template-columns: 60px repeat(7, 1fr); gap: 1px; border: 1px solid var(--border); border-radius: 15px; overflow: hidden; background: var(--border); }
+    .week-matrix.active { display: grid; }
+    .week-cell, .week-head, .week-time { background: rgba(18,23,35,.8); padding: 10px; }
+    .week-head { text-align: center; font-size: .8rem; color: #e2e8f0; font-weight: 650; }
+    .week-head span { display: block; color: var(--dim); font: 11px var(--mono); margin-top: 5px; }
+    .week-time { color: var(--muted); font: 11px var(--mono); text-align: right; }
+    .week-cell { display: flex; flex-direction: column; gap: 6px; min-height: 104px; }
+    .micro-pill { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent), transparent 88%); border-radius: 8px; padding: 6px; font-size: .72rem; color: #dbeafe; cursor: pointer; }
+
+    .metrics-panel { display: grid; grid-template-rows: auto 1fr; gap: 18px; padding: 22px; }
+    .mini-cal, .density-card { border: 1px solid var(--border); border-radius: 16px; background: rgba(255,255,255,.014); padding: 18px; }
+    .mini-title { text-align: center; font-size: .88rem; font-weight: 650; margin-bottom: 15px; }
+    .mini-week { display: grid; grid-template-columns: repeat(7,1fr); text-align: center; gap: 8px; color: var(--muted); font: 12px var(--mono); }
+    .mini-week b { color: #e2e8f0; font-family: var(--sans); font-weight: 600; }
+    .mini-date { width: 26px; height: 26px; margin: 7px auto 0; border-radius: 50%; display: grid; place-items: center; }
+    .mini-date.selected { background: var(--focus); color: white; box-shadow: 0 0 18px rgba(37,99,235,.45); }
+    .density-title { display: flex; justify-content: space-between; align-items: center; font-weight: 650; margin-bottom: 18px; }
+    .density-chart { height: 248px; display: grid; grid-template-columns: 42px repeat(7,1fr); gap: 8px; align-items: end; }
+    .y-axis { height: 100%; display: flex; flex-direction: column; justify-content: space-between; color: var(--faint); font: 10px var(--mono); padding-bottom: 20px; }
+    .day-density { height: 224px; display: flex; flex-direction: column; justify-content: flex-end; gap: 3px; border-radius: 8px; padding: 5px; background: rgba(255,255,255,.018); box-shadow: inset 0 0 0 1px rgba(255,255,255,.025); }
+    .seg { border-radius: 5px; min-height: 4px; opacity: .92; }
+    .day-letter { text-align: center; font: 11px var(--mono); color: var(--muted); margin-top: 8px; }
+    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: .78rem; }
+    .legend span { display: flex; align-items: center; gap: 8px; }
+    .legend i { width: 8px; height: 8px; border-radius: 3px; display: inline-block; }
+
+    .ledger-layout { height: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .ledger-panel { min-height: 0; border: 1px solid var(--border); border-radius: 18px; background: linear-gradient(180deg, rgba(255,255,255,.026), rgba(255,255,255,.01)); overflow: hidden; display: grid; grid-template-rows: 58px 1fr auto; }
+    .ledger-head { display: flex; justify-content: space-between; align-items: center; padding: 0 18px; border-bottom: 1px solid var(--border); }
+    .ledger-title { display: flex; align-items: center; gap: 9px; color: #9bdcff; font-weight: 650; }
+    .ledger-title.ai { color: #d8b4fe; }
+    .count { padding: 2px 7px; border-radius: 7px; background: rgba(37,99,235,.18); color: #93c5fd; font: 11px var(--mono); }
+    .rows { overflow: auto; }
+    .task-row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; min-height: 50px; padding: 0 18px; border-bottom: 1px solid rgba(255,255,255,.026); }
+    .check { width: 16px; height: 16px; border-radius: 50%; border: 1px solid #718096; background: transparent; cursor: pointer; display: grid; place-items: center; }
+    .check.done { border-color: var(--focus); background: var(--focus); color: #fff; }
+    .check.done::before { content: "✓"; font-size: 10px; font-weight: 900; }
+    .task-title { font-size: .86rem; color: #d9e1ec; }
+    .task-title.done { color: var(--faint); text-decoration: line-through; }
+    .priority { font: 11px var(--mono); border-radius: 6px; padding: 3px 7px; color: var(--p); border: 1px solid color-mix(in srgb, var(--p), transparent 62%); background: color-mix(in srgb, var(--p), transparent 92%); }
+    .row-status { display: flex; gap: 8px; align-items: center; color: var(--s); font-size: .78rem; min-width: 92px; justify-content: flex-end; }
+    .row-status::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--s); box-shadow: 0 0 10px var(--s); }
+    .agent-icon { color: #c084fc; width: 15px; height: 15px; }
+    .ledger-footer { display: flex; justify-content: space-between; align-items: center; padding: 15px 18px; color: #60a5fa; border-top: 1px solid var(--border); font-size: .85rem; cursor: pointer; }
+
+    .drawer {
+      position: fixed; top: 0; right: 0; width: 426px; height: 100vh;
+      transform: translateX(444px);
+      transition: transform .32s var(--ease);
+      z-index: 20;
+      border-left: 1px solid var(--border);
+      background:
+        radial-gradient(circle at 20% 0%, rgba(37,99,235,.12), transparent 28%),
+        linear-gradient(180deg, rgba(18,23,35,.98), rgba(9,12,21,.98));
+      box-shadow: -18px 0 60px rgba(0,0,0,.52);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+    .drawer.open { transform: none; }
+    .drawer-top { padding: 24px 24px 18px; border-bottom: 1px solid var(--border); }
+    .drawer-kicker { display: flex; justify-content: space-between; align-items: center; color: var(--muted); margin-bottom: 18px; }
+    .drawer-kicker button { border: 0; background: transparent; color: inherit; cursor: pointer; }
+    .drawer h3 { margin: 0; font-size: 1.35rem; letter-spacing: -0.03em; }
+    .drawer-meta { margin-top: 10px; color: #b8c3d4; font: 13px var(--mono); display: flex; justify-content: space-between; align-items: center; }
+    .drawer-body { overflow: auto; padding: 22px 24px; display: grid; align-content: start; gap: 22px; }
+    .drawer-section { display: grid; gap: 10px; }
+    .section-label { font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: .12em; color: #9aa6ba; }
+    .context-box, .linked-item, .action-item, .blocker { border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.028); }
+    .context-box { padding: 14px; color: #ccd5e3; font-size: .86rem; line-height: 1.55; }
+    .linked-list, .action-list { display: grid; gap: 9px; }
+    .linked-item, .action-item { min-height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; }
+    .linked-left { display: flex; align-items: center; gap: 12px; }
+    .linked-left i { width: 18px; height: 18px; color: #93c5fd; }
+    .linked-title { font-size: .84rem; color: #e2e8f0; }
+    .linked-sub { font-size: .72rem; color: var(--dim); margin-top: 3px; }
+    .action-item { cursor: pointer; font-size: .86rem; transition: transform .16s var(--ease), border-color .16s var(--ease); }
+    .action-item:hover { transform: translateX(2px); border-color: var(--border-strong); }
+    .action-item span:last-child { color: var(--dim); font: 12px var(--mono); display: flex; gap: 8px; align-items: center; }
+    .blocker { padding: 14px; border-color: rgba(245,158,11,.25); background: rgba(245,158,11,.07); }
+    .blocker strong { display: flex; gap: 9px; align-items: center; color: #f8fafc; font-size: .9rem; }
+    .blocker strong::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 14px rgba(245,158,11,.45); }
+    .blocker p { margin: 10px 0 0 17px; color: #d5ddeb; font-size: .84rem; line-height: 1.5; }
+    .drawer-actions { padding: 18px 24px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 12px; }
+    .drawer-actions button { flex: 1; height: 46px; border-radius: 12px; cursor: pointer; border: 1px solid var(--border); background: rgba(255,255,255,.025); }
+    .drawer-actions .primary { background: linear-gradient(135deg, #2563eb, #3b82f6); border-color: rgba(96,165,250,.35); box-shadow: 0 18px 50px rgba(37,99,235,.28); }
+
+    @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @media (max-width: 1180px) {
+      .app-shell { grid-template-columns: 230px 1fr; }
+      .command-grid, .calendar-grid { grid-template-columns: 1fr; overflow: auto; }
+      .panel-frame { height: auto; min-height: 100%; }
+      .drawer { width: min(426px, 92vw); }
+    }
   </style>
 </head>
 <body>
-  <div class="app">
-    <aside>
-      <div class="brand"><div class="eyebrow">DayPilot</div><h1>Command Bridge</h1><div class="sync">● LOCAL SYNC · HOMEPILOT READY</div></div>
-      <nav>
-        <button class="active" onclick="setView('bridge',this)">Command Bridge</button>
-        <button onclick="setView('calendar',this)">Calendar Core</button>
-        <button onclick="setView('tasks',this)">Task Ledger</button>
-      </nav>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div>
+        <div class="traffic" aria-hidden="true"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
+        <div class="brand"><span class="brand-mark"><i data-lucide="sparkles"></i></span><span>DayPilot</span></div>
+        <nav class="nav-stack">
+          <button class="nav-btn active" data-view="command"><i data-lucide="circle-dot"></i><span>Command</span></button>
+          <button class="nav-btn" data-view="calendar"><i data-lucide="calendar-days"></i><span>Calendar</span></button>
+          <button class="nav-btn" data-view="tasks"><i data-lucide="circle-check"></i><span>Tasks</span></button>
+          <button class="nav-btn" data-view="command"><i data-lucide="home"></i><span>HomePilot</span></button>
+          <button class="nav-btn" data-view="tasks"><i data-lucide="git-branch"></i><span>GitPilot</span></button>
+        </nav>
+      </div>
+      <div class="sidebar-bottom">
+        <div class="profile-card" role="button" tabindex="0">
+          <div class="avatar-img" aria-hidden="true"></div>
+          <div><div class="profile-name">Avery Morgan</div><div class="profile-role">Product Lead</div></div>
+          <i data-lucide="chevron-down" style="width:16px;color:var(--muted)"></i>
+        </div>
+        <div class="sync-card">
+          <div class="sync-row"><span><i class="green-dot"></i>DayPilot Sync</span><span class="live">Live</span></div>
+          <div class="sync-sub">All systems operational</div>
+        </div>
+        <div class="utility-row">
+          <button aria-label="Theme"><i data-lucide="sun"></i></button>
+          <button aria-label="Help"><i data-lucide="help-circle"></i></button>
+          <button aria-label="Settings"><i data-lucide="settings"></i></button>
+        </div>
+      </div>
     </aside>
+
     <main>
-      <header><div><h2 id="viewTitle">Strategic Feed</h2><p>Chat-first planning, schedule blocks, and context-on-demand telemetry.</p></div><div class="pill">OBSIDIAN · APPLE BLUE</div></header>
-      <section class="view active" id="bridge">
-        <div class="chat"><div class="feed" id="feed"></div><div class="input-wrap"><form onsubmit="submitDirective(event)"><span class="muted">⌘</span><input id="directive" placeholder="Ask DayPilot to schedule, rebalance, summarize, or delegate…"><button>Send</button></form></div></div>
-        <aside class="strategy"><div class="section-head"><h3>Today's Strategy</h3><span id="count"></span></div><div class="blocks" id="blocks"></div></aside>
+      <section id="command" class="view-panel active" aria-label="Command workspace">
+        <div class="panel-frame command-grid">
+          <div class="panel-card command-left">
+            <div class="card-header"><div class="card-title"><i data-lucide="sparkles"></i>Strategic Feed</div></div>
+            <div id="chatFeed" class="chat-feed"></div>
+            <div class="composer-wrap">
+              <div class="composer"><i data-lucide="terminal"></i><input id="commandInput" placeholder="Ask DayPilot to organize your day..." autocomplete="off" /><i data-lucide="mic"></i></div>
+              <div class="verify">DayPilot can make mistakes. Verify important info.</div>
+            </div>
+          </div>
+          <div class="panel-card">
+            <div class="card-header"><div class="card-title">Today's Strategy Blocks</div><div class="header-actions"><i data-lucide="layout-grid"></i></div></div>
+            <div id="strategyList" class="strategy-list"></div>
+          </div>
+        </div>
       </section>
-      <section class="view" id="calendar"><div class="calendar-tools"><div><h2>Temporal Matrix Distribution</h2><p>Day and week horizons for AI-arranged activities.</p></div><div class="toggle"><button id="dayBtn" class="active" onclick="renderCalendar('day')">Day Horizon</button><button id="weekBtn" onclick="renderCalendar('week')">Week Horizon</button></div></div><div class="calendar-area" id="calendarArea"></div></section>
-      <section class="view" id="tasks"><div class="tasks"><div class="col"><h3>Commander Assignments</h3><div class="cards" id="commander"></div></div><div class="col"><h3>Autonomous Agents (.H)</h3><div class="cards" id="agents"></div></div></div></section>
+
+      <section id="calendar" class="view-panel" aria-label="Calendar workspace">
+        <div class="panel-frame calendar-grid">
+          <div class="panel-card calendar-shell">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="sparkles"></i>Calendar Core</div>
+              <div class="header-actions"><div class="segmented"><button id="dayToggle" class="active">Day View</button><button id="weekToggle">Week View</button></div><i data-lucide="calendar"></i><i data-lucide="chevron-left"></i><span class="mono" style="font-size:.78rem;color:#cbd5e1">Today</span><i data-lucide="chevron-right"></i></div>
+            </div>
+            <div class="calendar-body">
+              <div class="day-label">May 20, 2025</div>
+              <div id="dayGrid" class="hour-grid"></div>
+              <div id="weekGrid" class="week-matrix"></div>
+            </div>
+          </div>
+          <div class="panel-card metrics-panel">
+            <div class="mini-cal">
+              <div class="mini-title">May 19 – May 25</div>
+              <div class="mini-week"><b>M</b><b>T</b><b>W</b><b>T</b><b>F</b><b>S</b><b>S</b><span class="mini-date">19</span><span class="mini-date selected">20</span><span class="mini-date">21</span><span class="mini-date">22</span><span class="mini-date">23</span><span class="mini-date">24</span><span class="mini-date">25</span></div>
+            </div>
+            <div class="density-card">
+              <div class="density-title"><span>Weekly Density</span><span class="mono" style="color:var(--dim);font-size:.72rem">CAPACITY</span></div>
+              <div id="densityChart" class="density-chart"></div>
+              <div class="legend"><span><i style="background:var(--focus)"></i>Focus</span><span><i style="background:var(--meeting)"></i>Meetings</span><span><i style="background:var(--admin)"></i>Admin</span><span><i style="background:var(--break)"></i>Breaks</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tasks" class="view-panel" aria-label="Task ledger">
+        <div class="panel-frame tasks-grid">
+          <div class="card-title" style="padding:2px 4px"><i data-lucide="list"></i>Task Ledger</div>
+          <div class="ledger-layout">
+            <div class="ledger-panel"><div class="ledger-head"><div class="ledger-title">My Tasks <span id="myCount" class="count">0</span></div><i data-lucide="sliders-horizontal" style="width:16px;color:var(--muted)"></i></div><div id="myRows" class="rows"></div><div class="ledger-footer"><span>＋ Add Task</span><span>View All →</span></div></div>
+            <div class="ledger-panel"><div class="ledger-head"><div class="ledger-title ai">AI Tasks <span id="aiCount" class="count">0</span></div><i data-lucide="sparkles" style="width:16px;color:#c084fc"></i></div><div id="aiRows" class="rows"></div><div class="ledger-footer" style="justify-content:flex-end;color:#cbd5e1"><span>View All →</span></div></div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
-  <aside class="drawer" id="drawer"><div class="drawer-head"><div><div class="eyebrow">Context Telemetry</div><h1 id="drawerTitle">Task</h1></div><button class="x" onclick="drawer.classList.remove('open')">×</button></div><div class="drawer-section"><h4>Execution Frame</h4><p id="drawerTime"></p></div><div class="drawer-section"><h4>Vector Context</h4><p id="drawerContext"></p></div></aside>
+
+  <aside id="drawer" class="drawer" aria-label="Context detail drawer">
+    <div class="drawer-top">
+      <div class="drawer-kicker"><i data-lucide="sparkles" style="width:16px"></i><button id="drawerClose" aria-label="Close"><i data-lucide="x"></i></button></div>
+      <h3 id="drawerTitle">Team meeting prep</h3>
+      <div class="drawer-meta"><span id="drawerTime">11:00 – 11:45 (45m)</span><span id="drawerStatus" class="status-pill" style="--status:var(--focus)">In Progress</span></div>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-section"><div class="section-label">Summary</div><div id="drawerSummary" class="context-box"></div></div>
+      <div class="drawer-section"><div class="section-label">Linked Context</div><div id="drawerLinks" class="linked-list"></div></div>
+      <div class="drawer-section"><div class="section-label">Suggested Actions</div><div id="drawerActions" class="action-list"></div></div>
+      <div class="blocker"><strong>Potential blocker</strong><p>Design feedback on CTA flow may impact timeline.</p></div>
+    </div>
+    <div class="drawer-actions"><button>Reschedule</button><button class="primary">Mark Complete ✓</button></div>
+  </aside>
+
   <script>
-    const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-    const hours=['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00'];
-    const slots=['09:00','11:00','14:00','16:00','18:00'];
-    let messages=[{role:'DayPilot',time:'08:12',body:'Welcome back, Commander. I balanced today around one inbox sweep, one protected deep-work block, and quiet autonomous preparation.'}];
-    let tasks=[
-      {id:101,day:'Monday',start:'09:00',end:'10:30',title:'Inbox Sweep & Contract Telemetry',owner:'agent',executor:'Sec-Core',priority:'critical',context:'Parsing compliance emails and matching clauses through Matrix RAG. No Commander interruption unless a blocker appears.'},
-      {id:102,day:'Monday',start:'11:00',end:'13:00',title:'Refactor Model Execution Boundaries',owner:'user',executor:'Commander',priority:'high',context:'Protected deep-work block for vLLM, Ollama, and approval boundary design.'},
-      {id:103,day:'Tuesday',start:'14:00',end:'16:00',title:'GitPilot Dependency Patch Review',owner:'agent',executor:'Git-Core',priority:'high',context:'Autonomous patch preparation staged for review before repository writes.'},
-      {id:104,day:'Thursday',start:'16:00',end:'16:45',title:'Team Architecture Meeting Prep',owner:'user',executor:'Commander',priority:'high',context:'AI-prepared brief with decision points, related files, and expected outcomes.'}
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+    const colors = { focus: 'var(--focus)', meeting: 'var(--meeting)', admin: 'var(--admin)', break: 'var(--break)' };
+
+    let events = [
+      { id: 1, start: '09:00', end: '09:45', duration: '45m', title: 'Inbox sweep', category: 'Admin', type: 'admin', icon: 'inbox', status: 'Done', top: 82, height: 62, summary: 'Processed urgent inbox signals, extracted commitments, and routed low-priority threads to autonomous triage.', context: 'Matrix RAG matched 14 inbound emails against active product roadmap commitments. Three items were sent to GitPilot for dependency review.' },
+      { id: 2, start: '10:00', end: '12:00', duration: '2h', title: 'Deep work', category: 'Focus', type: 'focus', icon: 'target', status: 'In Progress', top: 164, height: 144, summary: 'Protected deep work window for architecture refinement and local model-serving boundary decisions.', context: 'Focus window was reserved after DayPilot detected excessive meeting fragmentation across Tuesday and Thursday.' },
+      { id: 3, start: '12:00', end: '13:00', duration: '1h', title: 'Lunch break', category: 'Break', type: 'break', icon: 'coffee', status: 'Scheduled', top: 328, height: 74, summary: 'System rest block preserved to prevent cognitive overload and avoid back-to-back scheduling.', context: 'HomePilot ambient state indicates this is the best low-interruption interval.' },
+      { id: 4, start: '13:00', end: '13:45', duration: '45m', title: 'Email triage', category: 'Admin', type: 'admin', icon: 'mail', status: 'Scheduled', top: 410, height: 62, summary: 'Administrative triage for follow-ups, calendar confirmations, and routing unresolved messages.', context: 'Sec-Core will pre-rank email clusters by priority before the manual review window opens.' },
+      { id: 5, start: '14:00', end: '15:00', duration: '1h', title: 'Architecture review', category: 'Meeting', type: 'meeting', icon: 'users', status: 'Scheduled', top: 492, height: 82, summary: 'Cross-functional architecture review with product, design, and engineering alignment.', context: 'Linked GitPilot diffs and Q2 roadmap notes are attached for quick inspection.' },
+      { id: 6, start: '16:00', end: '17:30', duration: '1.5h', title: 'Deep work', category: 'Focus', type: 'focus', icon: 'target', status: 'Scheduled', top: 656, height: 112, summary: 'Second focus block for implementation cleanup and validation after meeting intake.', context: 'DayPilot reserved this block because calendar density drops after 15:45.' },
+      { id: 7, start: '17:30', end: '18:00', duration: '30m', title: 'Daily wrap-up', category: 'Admin', type: 'admin', icon: 'list-checks', status: 'Scheduled', top: 780, height: 48, summary: 'Daily closure window to commit notes, confirm tomorrow’s plan, and summarize automation results.', context: 'AI agents will deliver a short audit report before this block.' }
     ];
-    const feed=document.getElementById('feed'), blocks=document.getElementById('blocks'), drawer=document.getElementById('drawer');
-    function setView(id,btn){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); viewTitle.textContent=id==='bridge'?'Strategic Feed':id==='calendar'?'Temporal Matrix':'Operational Ledger'; if(id==='calendar')renderCalendar('day'); if(id==='tasks')renderTasks(); }
-    function renderFeed(){ feed.innerHTML=messages.map(m=>`<div class="message ${m.role==='Commander'?'user':''}"><div class="label">${m.role} · ${m.time}</div><div class="bubble">${m.body}</div></div>`).join(''); feed.scrollTop=feed.scrollHeight; }
-    function blockHtml(t){ return `<button class="block" onclick="openDrawer(${t.id})"><div class="time">${t.start}–${t.end} · ${t.day}</div><div class="title">${t.title}</div><div class="meta"><span class="tag ${t.owner==='user'?'user':'agent'}">${t.owner==='user'?'COMMANDER':'.HPERSONA'}</span><span class="tag ${t.priority==='critical'?'critical':''}">${t.priority.toUpperCase()}</span><span>${t.executor}</span></div></button>` }
-    function renderBlocks(){ const today=tasks.filter(t=>['Monday','Thursday'].includes(t.day)); count.textContent=today.length+' blocks'; blocks.innerHTML=today.map(blockHtml).join(''); }
-    function renderCalendar(mode){ dayBtn.classList.toggle('active',mode==='day'); weekBtn.classList.toggle('active',mode==='week'); if(mode==='day'){ calendarArea.innerHTML=`<div class="day-grid">${hours.map(h=>`<div class="row"><div class="hour">${h}</div><div class="cell">${tasks.filter(t=>t.start.slice(0,2)===h.slice(0,2)).map(t=>`<button class="cal-card ${t.owner}" onclick="openDrawer(${t.id})"><div class="title">${t.title}</div><div class="meta"><span>${t.start}–${t.end}</span><span>${t.executor}</span></div></button>`).join('')||'<span class="muted">quiet buffer</span>'}</div></div>`).join('')}</div>` } else { calendarArea.innerHTML=`<div class="week-grid"><div class="wh"></div>${days.map(d=>`<div class="wh">${d.slice(0,3)}<br>Active</div>`).join('')}${slots.map(s=>`<div class="wt">${s}</div>${days.map(d=>`<div class="wc">${tasks.filter(t=>t.day===d&&t.start.slice(0,2)===s.slice(0,2)).map(t=>`<button class="chip" onclick="openDrawer(${t.id})">${t.title}</button>`).join('')}</div>`).join('')}`).join('')}</div>` } }
-    function renderTasks(){ commander.innerHTML=tasks.filter(t=>t.owner==='user').map(t=>`<div class="ledger-card" onclick="openDrawer(${t.id})"><div class="title">${t.title}</div><div class="meta"><span>${t.start}–${t.end}</span><span>${t.executor}</span></div><p>${t.context}</p></div>`).join(''); agents.innerHTML=tasks.filter(t=>t.owner==='agent').map(t=>`<div class="ledger-card" onclick="openDrawer(${t.id})"><div class="title">${t.title}</div><div class="meta"><span>${t.start}–${t.end}</span><span>${t.executor}</span></div><p>${t.context}</p></div>`).join(''); }
-    function submitDirective(e){ e.preventDefault(); const input=document.getElementById('directive'); const text=input.value.trim(); if(!text)return; const time=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); messages.push({role:'Commander',time,body:text},{role:'DayPilot',time,body:'Directive processed. I updated strategy blocks, calendar allocation, and separated Commander work from autonomous .hpersona preparation.'}); tasks.unshift({id:Date.now(),day:'Thursday',start:/18|6pm|evening/i.test(text)?'18:00':'12:00',end:/18|6pm|evening/i.test(text)?'19:00':'13:00',title:text.length>62?text.slice(0,59)+'...':text,owner:'user',executor:'Commander',priority:/critical|urgent/i.test(text)?'critical':'high',context:'Manual assignment from Strategic Feed. AI protected this block and moved background work away from it.'}); tasks.unshift({id:Date.now()+1,day:'Thursday',start:'12:00',end:'12:30',title:'Autonomous context preparation',owner:'agent',executor:'Sec-Core',priority:'medium',context:'Sec-Core collects email, notes, and repo context related to the directive; writes remain approval-gated.'}); input.value=''; renderAll(); }
-    function openDrawer(id){ const t=tasks.find(x=>x.id===id); drawerTitle.textContent=t.title; drawerTime.textContent=`${t.day} · ${t.start}–${t.end} · ${t.executor}`; drawerContext.textContent=t.context; drawer.classList.add('open'); }
-    function renderAll(){ renderFeed(); renderBlocks(); renderTasks(); }
+
+    let messages = [
+      { role: 'ai', time: '07:30', text: "Good morning, Avery. I’ve analyzed your calendar, tasks, and signals. Here’s your plan." },
+      { role: 'user', time: '07:31', text: 'Make sure I have deep work time and keep meetings tight.' },
+      { role: 'ai', time: '07:31', text: 'Your workday has been balanced. 4 focus blocks • 3 meetings • 2 admin windows.' },
+      { role: 'ai', time: '07:32', text: 'I scheduled a deep work block from 10:00–12:00.' },
+      { role: 'ai', time: '07:32', text: 'Team meeting prep has been grouped with contract review. All set.' }
+    ];
+
+    let myTasks = [
+      { id: 101, title: 'Review architecture doc', priority: 'High', status: 'In Progress', statusColor: 'var(--focus)', checked: false },
+      { id: 102, title: 'Reply to investor email', priority: 'Medium', status: 'Scheduled', statusColor: 'var(--focus)', checked: false },
+      { id: 103, title: 'Prepare team meeting', priority: 'Medium', status: 'Scheduled', statusColor: 'var(--focus)', checked: false },
+      { id: 104, title: 'Update product roadmap', priority: 'Low', status: 'Complete', statusColor: 'var(--admin)', checked: true }
+    ];
+    let aiTasks = [
+      { id: 201, title: 'Schedule optimization', status: 'In Progress', statusColor: 'var(--focus)' },
+      { id: 202, title: 'Email triage & prioritization', status: 'In Progress', statusColor: 'var(--focus)' },
+      { id: 203, title: 'PR scan & summary', status: 'Scheduled', statusColor: 'var(--meeting)' },
+      { id: 204, title: 'Meeting notes summarization', status: 'Scheduled', statusColor: 'var(--meeting)' },
+      { id: 205, title: 'Calendar conflict resolver', status: 'Complete', statusColor: 'var(--admin)' }
+    ];
+
+    function esc(value) { return String(value).replace(/[&<>"]/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[s])); }
+
+    function route(view) {
+      $$('.view-panel').forEach(p => p.classList.toggle('active', p.id === view));
+      $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+      closeDrawer();
+    }
+
+    function renderMessages() {
+      $('#chatFeed').innerHTML = messages.map(m => `
+        <div class="msg-row ${m.role === 'user' ? 'user' : ''}">
+          ${m.role === 'user' ? '<div class="mini-user-avatar"></div>' : '<div class="ai-avatar"><i data-lucide="sparkles"></i></div>'}
+          <div class="msg-stack"><div class="bubble">${esc(m.text)}</div><div class="timestamp">${esc(m.time)}</div></div>
+        </div>`).join('');
+      $('#chatFeed').scrollTop = $('#chatFeed').scrollHeight;
+    }
+
+    function statusStyle(status) {
+      if (status === 'Done' || status === 'Complete') return 'var(--admin)';
+      if (status === 'In Progress') return 'var(--focus)';
+      return 'var(--meeting)';
+    }
+
+    function renderStrategy() {
+      const actionable = events.filter(e => e.type !== 'break');
+      $('#strategyList').innerHTML = actionable.map(e => `
+        <article class="strategy-card" style="--accent:${colors[e.type]};--status:${statusStyle(e.status)}" data-id="${e.id}">
+          <div class="time-stack"><strong>${e.start}</strong><span>– ${e.end}</span></div>
+          <div class="strategy-main"><div class="strategy-title"><i data-lucide="${e.icon}"></i>${esc(e.title)}</div><div class="strategy-cat">${esc(e.category)}</div></div>
+          <span class="status-pill" style="--status:${statusStyle(e.status)}">${esc(e.status)}</span>
+        </article>`).join('') + `<div class="schedule-link" data-route="calendar"><span><i data-lucide="calendar-days" style="width:16px;vertical-align:-3px;margin-right:8px"></i>View Full Schedule</span><span>→</span></div>`;
+    }
+
+    function renderDayGrid() {
+      const hours = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00'];
+      $('#dayGrid').innerHTML = hours.map(h => `<div class="hour-row"><div class="hour-label">${h}</div><div></div></div>`).join('') + '<div class="time-now"></div>' + events.map(e => `
+        <article class="event-card" data-id="${e.id}" style="--accent:${colors[e.type]};top:${e.top}px;height:${e.height}px">
+          <div><div class="event-title">${e.start} &nbsp; ${esc(e.title)}</div><div class="event-sub">${e.duration} • ${esc(e.category)}</div></div><i data-lucide="${e.icon}"></i>
+        </article>`).join('');
+    }
+
+    function renderWeekGrid() {
+      const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const slots = ['09:00','12:00','15:00','17:00'];
+      let html = '<div class="week-time"></div>' + days.map((d,i) => `<div class="week-head">${d}<span>${19+i}</span></div>`).join('');
+      slots.forEach(slot => {
+        html += `<div class="week-time">${slot}</div>`;
+        days.forEach((d, i) => {
+          const sample = events.filter((_, idx) => (idx + i + slot.length) % 5 === 0).slice(0, 2);
+          html += `<div class="week-cell">${sample.map(e => `<div class="micro-pill" data-id="${e.id}" style="--accent:${colors[e.type]}">${esc(e.title)}</div>`).join('')}</div>`;
+        });
+      });
+      $('#weekGrid').innerHTML = html;
+    }
+
+    function renderDensity() {
+      const density = [
+        { f: 42, m: 12, a: 18, b: 8 }, { f: 34, m: 22, a: 16, b: 6 }, { f: 48, m: 30, a: 10, b: 8 },
+        { f: 52, m: 12, a: 20, b: 7 }, { f: 36, m: 24, a: 18, b: 8 }, { f: 15, m: 0, a: 10, b: 16 }, { f: 0, m: 0, a: 0, b: 10 }
+      ];
+      $('#densityChart').innerHTML = '<div class="y-axis"><span>18:00</span><span>16:00</span><span>12:00</span><span>08:00</span></div>' + density.map((d, i) => `
+        <div><div class="day-density"><div class="seg" style="height:${d.b}%;background:var(--break)"></div><div class="seg" style="height:${d.a}%;background:var(--admin)"></div><div class="seg" style="height:${d.m}%;background:var(--meeting)"></div><div class="seg" style="height:${d.f}%;background:var(--focus)"></div></div><div class="day-letter">${['M','T','W','T','F','S','S'][i]}</div></div>`).join('');
+    }
+
+    function renderTasks() {
+      $('#myCount').textContent = myTasks.length;
+      $('#aiCount').textContent = aiTasks.length;
+      $('#myRows').innerHTML = myTasks.map(t => `
+        <div class="task-row"><button class="check ${t.checked ? 'done' : ''}" data-check="${t.id}" aria-label="Toggle ${esc(t.title)}"></button><span class="task-title ${t.checked ? 'done' : ''}">${esc(t.title)}</span><span class="priority" style="--p:${t.priority === 'High' ? 'var(--orange)' : t.priority === 'Medium' ? '#eab308' : 'var(--faint)'}">${t.priority}</span><span class="row-status" style="--s:${t.checked ? 'var(--admin)' : t.statusColor}">${t.checked ? 'Complete' : t.status}</span></div>`).join('');
+      $('#aiRows').innerHTML = aiTasks.map(t => `
+        <div class="task-row"><i class="agent-icon" data-lucide="sparkles"></i><span class="task-title" style="grid-column:2 / span 2">${esc(t.title)}</span><span class="row-status" style="--s:${t.statusColor}">${esc(t.status)}</span></div>`).join('');
+    }
+
+    function openDrawer(eventId) {
+      const e = events.find(x => x.id === Number(eventId));
+      if (!e) return;
+      $('#drawerTitle').textContent = e.title;
+      $('#drawerTime').textContent = `${e.start} – ${e.end} (${e.duration})`;
+      $('#drawerStatus').textContent = e.status;
+      $('#drawerStatus').style.setProperty('--status', statusStyle(e.status));
+      $('#drawerSummary').textContent = e.summary;
+      $('#drawerLinks').innerHTML = [
+        ['file-text', 'Product Roadmap Q2', 'Notion Page'],
+        ['figma', 'Design System Updates', 'Figma File'],
+        ['git-pull-request', 'Related PR Branches', 'GitPilot Diff']
+      ].map(([icon, title, sub]) => `<div class="linked-item"><div class="linked-left"><i data-lucide="${icon}"></i><div><div class="linked-title">${title}</div><div class="linked-sub">${sub}</div></div></div><i data-lucide="external-link" style="width:15px;color:var(--dim)"></i></div>`).join('');
+      $('#drawerActions').innerHTML = [['Review agenda','5 min'],['Check design updates','10 min'],['Scan related PRs','15 min'],['Confirm attendees','2 min']].map(([a,t]) => `<div class="action-item"><span>${a}</span><span>${t}<i data-lucide="arrow-right" style="width:14px"></i></span></div>`).join('');
+      $('#drawer').classList.add('open');
+      lucide.createIcons();
+    }
+    function closeDrawer(){ $('#drawer').classList.remove('open'); }
+
+    function submitCommand() {
+      const input = $('#commandInput');
+      const value = input.value.trim();
+      if (!value) return;
+      messages.push({ role: 'user', time: '07:33', text: value });
+      input.value = '';
+      renderMessages();
+      setTimeout(() => {
+        const newId = Date.now();
+        events.push({ id: newId, start: '15:30', end: '16:00', duration: '30m', title: `AI scheduled: ${value.slice(0, 24)}${value.length > 24 ? '…' : ''}`, category: 'Admin', type: 'admin', icon: 'bot', status: 'Scheduled', top: 615, height: 42, summary: 'DayPilot created a placeholder execution block from the command feed.', context: `Raw command vector: ${value}` });
+        myTasks.unshift({ id: newId, title: `Verify: ${value}`, priority: 'High', status: 'In Progress', statusColor: 'var(--focus)', checked: false });
+        aiTasks.unshift({ id: newId + 1, title: 'Directive vectorization', status: 'In Progress', statusColor: 'var(--focus)' });
+        messages.push({ role: 'ai', time: '07:33', text: 'Directive processed. I updated the strategy blocks, calendar matrix, and operational ledger.' });
+        renderAll();
+      }, 650);
+    }
+
+    function renderAll() {
+      renderMessages(); renderStrategy(); renderDayGrid(); renderWeekGrid(); renderDensity(); renderTasks(); lucide.createIcons();
+    }
+
+    document.addEventListener('click', event => {
+      const nav = event.target.closest('.nav-btn');
+      if (nav) route(nav.dataset.view);
+      const routeLink = event.target.closest('[data-route]');
+      if (routeLink) route(routeLink.dataset.route);
+      const block = event.target.closest('[data-id]');
+      if (block) openDrawer(block.dataset.id);
+      const check = event.target.closest('[data-check]');
+      if (check) {
+        const item = myTasks.find(t => t.id === Number(check.dataset.check));
+        if (item) { item.checked = !item.checked; item.status = item.checked ? 'Complete' : 'Scheduled'; renderTasks(); lucide.createIcons(); }
+      }
+    });
+    $('#drawerClose').addEventListener('click', closeDrawer);
+    $('#commandInput').addEventListener('keydown', event => { if (event.key === 'Enter') submitCommand(); });
+    $('#dayToggle').addEventListener('click', () => { $('#dayToggle').classList.add('active'); $('#weekToggle').classList.remove('active'); $('#dayGrid').style.display = 'grid'; $('#weekGrid').classList.remove('active'); });
+    $('#weekToggle').addEventListener('click', () => { $('#weekToggle').classList.add('active'); $('#dayToggle').classList.remove('active'); $('#dayGrid').style.display = 'none'; $('#weekGrid').classList.add('active'); });
+
     renderAll();
   </script>
 </body>

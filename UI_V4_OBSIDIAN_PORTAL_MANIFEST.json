@@ -1,0 +1,17 @@
+{
+  "name": "DayPilot Pro Obsidian Minimalist Portal",
+  "version": "v4",
+  "updated_file": "examples/ui/daypilot-premium-minimalist-portal.html",
+  "format": "single-file HTML/CSS/JavaScript demo",
+  "features": [
+    "persistent left sidebar routing deck",
+    "Command tab with Strategic Feed and Today's Strategy Blocks",
+    "Calendar tab with absolute-position Day View and Week View toggle",
+    "Weekly Density stacked capacity chart",
+    "Tasks tab with split My Tasks and AI Tasks operational ledger",
+    "animated right-edge context drawer",
+    "mock data engine for chat, events, strategy blocks, and tasks",
+    "Lucide icon rehydration for dynamic UI updates"
+  ],
+  "validation": "python -m pytest -q -> 10 passed"
+}
