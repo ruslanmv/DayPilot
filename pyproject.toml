@@ -37,3 +37,12 @@ pythonpath = [
   "services/voice-gateway",
 ]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.2",
+  "ruff>=0.5",
+]
+
+[tool.uv]
+package = false
