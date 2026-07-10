@@ -6,13 +6,225 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Status-Scaffold-blue?style=for-the-badge" alt="Status" />
+  <img src="https://img.shields.io/badge/Status-Enterprise%20Ready-blue?style=for-the-badge" alt="Status" />
   <img src="https://img.shields.io/badge/Domain-daypilot.ruslanmv.com-cyan?style=for-the-badge" alt="Domain" />
   <img src="https://img.shields.io/badge/Stack-Tauri%20%2B%20React%20%2B%20FastAPI-purple?style=for-the-badge" alt="Stack" />
   <img src="https://img.shields.io/badge/Integration-HomePilot%20.hpersona-orange?style=for-the-badge" alt="HomePilot" />
 </p>
 
 ---
+
+
+## Enterprise Production Readiness
+
+DayPilot Enterprise is organized as a production-oriented monorepo for local-first and hybrid AI operations. The repository separates operator experience, API ingress, orchestration, MCP tool governance, knowledge retrieval, model routing, voice workflows, observability, local data, infrastructure, and shared TypeScript contracts.
+
+### Production principles
+
+- **Local-first by default:** sensitive documents, personas, project memory, and approval state are designed to run locally unless a deployment explicitly enables cloud synchronization.
+- **Human approval for write actions:** email sends, calendar changes, repository writes, file generation, persona enablement, and external communications must be approval-gated.
+- **Auditable execution:** agent plans, tool calls, document indexing, model requests, approvals, and errors should emit structured logs, traces, metrics, and audit records.
+- **Provider abstraction:** Ollabridge routes local or hybrid model execution so the UX does not depend on raw model configuration during daily work.
+- **Document safety:** source files are preserved; DayPilot creates AI-readable internal representations and writes generated outputs as new versions only.
+- **Composable deployment:** desktop, local web, Docker Compose, Kubernetes, Terraform, and cloud gateway modes are documented separately so teams can choose the right operational footprint.
+
+### Repository map
+
+| Area | Path | Purpose |
+|---|---|---|
+| Operator web UI | `apps/operator-web` | React/Vite web operator experience. |
+| Desktop shell | `apps/operator-desktop` | Tauri desktop wrapper for local workstations. |
+| Mobile PWA | `apps/mobile-pwa` | Mobile-friendly operator view. |
+| UI bridge package | `packages/ui-bridge` | Shared DayPilot command-center UI components and styling. |
+| Shared contracts | `packages/shared-types` | TypeScript domain contracts for personas, approvals, tasks, projects, agents, and documents. |
+| API gateway | `services/api-gateway` | FastAPI ingress for health, operator briefing, persona preview, and future external API routes. |
+| Orchestrator | `services/orchestrator` | Approval-first agent runtime and workflow planning. |
+| MCP host | `services/mcp-host` | Governed tool registry and HomePilot `.hpersona` bridge. |
+| Knowledge service | `services/knowledge-service` | Document ingest, chunk persistence, and retrieval foundation. |
+| Model serving | `services/model-serving` | Mock/Ollama/OpenAI-compatible routing layer. |
+| Voice gateway | `services/voice-gateway` | Future ASR/TTS and live voice workflow contracts. |
+| Observability | `services/observability` | Metrics, traces, and structured logging utilities. |
+| Local data | `local_data` | Local-first runtime storage placeholders for documents, indexes, traces, and personas. |
+| Infrastructure | `infra` | Docker, Kubernetes, and Terraform deployment assets. |
+| Tests | `tests` | Python service and contract tests. |
+
+### Production deployment checklist
+
+Before a production deployment, verify the following operational controls:
+
+1. **Identity and access:** configure authentication, workspace membership, and admin-only policy management.
+2. **Secrets:** store credentials in a managed secret backend; never commit provider tokens, email credentials, Box credentials, or model API keys.
+3. **Database:** run Alembic migrations and configure backup/restore for Postgres or the chosen production database.
+4. **Document permissions:** explicitly approve local folders, Box scopes, and project vault write permissions. Default to read + index only.
+5. **MCP tools:** review every tool contract for risk level, write behavior, approval requirement, persona access, and workspace scope.
+6. **Model routing:** define Ollabridge local/hybrid/cloud routing and fallback rules per agent role.
+7. **Observability:** enable metrics, traces, structured logs, retention policy, alerts, and audit exports.
+8. **Network boundaries:** expose only the gateway or approved ingress; keep local services and data stores private.
+9. **Approvals:** test human-in-the-loop flows for email, calendar, Git, document generation, and external communications.
+10. **Disaster recovery:** document restore steps for database, vector index, generated files, and persona registry.
+
+## DayPilot Pro Premium UX Architecture
+
+DayPilot Pro is designed as a daily AI operating room, not a passive dashboard. The product promise is:
+
+```text
+DayPilot = Calendar + Tasks + Projects + Agents + Documents + Natural Tools
+```
+
+The user should open DayPilot and immediately understand what to do now, what AI is doing, which project needs attention, what changed since yesterday, which document supports the work, and what needs approval.
+
+### Best Simple UX
+
+The default Command screen should reduce the morning to a single calm summary:
+
+```text
+Good morning. Here is your day.
+
+NOW:      Continue DayPilot UI implementation
+NEXT:     Review GitPilot generated patch
+LATER:    Matrix Designer feedback + client follow-up
+
+AI RUNNING: 4 workflows
+BLOCKERS:   1 needs your approval
+PROJECTS:   6 active, 2 need attention
+
+[Start Focus Mode] [Review AI Work] [Adjust Plan]
+```
+
+DayPilot should not make the user search. It should answer:
+
+- What should I do now?
+- What is AI doing for me?
+- Which project needs attention?
+- What changed since yesterday?
+- What needs my approval?
+
+### Core Workflow
+
+```text
+Open DayPilot
+   ↓
+DayPilot reads calendar, email, projects, GitPilot, HomePilot, Matrix Designer
+   ↓
+AI creates a plan for the day
+   ↓
+User approves or adjusts with chat
+   ↓
+DayPilot schedules work blocks
+   ↓
+AI agents execute background tasks
+   ↓
+DayPilot monitors progress and blockers
+   ↓
+User continues work across projects without losing context
+```
+
+### Sidebar Structure
+
+The default sidebar stays simple and first-class:
+
+```text
+Command
+Calendar
+Tasks
+Projects
+Documents
+Agents
+```
+
+Connected systems such as HomePilot, GitPilot, Matrix Designer, Box, Local Files, Email, and Ollabridge belong in Settings or integration drawers rather than the primary nav.
+
+### Main Screens
+
+1. **Command — Daily Control Center**: the default screen with the Now / Next / Later summary, Strategic Feed, Today’s Plan, and live context for blockers, AI work, approvals, and project attention.
+2. **Calendar — Minute-by-Minute AI Plan**: the actual day distribution, where every block has an owner, source, status, and drawer actions.
+3. **Tasks — You vs AI**: manual commitments stay separate from work DayPilot is doing in the background.
+4. **Projects — Continue Consulting and Internal Work**: each project shows progress, blocker state, AI activity, linked documents, and a Continue Work action. The drawer explains what was done yesterday, what needs to happen today, what AI is doing, linked files/branches/emails, blockers, and the next recommended action.
+5. **Documents — AI File Command Center**: local files, Box, project folders, and the DayPilot Vault are organized by project, time, and relevance. Documents can be chatted with, summarized, compared, converted to tasks, or used to generate Office outputs without overwriting originals.
+6. **Agents — AI Workflow Control**: HomePilot, GitPilot, Matrix Designer, Email Sentinel, Scheduler, Document Assistant, and Project Analyst work stays visible through simple Running, Needs Approval, and Blocked statuses.
+
+
+### Documents Tab
+
+Documents are a first-class DayPilot tab because most daily work lives in contracts, Excel sheets, Word reports, PowerPoint decks, PDFs, project notes, invoices, meeting files, proposals, screenshots, and code/design specs. The Documents tab is not a raw file browser; it is a **Today Context Engine** organized into three panes:
+
+- **Sources**: Local PC files, Box, selected project folders, generated outputs, and the DayPilot Project Vault.
+- **Smart Document Workspace**: today’s documents, project files, recent files, and files needing review.
+- **Document AI**: chat with one document, a project folder, or all files relevant to today.
+
+Supported default business formats include Word (`.doc`, `.docx`, `.rtf`, `.odt`), Excel (`.xls`, `.xlsx`, `.xlsm`, `.csv`, `.tsv`, `.ods`), PowerPoint (`.ppt`, `.pptx`, `.odp`), documents (`.pdf`, `.txt`, `.md`, `.html`), design references (`.png`, `.jpg`, `.webp`, `.svg`), and project data (`.json`, `.yaml`, `.xml`, `.sql`).
+
+The safety model is explicit: source files stay untouched, DayPilot extracts readable text/tables/slides into an internal AI-readable representation, AI indexes chunks into project memory, users chat with the document, and generated outputs are saved as new versions.
+
+### Integration Roles
+
+| System | Role |
+|---|---|
+| HomePilot | Local context, personal workflows, environment signals, personas |
+| GitPilot | Coding tasks, branches, PRs, tests, patches, code review |
+| Matrix Designer | UI/UX suggestions, design review, layout critique, product quality |
+| DayPilot | Daily planning, scheduling, task control, monitoring, approvals |
+| Documents | Word, Excel, PowerPoint, PDF, notes, images, Box, local folders, and project vault memory |
+| Ollabridge | AI provider layer for local/online model execution |
+
+### Product Rules
+
+1. Show only Now, Next, Blocked, AI Running, Project Progress, and Needs Approval by default.
+2. Keep everything else in drawers or project detail views.
+3. My Tasks are things the user must do manually.
+4. AI Tasks are things DayPilot is doing for the user.
+5. Every calendar block has an owner, source, and status.
+6. Every project has yesterday, today, AI activity, linked documents, blockers, and next recommended action.
+7. Every document explains why it matters today, which project/meeting needs it, what changed, and what AI can prepare from it.
+8. Original Office and legacy files are never overwritten automatically; DayPilot creates AI-readable representations and saves generated outputs as new versions.
+9. Default document permissions are read + index only, with no destructive edits and no external sharing without approval.
+10. AI can prepare and execute safe workflows, but important actions require approval.
+11. The user should be able to continue consulting and internal projects without losing context.
+
+### Final Product Definition
+
+DayPilot is a personal AI command center that organizes the day, executes safe AI workflows, monitors projects, coordinates HomePilot, GitPilot, and Matrix Designer, and helps the user continue work across consulting and internal projects with minimal effort.
+
+
+## Local Development with Make and UV
+
+DayPilot uses a UV-managed Python environment and a Makefile for a predictable local workflow:
+
+```bash
+make help      # list all supported commands
+make install   # uv sync --group dev, then pnpm install
+make run       # run the FastAPI API gateway with uvicorn
+make run-web   # run the operator web app
+make test      # run Python tests and package tests
+```
+
+The default Python install is intentionally lean (`uv sync --group dev`). Optional heavier extras for RAG, model serving, and observability can be installed with `make install-python-all`.
+
+
+## Documentation Guide
+
+The `docs/` folder is the production knowledge base for implementation, deployment, security, and operating-model decisions. Start with the architecture and security documents, then move into deployment and integration guides.
+
+| Document | Audience | What it explains |
+|---|---|---|
+| [`docs/architecture.md`](docs/architecture.md) | Engineers and architects | Service boundaries, operator UI → API gateway → orchestrator → MCP host → tools/knowledge/models flow, approval queue, and observability placement. |
+| [`docs/security.md`](docs/security.md) | Security, platform, and product owners | Policy-first defaults, high-risk actions, approval requirements, and production prompt-injection/security expectations. |
+| [`docs/deployment.md`](docs/deployment.md) | DevOps and platform teams | Local desktop, local web, cloud gateway, hybrid deployment modes, canonical domain, and Docker Compose baseline. |
+| [`docs/operationalization-gap-analysis.md`](docs/operationalization-gap-analysis.md) | Technical leads | What production-readiness gaps were identified, which infrastructure/runtime files close them, and which areas still require hardening. |
+| [`docs/homepilot-integration.md`](docs/homepilot-integration.md) | Integration engineers | `.hpersona` import flow, dependency inspection, restrictive policy creation, and safe enablement stages for HomePilot personas. |
+| [`docs/persona-policy.md`](docs/persona-policy.md) | Governance and agent developers | Persona install states, allowed tools, blocked actions, rate limits, scopes, retention, and approval rules. |
+| [`docs/mcp-tool-contracts.md`](docs/mcp-tool-contracts.md) | Tool developers | Required MCP tool metadata: input/output schemas, risk level, write behavior, approvals, personas, and workspace scopes. |
+| [`docs/rag-evaluation.md`](docs/rag-evaluation.md) | AI quality and retrieval engineers | RAG evaluation placeholders for precision, recall, faithfulness, relevance, citations, retrieval gaps, and prompt-injection risk. |
+| [`docs/ux-space-bridge-minimalist-portal.md`](docs/ux-space-bridge-minimalist-portal.md) | Product, design, and frontend | Premium minimalist portal principles, visual token contract, command-first flow, drawer behavior, and UI architecture. |
+| [`docs/roadmap.md`](docs/roadmap.md) | Product and delivery teams | Sequenced roadmap from HomePilot import and persona registry to approvals, connectors, RAG, observability, and voice gateway. |
+
+### Recommended reading paths
+
+- **First-time developer:** `README.md` → `docs/architecture.md` → `docs/security.md` → `docs/deployment.md`.
+- **Frontend/product designer:** `README.md` → `docs/ux-space-bridge-minimalist-portal.md` → `packages/ui-bridge`.
+- **Agent/tool developer:** `docs/persona-policy.md` → `docs/mcp-tool-contracts.md` → `services/mcp-host`.
+- **RAG/document engineer:** `docs/rag-evaluation.md` → `services/knowledge-service` → `local_data/README.md`.
+- **Platform/production owner:** `docs/operationalization-gap-analysis.md` → `docs/deployment.md` → `infra/`.
 
 ## 1. Executive Summary
 
