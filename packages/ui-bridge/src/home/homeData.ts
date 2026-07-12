@@ -1,3 +1,5 @@
+import { isDemoMode } from '../env'
+
 export type AgendaItem = { time: string; title: string; tag: string; end?: string }
 export type ContinueItem = {
   id: string
@@ -9,14 +11,16 @@ export type ContinueItem = {
   accent: 'blue' | 'purple' | 'green'
 }
 
-export const NEXT_PRIORITY = {
+type NextPriority = { title: string; project: string; time: string; support: string } | null
+
+const DEMO_NEXT_PRIORITY: NextPriority = {
   title: 'Continue DayPilot UI implementation',
   project: 'DayPilot Portal',
   time: '08:30 – 12:00',
   support: 'The email workspace structure is approved. Continue implementing dark-mode details.',
 }
 
-export const TODAY_PLAN: AgendaItem[] = [
+const DEMO_TODAY_PLAN: AgendaItem[] = [
   { time: '08:30', title: 'Daily plan review', tag: 'Calendar' },
   { time: '10:00', title: 'DayPilot email workspace', tag: 'Focus', end: '10:00 – 12:00' },
   { time: '13:00', title: 'GitPilot patch review', tag: 'Project' },
@@ -24,7 +28,7 @@ export const TODAY_PLAN: AgendaItem[] = [
   { time: '17:00', title: 'Risk alignment', tag: 'Meeting' },
 ]
 
-export const CONTINUE_ITEMS: ContinueItem[] = [
+const DEMO_CONTINUE_ITEMS: ContinueItem[] = [
   {
     id: 'c1', icon: '📄', name: 'DayPilot Portal', status: 'Email workspace structure approved',
     next: 'Implement dark-mode details', progress: 76, accent: 'green',
@@ -35,32 +39,41 @@ export const CONTINUE_ITEMS: ContinueItem[] = [
   },
 ]
 
+// Clean-data by default: the Home surface starts empty and fills from real
+// plans/projects. Sample content only appears in demo mode.
+export const NEXT_PRIORITY: NextPriority = isDemoMode() ? DEMO_NEXT_PRIORITY : null
+export const TODAY_PLAN: AgendaItem[] = isDemoMode() ? DEMO_TODAY_PLAN : []
+export const CONTINUE_ITEMS: ContinueItem[] = isDemoMode() ? DEMO_CONTINUE_ITEMS : []
+
 export type HomeTurn = { role: 'user' | 'assistant'; body: string; time?: string; action?: { label: string; target: string } }
 
-export const AI_WELCOME =
-  'Good morning, Ruslan.\nHere’s your plan for today.'
+// The assistant does not fabricate a plan on load. In demo mode it shows a
+// sample greeting; in clean mode it opens with a neutral, honest prompt.
+export const AI_WELCOME = isDemoMode()
+  ? 'Good morning.\nHere’s your plan for today.'
+  : 'Hi — I’m connected to your DayPilot workspace. Ask me about today, your plan, projects, or integration status.'
 
-export const AI_PLAN_BULLETS = [
-  'Continue DayPilot UI implementation',
-  'Review GitPilot patch',
-  'Matrix Designer feedback',
-  'Client Alpha follow-up',
-]
+export const AI_PLAN_BULLETS: string[] = isDemoMode()
+  ? ['Continue DayPilot UI implementation', 'Review GitPilot patch', 'Matrix Designer feedback', 'Client Alpha follow-up']
+  : []
 
-export const AI_SEED: HomeTurn[] = [
-  { role: 'user', body: "What's the status of the email workspace implementation?", time: '10:28 AM' },
-  {
-    role: 'assistant',
-    body: 'The email workspace structure is complete. Dark-mode details are in progress. 32 of 42 tasks completed (76%). Would you like me to open the project?',
-    time: '10:28 AM',
-  },
-  { role: 'user', body: 'Yes, open it please.', time: '10:29 AM' },
-  { role: 'assistant', body: 'Opening DayPilot Portal project…', time: '10:29 AM', action: { label: 'Open in Projects', target: 'projects' } },
-]
+export const AI_SEED: HomeTurn[] = isDemoMode()
+  ? [
+      { role: 'user', body: "What's the status of the email workspace implementation?", time: '10:28 AM' },
+      {
+        role: 'assistant',
+        body: 'The email workspace structure is complete. Dark-mode details are in progress. 32 of 42 tasks completed (76%). Would you like me to open the project?',
+        time: '10:28 AM',
+      },
+      { role: 'user', body: 'Yes, open it please.', time: '10:29 AM' },
+      { role: 'assistant', body: 'Opening DayPilot Portal project…', time: '10:29 AM', action: { label: 'Open in Projects', target: 'projects' } },
+    ]
+  : []
 
 export const HOME_SUGGESTIONS = [
-  { label: 'Move admin work to afternoon', icon: '◷' },
-  { label: 'Prepare for Client Alpha meeting', icon: '⌘' },
+  { label: 'What day is it today?', icon: '📅' },
+  { label: "Generate today's plan", icon: '◷' },
+  { label: 'Check integration status', icon: '⚙' },
   { label: 'Show what needs approval', icon: '✓' },
 ]
 

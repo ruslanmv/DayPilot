@@ -1,4 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { isDemoMode } from '../env'
+import { chatPlan, generatePlan, loadPlan, type PlannerBlock } from '../plannerClient'
 import {
   INITIAL_FOCUS_MINUTES,
   INITIAL_PLAN,
@@ -11,6 +13,20 @@ import {
   type PlanUIBlock,
 } from './planData'
 
+const DEMO = isDemoMode()
+
+/** Map a backend planner block to the UI block shape. */
+function toUiBlock(b: PlannerBlock, i: number): PlanUIBlock {
+  return {
+    id: b.id || `blk-${i}`,
+    title: b.title,
+    kind: b.kind,
+    start: b.start || '00:00',
+    end: b.end || '00:00',
+    status: b.status === 'done' ? 'done' : 'scheduled',
+  }
+}
+
 /**
  * Planning — the multi-agent day planner surface. A timeline of clickable
  * blocks (every box opens an action popover), a one-tap Replan, and a chat
@@ -19,18 +35,58 @@ import {
  * last, lunch protected; the score badge is the critic's verdict.
  */
 export function PlanningWorkspace({ onStartFocus }: { onStartFocus?: () => void }) {
-  const [blocks, setBlocks] = useState<PlanUIBlock[]>(INITIAL_PLAN)
-  const [score, setScore] = useState(INITIAL_SCORE)
-  const [focusMinutes, setFocusMinutes] = useState(INITIAL_FOCUS_MINUTES)
+  const [blocks, setBlocks] = useState<PlanUIBlock[]>(DEMO ? INITIAL_PLAN : [])
+  const [score, setScore] = useState(DEMO ? INITIAL_SCORE : 0)
+  const [focusMinutes, setFocusMinutes] = useState(DEMO ? INITIAL_FOCUS_MINUTES : 0)
   const [selected, setSelected] = useState<string | null>(null)
-  const [turns, setTurns] = useState<PlanTurn[]>(PLAN_CHAT_SEED)
+  const [turns, setTurns] = useState<PlanTurn[]>(DEMO ? PLAN_CHAT_SEED : [])
   const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [loaded, setLoaded] = useState(DEMO)
   const logRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = logRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [turns])
+
+  // Load the real, persisted plan for today (connected mode).
+  useEffect(() => {
+    if (DEMO) return
+    let cancelled = false
+    loadPlan().then((plan) => {
+      if (cancelled) return
+      if (plan) {
+        const ui = plan.blocks.map(toUiBlock)
+        setBlocks(ui)
+        recompute(ui)
+      }
+      setLoaded(true)
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function applyPlan(next: PlannerBlock[], summary?: string, apiScore?: number) {
+    const ui = next.map(toUiBlock)
+    setBlocks(ui)
+    if (typeof apiScore === 'number') { setScore(apiScore); recomputeFocus(ui) } else { recompute(ui) }
+    if (summary) setTurns((t) => [...t, { role: 'assistant', body: summary }])
+  }
+
+  function recomputeFocus(next: PlanUIBlock[]) {
+    const deep = next.filter((b) => b.kind === 'deep' && b.status !== 'done')
+    setFocusMinutes(deep.reduce((acc, b) => acc + (minutesOf(b.end) - minutesOf(b.start)), 0))
+  }
+
+  // Backend-connected replan: runs the graph and persists (connected mode).
+  async function replanRemote(instruction?: string) {
+    setBusy(true)
+    const plan = await generatePlan(undefined, instruction)
+    setBusy(false)
+    if (plan) applyPlan(plan.blocks, plan.summary, plan.score)
+    else setTurns((t) => [...t, { role: 'assistant', body: "I couldn't reach the planner. Check that the backend is running." }])
+  }
 
   function recompute(next: PlanUIBlock[]) {
     const work = next.filter((b) => b.kind !== 'break' && b.status !== 'done')
@@ -74,15 +130,33 @@ export function PlanningWorkspace({ onStartFocus }: { onStartFocus?: () => void 
     setTurns((t) => [...t, { role: 'user', body: q }])
     setInput('')
     const lowered = q.toLowerCase()
-    window.setTimeout(() => {
-      if (['move', 'replan', 'push', 'batch', 'protect', 'reschedule'].some((k) => lowered.includes(k))) {
-        replan('your request')
-      } else if (lowered.includes('focus')) {
-        setTurns((t) => [...t, { role: 'assistant', body: `You have ${focusMinutes} focused minutes across ${blocks.filter((b) => b.kind === 'deep').length} deep-work blocks. Score ${score}/100.` }])
-      } else {
-        setTurns((t) => [...t, { role: 'assistant', body: 'I can replan your day, move blocks, or report focus time — just ask.' }])
+
+    // Demo mode: local simulation. Connected mode: real planner chat that
+    // replans on the backend and dynamically updates the scheduler.
+    if (DEMO) {
+      window.setTimeout(() => {
+        if (['move', 'replan', 'push', 'batch', 'protect', 'reschedule'].some((k) => lowered.includes(k))) {
+          replan('your request')
+        } else if (lowered.includes('focus')) {
+          setTurns((t) => [...t, { role: 'assistant', body: `You have ${focusMinutes} focused minutes across ${blocks.filter((b) => b.kind === 'deep').length} deep-work blocks. Score ${score}/100.` }])
+        } else {
+          setTurns((t) => [...t, { role: 'assistant', body: 'I can replan your day, move blocks, or report focus time — just ask.' }])
+        }
+      }, 350)
+      return
+    }
+
+    setBusy(true)
+    chatPlan(q).then((res) => {
+      setBusy(false)
+      if (!res) {
+        setTurns((t) => [...t, { role: 'assistant', body: "I couldn't reach the planner. Check that the backend is running." }])
+        return
       }
-    }, 350)
+      setTurns((t) => [...t, { role: 'assistant', body: res.reply }])
+      // A replan returns the freshly persisted plan — update the timeline live.
+      if (res.replanned && res.plan) applyPlan(res.plan.blocks, undefined, res.plan.score)
+    })
   }
 
   function updateBlock(id: string, patch: Partial<PlanUIBlock>) {
@@ -119,9 +193,18 @@ export function PlanningWorkspace({ onStartFocus }: { onStartFocus?: () => void 
           <div className="dp-plan__head-right">
             <span className="dp-plan__score" title="Critic score">✦ {score}/100</span>
             <span className="dp-plan__focus">{focusMinutes} min focus</span>
-            <button className="dp-plan__replan" onClick={() => replan('one-tap replan')}>↻ Replan</button>
+            <button className="dp-plan__replan" disabled={busy} onClick={() => (DEMO ? replan('one-tap replan') : replanRemote())}>
+              {busy ? '…' : '↻ Replan'}
+            </button>
           </div>
         </header>
+
+        {!DEMO && loaded && blocks.length === 0 && (
+          <div className="dp-plan__empty">
+            <p>No plan yet for today. Generate an optimized plan from your open tasks.</p>
+            <button className="dp-plan__replan" disabled={busy} onClick={() => replanRemote()}>{busy ? 'Planning…' : '✦ Generate plan'}</button>
+          </div>
+        )}
 
         <div className="dp-plan__timeline">
           {blocks.map((b) => (

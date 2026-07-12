@@ -130,6 +130,42 @@ def generate_plan(
     }
 
 
+def _kind_of(title: str, source: str) -> str:
+    """Re-derive a block's kind for the UI (PlanBlock persists title, not kind)."""
+    from .agents import classify_kind
+    if "lunch" in title.lower() or source == "break":
+        return "break"
+    return classify_kind(title)
+
+
+def read_plan(session: Session, workspace_id: str, plan_date: str) -> dict[str, Any]:
+    """Load the persisted plan for a day without regenerating it.
+
+    Returns the current DayPlan blocks (kind re-derived) so the Planning surface
+    can render live, persisted state on load rather than a fabricated timeline.
+    """
+    plan = build_or_get_draft(session, workspace_id, plan_date)
+    blocks = sorted(plan.blocks, key=lambda b: b.order_index)
+    return {
+        "planDate": plan_date,
+        "state": plan.state,
+        "summary": plan.summary or "",
+        "blocks": [
+            {
+                "id": b.id,
+                "taskId": b.task_id,
+                "title": b.title,
+                "kind": _kind_of(b.title, b.source),
+                "start": b.start_time,
+                "end": b.end_time,
+                "owner": b.owner,
+                "status": b.status,
+            }
+            for b in blocks
+        ],
+    }
+
+
 def _hints_from_instruction(instruction: str | None) -> list[str]:
     """Translate a natural replan instruction into scheduler hints."""
     if not instruction:

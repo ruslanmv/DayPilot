@@ -2,16 +2,73 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
 UV ?= uv
+# Use corepack's pnpm shim so a global pnpm install is not required and no
+# `corepack enable` symlink step (which needs root / fails with EACCES on WSL)
+# is involved. Override with `make PNPM=pnpm ...` if you have pnpm on PATH.
 PNPM ?= pnpm
+
+# Ports. PORT is the single knob; API/WEB derive from it but can be set alone.
+PORT ?= 8080
 API_HOST ?= 0.0.0.0
-API_PORT ?= 8080
+API_PORT ?= $(PORT)
+WEB_HOST ?= 0.0.0.0
 WEB_PORT ?= 5173
 
-.PHONY: help install install-python install-python-all install-js run run-api run-web run-mobile test lint format typecheck build init-db migrate seed seed-reset sim ui-smoke compose compose-runtime clean preview-persona install-persona
+# Every service package is importable without a prior editable install, so the
+# gateway can pull in the orchestrator/knowledge/model packages directly.
+SERVICE_PYTHONPATH := services/api-gateway:services/orchestrator:services/knowledge-service:services/model-serving:services/observability:services/voice-gateway:services/mcp-host
+
+.PHONY: help install install-python install-python-all install-js run run-api run-web serve run-mobile test lint format typecheck build init-db migrate seed seed-reset sim ui-smoke compose compose-runtime clean preview-persona install-persona
+
+define HELP_TEXT
+
+DayPilot Enterprise commands
+
+  Setup
+    install              Install Python + JavaScript dependencies
+    install-python       Sync the UV-managed Python environment (dev tools)
+    install-python-all   Sync Python with all optional extras (RAG, models, obs)
+    install-js           Install workspace JavaScript dependencies with pnpm
+
+  Run
+    run                  Run the full app locally (API gateway + web UI)
+    run-api              Run the FastAPI API gateway (hot reload, auto free port)
+    serve                Serve the frontend / dev web UI
+    run-web              Alias for `serve` (backwards compatible)
+    run-mobile           Run the mobile PWA dev server
+
+  Data
+    init-db              Initialize the local database
+    migrate              Apply Alembic migrations
+    seed                 Seed a realistic-volume workspace (5k tasks)
+    seed-reset           Reset seeded rows and reseed the default workspace
+
+  Quality
+    test                 Run Python + package-level JavaScript tests
+    lint                 Run Python + JavaScript linters
+    format               Format Python code with Ruff
+    typecheck            Run TypeScript typechecks
+    build                Build all JavaScript workspace packages/apps
+    ui-smoke             Build operator-web + run the Playwright UI smoke test
+
+  Ops
+    sim                  Run the end-to-end 5-day week simulation
+    compose              Start the Docker Compose development stack
+    compose-runtime      Start runtime + observability Compose profiles
+    clean                Remove local caches and virtual environments
+
+Examples:
+  make install
+  make run                  # backend + frontend together
+  make serve                # frontend only
+  make run PORT=9000        # start the API on a different port
+  make test
+
+endef
+export HELP_TEXT
 
 help: ## Show available make targets.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nDayPilot Enterprise commands\n\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
-	@printf "\nExamples:\n  make install\n  make run\n  make run-web\n  make test\n\n"
+	@printf '%s\n' "$$HELP_TEXT"
 
 install: install-python install-js ## Install Python and JavaScript dependencies for local development.
 
@@ -22,16 +79,34 @@ install-python-all: ## Sync Python with all optional extras for RAG, models, and
 	$(UV) sync --all-extras --group dev
 
 install-js: ## Install workspace JavaScript dependencies with pnpm.
-	corepack enable
 	$(PNPM) install
 
-run: run-api ## Run the default local DayPilot API gateway.
+run: ## Run the full app locally: API gateway + web UI (Ctrl+C stops both).
+	@echo ""
+	@echo "  Starting DayPilot — API gateway + web UI"
+	@echo "  Web UI:      http://localhost:$(WEB_PORT)"
+	@echo "  API gateway: http://localhost:$(API_PORT)  (a free port is picked if taken)"
+	@echo "  Press Ctrl+C to stop both."
+	@echo ""
+	@trap 'kill 0' INT TERM EXIT; \
+	$(MAKE) --no-print-directory run-api & \
+	$(MAKE) --no-print-directory serve & \
+	wait
 
-run-api: ## Run the FastAPI API gateway with hot reload.
-	$(UV) run uvicorn app.main:app --app-dir services/api-gateway --host $(API_HOST) --port $(API_PORT) --reload
+run-api: ## Run the FastAPI API gateway with hot reload on an available port.
+	@port=$$($(UV) run python scripts/find_free_port.py $(API_PORT) $(API_HOST)); \
+	if [ "$$port" != "$(API_PORT)" ]; then \
+	  echo "Port $(API_PORT) is busy; using free port $$port for the API gateway."; \
+	fi; \
+	echo "API gateway: http://localhost:$$port"; \
+	PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
+	  $(UV) run uvicorn app.main:app --app-dir services/api-gateway \
+	  --host $(API_HOST) --port $$port --reload
 
-run-web: ## Run the operator web app.
-	$(PNPM) --filter @daypilot/operator-web dev -- --host 0.0.0.0 --port $(WEB_PORT)
+serve: ## Serve the frontend / dev web UI.
+	$(PNPM) --filter @daypilot/operator-web dev -- --host $(WEB_HOST) --port $(WEB_PORT)
+
+run-web: serve ## Alias for `serve` (backwards compatible).
 
 run-mobile: ## Run the mobile PWA app.
 	$(PNPM) --filter @daypilot/mobile-pwa dev -- --host 0.0.0.0

@@ -15,6 +15,7 @@ from .routers import (
     approvals,
     calendar,
     catalog,
+    chat,
     coding,
     design,
     documents,
@@ -57,6 +58,7 @@ for _router in (
     notifications.router,
     catalog.router,
     planner.router,
+    chat.router,
 ):
     app.include_router(_router)
 

@@ -112,6 +112,26 @@ def test_generate_plan_persists_blocks_and_metrics():
     assert blocks == len(result["blocks"])
 
 
+def test_read_plan_returns_persisted_blocks_with_kind():
+    ws = "ws_read"
+    _seed_tasks(ws)
+    from daypilot_orchestrator.planner.service import read_plan
+
+    with session_scope(ENGINE) as s:
+        generate_plan(s, ws, "2026-07-13")
+    with session_scope(ENGINE) as s:
+        loaded = read_plan(s, ws, "2026-07-13")
+    assert loaded["planDate"] == "2026-07-13"
+    assert loaded["blocks"]
+    # Kind is re-derived for the UI; lunch is a break, others are work kinds.
+    kinds = {b["kind"] for b in loaded["blocks"]}
+    assert kinds <= {"deep", "meeting", "admin", "review", "break"}
+    assert any(b["kind"] == "break" for b in loaded["blocks"])
+    # The gateway GET route returns the same shape.
+    resp = client.get(f"/v1/planner/plans/2026-07-13?workspaceId={ws}")
+    assert resp.status_code == 200 and resp.json()["blocks"]
+
+
 def test_chat_answers_and_replans():
     ws = "ws_chat"
     _seed_tasks(ws)
