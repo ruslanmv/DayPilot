@@ -106,6 +106,29 @@ def test_sidebar_nav_and_settings_menu_contract():
     onb = (ui / 'onboarding' / 'OnboardingWizard.tsx').read_text(encoding='utf-8')
     assert 'Connect your mailbox' in onb and 'Add a knowledge source' in onb
     assert 'Skip for now' in onb and 'daypilot.onboarded' in onb
+    # First-run onboarding requires AI-provider setup before AI is "ready".
+    assert 'Connect your AI' in onb and 'Test connection' in onb
+    assert 'limited mode' in onb and 'daypilot.ai_ready' in onb
+
+    # Clean-data default: demo/sample content is opt-in behind a flag with a
+    # visible badge; the shell no longer imports demo data directly.
+    demo = (ui / 'demoData.ts').read_text(encoding='utf-8')
+    assert 'VITE_DAYPILOT_DEMO_MODE' in (ui / 'env.ts').read_text(encoding='utf-8')
+    assert 'isDemoMode' in demo and 'seedTasks' in demo
+    assert 'dp-demo-badge' in portal and 'Demo mode' in portal
+
+    # The assistant is connected to the backend (intent routing), not a canned
+    # menu, and persistent chat sessions back the history UI.
+    assistant = (ui / 'assistant.ts').read_text(encoding='utf-8')
+    assert 'classifyIntent' in assistant and 'askAssistant' in assistant
+    assert "/v1/planner/plans/" in assistant and '/v1/providers/health' in assistant
+    # "Can you access my email?" must be answered truthfully from connection
+    # status, not guessed — the classifier and a specific access answer exist.
+    assert "can you access" in assistant and 'accessAnswer' in assistant
+    assert '/v1/integrations' in assistant
+    chat = (ui / 'chatSessions.ts').read_text(encoding='utf-8')
+    assert '/v1/chat/sessions' in chat and 'appendMessage' in chat
+    assert 'Conversation history' in home or 'New conversation' in home
     pw = (ui / 'projects' / 'ProjectWizard.tsx').read_text(encoding='utf-8')
     assert 'New project' in pw and 'First milestone' in pw
     assert 'OnboardingWizard' in portal and 'ProjectWizard' in portal

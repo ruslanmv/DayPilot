@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from daypilot_orchestrator.planner.revision import active_config, apply_config, review_planner
-from daypilot_orchestrator.planner.service import chat_with_plan, generate_plan
+from daypilot_orchestrator.planner.service import chat_with_plan, generate_plan, read_plan
 
 from ..db import get_session
 
@@ -33,6 +33,11 @@ class ApplyBody(BaseModel):
     approvalId: str
     proposed: dict[str, Any]
     workspaceId: str = "default"
+
+
+@router.get("/plans/{plan_date}")
+def read(plan_date: str, workspaceId: str = "default", session: Session = Depends(get_session)) -> dict[str, Any]:
+    return read_plan(session, workspaceId, plan_date)
 
 
 @router.post("/plans/{plan_date}/generate")

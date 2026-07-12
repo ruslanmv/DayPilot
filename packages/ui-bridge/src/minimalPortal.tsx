@@ -1,6 +1,8 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { DayPilotAgent, DayPilotDocument, DayPilotDocumentSource, DayPilotMessage, DayPilotProject, DayPilotTask } from '@daypilot/shared-types'
-import { dayHours, documentSources, initialAgents, initialDocuments, initialMessages, initialProjects, initialTasks, weekDays, weekSlots } from './spaceBridgeData'
+import { dayHours, weekDays, weekSlots } from './spaceBridgeData'
+import { isDemoMode, seedAgents, seedDocumentSources, seedDocuments, seedMessages, seedProjects, seedTasks } from './demoData'
+import { askAssistant } from './assistant'
 import { SettingsMenu } from './shell/SettingsMenu'
 import { SettingsPanel } from './shell/SettingsPanel'
 import { CommandPalette, type PaletteAction } from './shell/CommandPalette'
@@ -626,9 +628,12 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false }: Spac
   const isMobile = useIsMobile()
   const NAV_VIEWS = navViews(emailEnabled)
   const [view, setView] = useState<PortalView>('home')
-  const [messages, setMessages] = useState<DayPilotMessage[]>(initialMessages)
-  const [tasks, setTasks] = useState<DayPilotTask[]>(initialTasks)
-  const [projects, setProjects] = useState<DayPilotProject[]>(initialProjects)
+  const [messages, setMessages] = useState<DayPilotMessage[]>(seedMessages)
+  const [tasks, setTasks] = useState<DayPilotTask[]>(seedTasks)
+  const [projects, setProjects] = useState<DayPilotProject[]>(seedProjects)
+  const documents = useMemo(seedDocuments, [])
+  const documentSources = useMemo(seedDocumentSources, [])
+  const agents = useMemo(seedAgents, [])
   const [projectWizardOpen, setProjectWizardOpen] = useState(false)
   const [selected, setSelected] = useState<DrawerItem | undefined>()
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId | undefined>()
@@ -739,6 +744,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false }: Spac
             <path d="M16 3.5 28.5 28 16 22.2Z" fill="currentColor" />
           </svg>
           <span className="dp-brand__word">DayPilot</span>
+          {isDemoMode() && <span className="dp-demo-badge" title="Showing sample data. Set VITE_DAYPILOT_DEMO_MODE=false for a clean, real-data workspace.">Demo mode</span>}
         </div>
         <nav className="dp-nav" aria-label="DayPilot views">
           {NAV_VIEWS.map((nav) => (
@@ -764,6 +770,8 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false }: Spac
             onStartFocus={startFocusMode}
             onNavigate={(target) => setView(target)}
             onOpenPalette={() => setPaletteOpen(true)}
+            onOpenProjectWizard={() => setProjectWizardOpen(true)}
+            onOpenApprovals={() => setApprovalsOpen(true)}
           />
         ) : (
           <>
@@ -779,16 +787,16 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false }: Spac
               {view === 'planning' && <PlanningWorkspace onStartFocus={startFocusMode} />}
               {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
               {view === 'tasks' && <OperationalLedger tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
-              {view === 'projects' && <ProjectsCore projects={projects} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
-              {view === 'documents' && <DocumentsCore sources={documentSources} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'document', item })} />}
-              {view === 'agents' && <AgentsCore agents={initialAgents} onSelect={(item) => setSelected({ kind: 'agent', item })} />}
+              {view === 'projects' && <ProjectsCore projects={projects} documents={documents} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
+              {view === 'documents' && <DocumentsCore sources={documentSources} documents={documents} onSelect={(item) => setSelected({ kind: 'document', item })} />}
+              {view === 'agents' && <AgentsCore agents={agents} onSelect={(item) => setSelected({ kind: 'agent', item })} />}
               {view === 'email' && <EmailWorkspace />}
             </div>
           </>
         )}
       </main>
 
-      <DetailDrawer selected={selected} documents={initialDocuments} onClose={() => setSelected(undefined)} />
+      <DetailDrawer selected={selected} documents={documents} onClose={() => setSelected(undefined)} />
 
       <CommandPalette open={paletteOpen} actions={paletteActions} onClose={() => setPaletteOpen(false)} />
       {settingsSection && (
@@ -841,7 +849,7 @@ const MOBILE_TITLES: Record<PortalView, string> = {
   agents: 'Agents',
 }
 
-const RECENT_AI = ['Email workspace status', 'Prepare Client Alpha meeting', "Today's plan"]
+const RECENT_AI = isDemoMode() ? ['Email workspace status', 'Prepare Client Alpha meeting', "Today's plan"] : []
 
 function MobilePortal({ emailEnabled }: { emailEnabled: boolean }) {
   const NAV = navViews(emailEnabled)
@@ -849,8 +857,11 @@ function MobilePortal({ emailEnabled }: { emailEnabled: boolean }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiSeed, setAiSeed] = useState<string | undefined>()
-  const [tasks] = useState<DayPilotTask[]>(initialTasks)
-  const [projects, setProjects] = useState<DayPilotProject[]>(initialProjects)
+  const [tasks] = useState<DayPilotTask[]>(seedTasks)
+  const [projects, setProjects] = useState<DayPilotProject[]>(seedProjects)
+  const documents = useMemo(seedDocuments, [])
+  const documentSources = useMemo(seedDocumentSources, [])
+  const agents = useMemo(seedAgents, [])
   const [projectWizardOpen, setProjectWizardOpen] = useState(false)
   const [selected, setSelected] = useState<DrawerItem | undefined>()
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId | undefined>()
@@ -910,9 +921,9 @@ function MobilePortal({ emailEnabled }: { emailEnabled: boolean }) {
         {view === 'planning' && <PlanningWorkspace onStartFocus={startFocus} />}
         {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
         {view === 'tasks' && <OperationalLedger tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
-        {view === 'projects' && <ProjectsCore projects={projects} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
-        {view === 'documents' && <DocumentsCore sources={documentSources} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'document', item })} />}
-        {view === 'agents' && <AgentsCore agents={initialAgents} onSelect={(item) => setSelected({ kind: 'agent', item })} />}
+        {view === 'projects' && <ProjectsCore projects={projects} documents={documents} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
+        {view === 'documents' && <DocumentsCore sources={documentSources} documents={documents} onSelect={(item) => setSelected({ kind: 'document', item })} />}
+        {view === 'agents' && <AgentsCore agents={agents} onSelect={(item) => setSelected({ kind: 'agent', item })} />}
         {view === 'email' && <EmailWorkspace />}
       </main>
 
@@ -938,6 +949,7 @@ function MobilePortal({ emailEnabled }: { emailEnabled: boolean }) {
             </div>
             <div className="dp-m__drawer-section">Recent AI conversations</div>
             <div className="dp-m__drawer-nav">
+              {RECENT_AI.length === 0 && <p className="dp-m__recent-empty">No conversations yet. Ask the assistant anything to get started.</p>}
               {RECENT_AI.map((c) => (
                 <button key={c} className="dp-m__recent" onClick={() => openAi(c)}>
                   <span className="dp-m__recent-spark" aria-hidden="true">✦</span>
@@ -969,7 +981,7 @@ function MobilePortal({ emailEnabled }: { emailEnabled: boolean }) {
       {/* Full-screen AI conversation */}
       {aiOpen && <MobileAI seed={aiSeed} onClose={() => setAiOpen(false)} onNavigate={go} />}
 
-      <DetailDrawer selected={selected} documents={initialDocuments} onClose={() => setSelected(undefined)} />
+      <DetailDrawer selected={selected} documents={documents} onClose={() => setSelected(undefined)} />
       {settingsSection && <SettingsPanel section={settingsSection} onClose={() => setSettingsSection(undefined)} />}
       {focusTask && <FocusMode task={focusTask} onExit={() => setFocusTask(undefined)} />}
       <ProjectWizard
@@ -990,43 +1002,50 @@ function MobileHome({ onStartFocus, onNavigate, onAsk }: {
   return (
     <div className="dp-m__page">
       <section className="dp-m__ready">
-        <h2 className="dp-m__ready-title"><span className="dp-m__ready-icon" aria-hidden="true">☼</span> Your day is ready</h2>
-        <p className="dp-m__ready-sub">Focus on your top priority and keep the momentum.</p>
+        <h2 className="dp-m__ready-title"><span className="dp-m__ready-icon" aria-hidden="true">☼</span> {NEXT_PRIORITY ? 'Your day is ready' : 'Ready when you are'}</h2>
+        <p className="dp-m__ready-sub">{NEXT_PRIORITY ? 'Focus on your top priority and keep the momentum.' : 'No plan yet for today. Ask the assistant to generate one.'}</p>
       </section>
 
-      <section className="dp-m__card">
-        <div className="dp-m__label">Next priority</div>
-        <div className="dp-m__np">
-          <span className="dp-m__np-icon" aria-hidden="true">🖥</span>
-          <div className="dp-m__np-body">
-            <div className="dp-m__np-title">{NEXT_PRIORITY.title}</div>
-            <div className="dp-m__np-meta"><span>🗓 {NEXT_PRIORITY.time}</span><span className="dp-m__dot">·</span><span className="dp-chip">{NEXT_PRIORITY.project}</span></div>
+      {NEXT_PRIORITY && (
+        <section className="dp-m__card">
+          <div className="dp-m__label">Next priority</div>
+          <div className="dp-m__np">
+            <span className="dp-m__np-icon" aria-hidden="true">🖥</span>
+            <div className="dp-m__np-body">
+              <div className="dp-m__np-title">{NEXT_PRIORITY.title}</div>
+              <div className="dp-m__np-meta"><span>🗓 {NEXT_PRIORITY.time}</span><span className="dp-m__dot">·</span><span className="dp-chip">{NEXT_PRIORITY.project}</span></div>
+            </div>
           </div>
-        </div>
-        <p className="dp-m__np-support">{NEXT_PRIORITY.support}</p>
-        <button className="dp-m__cta" onClick={onStartFocus}>▶ Start focus</button>
-        <button className="dp-m__ghostlink" onClick={() => onNavigate('projects')}>View project ↗</button>
-      </section>
+          <p className="dp-m__np-support">{NEXT_PRIORITY.support}</p>
+          <button className="dp-m__cta" onClick={onStartFocus}>▶ Start focus</button>
+          <button className="dp-m__ghostlink" onClick={() => onNavigate('projects')}>View project ↗</button>
+        </section>
+      )}
 
       <section className="dp-m__card">
         <h3 className="dp-m__card-title"><span aria-hidden="true">🗓</span> Today's plan</h3>
-        <ul className="dp-m__agenda">
-          {TODAY_PLAN.map((item) => (
-            <li key={item.time} className="dp-m__agenda-row" onClick={() => onNavigate('calendar')}>
-              <span className="dp-m__agenda-dot" aria-hidden="true" />
-              <span className="dp-m__agenda-time">{item.time}</span>
-              <span className="dp-m__agenda-title">{item.title}</span>
-              <span className="dp-m__agenda-tag">{item.tag}</span>
-              <span className="dp-m__agenda-chev" aria-hidden="true">›</span>
-            </li>
-          ))}
-        </ul>
-        <button className="dp-m__more" onClick={() => onNavigate('calendar')}>View full calendar →</button>
+        {TODAY_PLAN.length > 0 ? (
+          <ul className="dp-m__agenda">
+            {TODAY_PLAN.map((item) => (
+              <li key={item.time} className="dp-m__agenda-row" onClick={() => onNavigate('planning')}>
+                <span className="dp-m__agenda-dot" aria-hidden="true" />
+                <span className="dp-m__agenda-time">{item.time}</span>
+                <span className="dp-m__agenda-title">{item.title}</span>
+                <span className="dp-m__agenda-tag">{item.tag}</span>
+                <span className="dp-m__agenda-chev" aria-hidden="true">›</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="dp-m__card-empty">No blocks scheduled yet. Ask the assistant to generate a plan.</p>
+        )}
+        <button className="dp-m__more" onClick={() => onNavigate('planning')}>Open planner →</button>
       </section>
 
       <section className="dp-m__card">
         <h3 className="dp-m__card-title"><span aria-hidden="true">⟳</span> Continue from yesterday</h3>
         <div className="dp-m__continue">
+          {CONTINUE_ITEMS.length === 0 && <p className="dp-m__card-empty">Nothing carried over yet.</p>}
           {CONTINUE_ITEMS.map((c) => (
             <button key={c.id} className="dp-m__cont" onClick={() => onNavigate('projects')}>
               <span className={'dp-m__cont-icon dp-continue__icon--' + c.accent} aria-hidden="true">{c.icon}</span>
@@ -1080,17 +1099,27 @@ function MobileAI({ seed, onClose, onNavigate }: {
     const q = text.trim()
     if (!q) return
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const rtime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     setTurns((t) => [...t, { role: 'user', body: q, time }])
     setInput('')
     setAtBottom(true)
     setThinking(true)
     if (taRef.current) taRef.current.style.height = 'auto'
-    window.setTimeout(() => {
-      const rtime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      setTurns((t) => [...t, { role: 'assistant', body: aiReply(q), time: rtime }])
-      setThinking(false)
-    }, 400)
-  }, [])
+    if (isDemoMode()) {
+      window.setTimeout(() => {
+        setTurns((t) => [...t, { role: 'assistant', body: aiReply(q), time: rtime() }])
+        setThinking(false)
+      }, 400)
+      return
+    }
+    askAssistant(q)
+      .then((reply) => {
+        setTurns((t) => [...t, { role: 'assistant', body: reply.text, time: rtime() }])
+        if (reply.action?.kind === 'navigate') onNavigate(reply.action.target)
+      })
+      .catch(() => setTurns((t) => [...t, { role: 'assistant', body: "I couldn't reach the backend just now. Please try again.", time: rtime() }]))
+      .finally(() => setThinking(false))
+  }, [onNavigate])
 
   // Seed the composer from a tapped "recent conversation" suggestion.
   useEffect(() => {
@@ -1129,7 +1158,7 @@ function MobileAI({ seed, onClose, onNavigate }: {
         <div className="dp-home-ai__turn dp-home-ai__turn--assistant">
           <div className="dp-home-ai__bubble">
             <p style={{ whiteSpace: 'pre-line', margin: 0 }}>{AI_WELCOME}</p>
-            <ul className="dp-home-ai__plan">{AI_PLAN_BULLETS.map((b) => <li key={b}>{b}</li>)}</ul>
+            {AI_PLAN_BULLETS.length > 0 && <ul className="dp-home-ai__plan">{AI_PLAN_BULLETS.map((b) => <li key={b}>{b}</li>)}</ul>}
           </div>
         </div>
         {turns.map((t, i) => (

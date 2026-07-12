@@ -339,16 +339,30 @@ make test           # Python tests + workspace tests
 ### Run locally
 
 ```bash
-make run            # FastAPI gateway on http://localhost:8080
-make run-web        # operator web console on http://localhost:5173
+make run            # full app: API gateway (:8080) + web UI (:5173), Ctrl+C stops both
+make serve          # frontend / dev web UI only  (make run-web is a compatible alias)
+make run-api        # API gateway only (auto-selects a free port if 8080 is busy)
 make run-mobile     # mobile PWA
+make run PORT=9000  # start the API on a different port
 ```
+
+`make run` starts the backend **and** the web UI together. The gateway picks a
+free port automatically if the requested one is taken, and prints the URLs.
 
 Health check:
 
 ```bash
 curl http://localhost:8080/health
 ```
+
+### Clean data vs. demo mode
+
+The web shell starts **clean and connected to real data** — no fabricated
+tasks, projects, or assistant chatter. To explore with sample content, set
+`VITE_DAYPILOT_DEMO_MODE=true`; a visible **Demo mode** badge then appears so
+sample data is never mistaken for real data. First-run onboarding requires
+connecting an AI provider (Ollabridge local by default, Ollabridge Cloud
+optional) with a **Test connection** check before AI features report as ready.
 
 ### Seed realistic data
 

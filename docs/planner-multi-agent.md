@@ -64,6 +64,7 @@ can improve).
 **API** (`/v1/planner`):
 
 ```bash
+GET  /v1/planner/plans/2026-07-13                # load the persisted plan (no regen)
 POST /v1/planner/plans/2026-07-13/generate      # run the graph, persist blocks
 POST /v1/planner/plans/2026-07-13/generate      # {"instruction": "protect my morning"} → replan
 POST /v1/planner/plans/2026-07-13/chat          # {"message": "move admin to the afternoon"}

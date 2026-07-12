@@ -362,6 +362,53 @@ class EmailItem(Base):
     __table_args__ = (Index("ix_email_items_ws_status_received", "workspace_id", "status", "received_at"),)
 
 
+class ChatSession(TimestampMixin, Base):
+    """A persisted assistant conversation (ChatGPT / Claude style).
+
+    Sessions let the user resume a conversation across refreshes and devices,
+    rename/clear/delete them, and keep a browsable history. Only the
+    conversation text is stored — never credentials or provider keys.
+    """
+
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    title: Mapped[str] = mapped_column(String(200), default="New conversation")
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    message_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    messages: Mapped[list[ChatMessage]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="ChatMessage.seq"
+    )
+
+    __table_args__ = (Index("ix_chat_sessions_ws_updated", "workspace_id", "updated_at"),)
+
+
+class ChatMessage(Base):
+    """One turn in a ChatSession. `seq` orders turns within a session."""
+
+    __tablename__ = "chat_messages"
+
+    seq: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True
+    )
+    id: Mapped[str] = mapped_column(String(36), default=uuid_str, unique=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), default="user")  # user | assistant
+    body: Mapped[str] = mapped_column(Text, default="")
+    action_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+    session: Mapped[ChatSession] = relationship(back_populates="messages")
+
+    __table_args__ = (Index("ix_chat_messages_session_seq", "session_id", "seq"),)
+
+
 class Job(TimestampMixin, Base):
     """Durable background job (batch B12) — agent runs and document indexing.
 
