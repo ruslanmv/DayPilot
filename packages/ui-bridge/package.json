@@ -6,13 +6,18 @@
   "main": "src/index.tsx",
   "types": "src/index.tsx",
   "scripts": {
-    "build": "tsc --emitDeclarationOnly false",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint": "echo placeholder lint",
     "test": "echo placeholder test"
   },
   "dependencies": {
-    "typescript": "latest",
-    "react": "latest",
-    "@daypilot/shared-types": "workspace:*"
+    "@daypilot/homepilot-theme": "workspace:*",
+    "@daypilot/shared-types": "workspace:*",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "typescript": "^5.7.2"
   }
 }

@@ -6,6 +6,8 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from starlette.responses import Response
 
 from daypilot_models.connectors import load_backend
+from daypilot_models.provider_health import provider_health
+from daypilot_models.routing import route_for_role, serialize_routes
 
 GENERATIONS = Counter("daypilot_model_generations_total", "Model generation calls", ["backend"])
 GENERATION_LATENCY = Histogram("daypilot_model_generation_seconds", "Model generation latency", ["backend"])
@@ -21,8 +23,9 @@ def route_model(task: str) -> dict:
     return {
         "task": task,
         "backend": backend.name,
-        "candidates": ["mock", "ollama", "vllm", "openai-compatible"],
-        "policy": "local-first unless explicitly configured otherwise",
+        "candidates": ["ollabridge", "mock", "ollama", "vllm", "openai-compatible"],
+        "default_provider": "ollabridge",
+        "policy": "local-first via Ollabridge unless explicitly configured otherwise",
     }
 
 
@@ -50,6 +53,28 @@ def route(task: str) -> dict:
 @app.post("/v1/generate")
 def create_generation(request: GenerateRequest) -> dict:
     return generate(request.prompt, request.task)
+
+
+@app.get("/v1/providers/health")
+def providers_health() -> dict:
+    return provider_health()
+
+
+@app.get("/v1/providers/routes")
+def providers_routes() -> dict:
+    return {"routes": serialize_routes()}
+
+
+@app.get("/v1/providers/route/{role}")
+def provider_route(role: str) -> dict:
+    policy = route_for_role(role)
+    return {
+        "role": policy.role,
+        "model": policy.preferred_model,
+        "tier": policy.tier,
+        "latencyBudgetMs": policy.latency_budget_ms,
+        "fallback": list(policy.fallback),
+    }
 
 
 @app.get("/metrics")

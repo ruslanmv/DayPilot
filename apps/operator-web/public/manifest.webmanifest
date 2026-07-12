@@ -1,0 +1,19 @@
+{
+  "name": "DayPilot Operator Console",
+  "short_name": "DayPilot",
+  "description": "Local-first AI operator workspace — plan your day, run coding and email workflows, and keep every AI action approval-gated.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#08111c",
+  "theme_color": "#0a1421",
+  "categories": ["productivity", "business"],
+  "icons": [
+    {
+      "src": "/daypilot-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

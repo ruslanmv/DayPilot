@@ -1,0 +1,38 @@
+name: Deploy Web + PWA
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "web-v*"
+
+jobs:
+  build:
+    name: Build operator-web + mobile-pwa
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build web + PWA
+        run: |
+          pnpm --filter @daypilot/operator-web build
+          pnpm --filter @daypilot/mobile-pwa build
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: operator-web-dist
+          path: apps/operator-web/dist
+      - name: Upload PWA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-pwa-dist
+          path: apps/mobile-pwa/dist
+      # Deploy step is environment-specific. Publish apps/operator-web/dist to
+      # daypilot.ruslanmv.com (static host / Cloudflare Pages / S3+CDN). Roll
+      # back by re-publishing the previous artifact. See docs/operations-runbook.md.

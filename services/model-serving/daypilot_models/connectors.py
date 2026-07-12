@@ -70,6 +70,11 @@ class OpenAICompatibleBackend:
 
 def load_backend() -> ModelBackend:
     backend = os.getenv("DAYPILOT_MODEL_BACKEND", "mock").lower()
+    if backend == "ollabridge":
+        # Imported lazily so the mock/test path has no httpx client wiring.
+        from .ollabridge_client import connector_from_env
+
+        return connector_from_env()
     if backend == "ollama":
         return OllamaBackend(
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),

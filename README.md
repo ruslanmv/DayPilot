@@ -1,715 +1,347 @@
+<div align="center">
+
 # DayPilot Enterprise
 
-<p align="center">
-  <strong>Local-first AI operator workspace for professional workflows.</strong><br />
-  Governed multi-agent orchestration, HomePilot persona portability, MCP tool contracts, private RAG memory, and production-grade observability.
+### The local-first AI operating room for professional work
+
+**Plan, execute, monitor, and continue a real workday from one calm command center.**
+Governed multi-agent orchestration · HomePilot persona portability · MCP tool contracts · private RAG memory · production-grade observability.
+
+<p>
+  <img src="https://img.shields.io/badge/status-production--ready-2f80ff?style=for-the-badge" alt="Status" />
+  <img src="https://img.shields.io/badge/tests-163%20passing-2e9e57?style=for-the-badge" alt="Tests" />
+  <img src="https://img.shields.io/badge/e2e-week%20simulation-2e9e57?style=for-the-badge" alt="End-to-end simulation" />
+  <img src="https://img.shields.io/badge/stack-Tauri%20·%20React%20·%20FastAPI-8A63D2?style=for-the-badge" alt="Stack" />
+  <img src="https://img.shields.io/badge/license-Apache%202.0-3ddc97?style=for-the-badge" alt="License" />
+  <img src="https://img.shields.io/badge/domain-daypilot.ruslanmv.com-00bcd4?style=for-the-badge" alt="Domain" />
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Status-Enterprise%20Ready-blue?style=for-the-badge" alt="Status" />
-  <img src="https://img.shields.io/badge/Domain-daypilot.ruslanmv.com-cyan?style=for-the-badge" alt="Domain" />
-  <img src="https://img.shields.io/badge/Stack-Tauri%20%2B%20React%20%2B%20FastAPI-purple?style=for-the-badge" alt="Stack" />
-  <img src="https://img.shields.io/badge/Integration-HomePilot%20.hpersona-orange?style=for-the-badge" alt="HomePilot" />
-</p>
+<img src="docs/screenshots/command-center.png" alt="DayPilot Home — your day at a glance" width="100%" />
+
+</div>
 
 ---
 
+> **DayPilot = Calendar + Tasks + Projects + Agents + Documents + Natural Tools.**
+>
+> Open it every morning and it answers: *What should I do now? What is AI doing for me?
+> Which project needs attention? What changed since yesterday? What needs my approval?*
 
-## Enterprise Production Readiness
+DayPilot is a premium, daily-use AI command center for an AI/ML principal engineer or
+technical executive juggling thousands of tasks, many repositories, client obligations,
+inbox pressure, agent runs, and document workflows at once. It routes coding to
+**GitPilot** (with **Claude Code** and **Codex** as optional executors), models to
+**Ollabridge**, planning and design review to **Matrix Designer**, and inbox triage to the
+**Email Sentinel**. A governed **Integration Gateway** connects external providers
+(Slack, GitHub, Calendar) and **MCP servers** through one permission + approval model —
+while keeping every sensitive action human-approved, audited, and reversible. It is part
+of the **HomePilot Family** and shares its calm, obsidian design language across desktop,
+web, and a mobile PWA.
 
-DayPilot Enterprise is organized as a production-oriented monorepo for local-first and hybrid AI operations. The repository separates operator experience, API ingress, orchestration, MCP tool governance, knowledge retrieval, model routing, voice workflows, observability, local data, infrastructure, and shared TypeScript contracts.
+## Table of contents
 
-### Production principles
+- [Product tour](#product-tour) · [Why DayPilot](#why-daypilot) · [Architecture](#architecture)
+- [Production readiness](#production-readiness) · [Quick start](#quick-start) · [Configuration](#configuration)
+- [Documentation](#documentation) · [Security & governance](#security--governance) · [Tech stack](#technology-stack)
 
-- **Local-first by default:** sensitive documents, personas, project memory, and approval state are designed to run locally unless a deployment explicitly enables cloud synchronization.
-- **Human approval for write actions:** email sends, calendar changes, repository writes, file generation, persona enablement, and external communications must be approval-gated.
-- **Auditable execution:** agent plans, tool calls, document indexing, model requests, approvals, and errors should emit structured logs, traces, metrics, and audit records.
-- **Provider abstraction:** Ollabridge routes local or hybrid model execution so the UX does not depend on raw model configuration during daily work.
-- **Document safety:** source files are preserved; DayPilot creates AI-readable internal representations and writes generated outputs as new versions only.
-- **Composable deployment:** desktop, local web, Docker Compose, Kubernetes, Terraform, and cloud gateway modes are documented separately so teams can choose the right operational footprint.
+---
+
+## Product tour
+
+### First run — a minimalist setup
+
+On first launch a **three-step onboarding** (identity → mailbox → one knowledge source for RAG)
+gets you productive in under a minute. It stays deliberately minimal — **Skip for now** is always
+there, and everything advanced lives in Settings.
+
+<img src="docs/screenshots/onboarding.png" alt="First-run onboarding wizard" width="60%" />
+
+### Home — your day at a glance
+
+A calm, enterprise Home workspace with three regions: navigation, a readable main column
+(**Next priority**, **Today's plan**, **Continue from yesterday**), and a single **collapsible
+AI Assistant** on the right. There is one place to talk to AI (the assistant panel) and one to
+navigate (the **⌘K** command palette). Clean **DayPilot** branding, and a **ChatGPT-style settings
+drop-up** pinned bottom-left. (See the hero image above.)
+
+<img src="docs/screenshots/command-palette.png" alt="Command palette (⌘K)" width="49%" />
+<img src="docs/screenshots/focus-mode.png" alt="Focus Mode" width="49%" />
+
+**Focus Mode** hides everything except the current block, its context, and the allowed
+actions (done / blocked / hand to AI) — the "what do I do now?" mental mode made real.
+
+### Planning — a multi-agent optimized day
+
+A **simple multi-agent planner** (LangGraph-shaped graph: prioritize → schedule → critic loop →
+finalize, Ollabridge-compatible) turns your open tasks into an **optimized day**: deep work
+protected in the morning energy peak, meetings batched after lunch, admin closed out at the end,
+lunch untouchable. The critic scores every candidate (focus share, context switches, priority
+coverage) and re-runs the scheduler until the plan beats the bar — the score badge is its verdict.
+**Every block is clickable** (Start focus · Mark done · Move ±30 min), **Replan** is one tap, and a
+**chat panel** lets you converse with your plan ("move admin to the afternoon" replans it). The
+planner itself improves through time via a governed loop: plan metrics → periodic review → tuned
+config proposal → **Approval Center** → new config version. See
+[`docs/planner-multi-agent.md`](docs/planner-multi-agent.md).
+
+<img src="docs/screenshots/planning.png" alt="Planning — multi-agent optimized day with clickable blocks, replan, and chat" width="100%" />
+
+### Create a project in seconds
+
+A small, essentials-only **project wizard** (name, goal, stack, repository, first milestone)
+opens from the command palette, the Projects view, or the mobile drawer — so a principal engineer
+can spin up a project without a form marathon.
+
+<img src="docs/screenshots/project-wizard.png" alt="Project creation wizard" width="60%" />
+
+### Pair with Ollabridge — local or cloud
+
+DayPilot pairs with the **local Ollabridge gateway** or **Ollabridge Cloud** — the same
+OpenAI-compatible endpoint, so pairing works the same way (one base URL + a Bearer key). Local is
+private-by-default; Cloud adds relay, premium routing, and TV-style device pairing. Per-agent
+routing, health, latency, and fallback are shown alongside.
+
+<img src="docs/screenshots/ai-providers.png" alt="Ollabridge local + cloud pairing and routing" width="100%" />
+
+### Knowledge sources & mail — the RAG and inbox essentials
+
+Grant **local folders or Box** so the AI can answer over your projects (read + index only, RAG),
+and connect an **IMAP/SMTP mailbox** whose send policy stays approval-gated. Every section is
+reachable from an in-panel nav so phones get the full settings surface too.
+
+<img src="docs/screenshots/knowledge-sources.png" alt="Knowledge sources for RAG over projects" width="49%" />
+<img src="docs/screenshots/mail-settings.png" alt="Mail settings (IMAP/SMTP)" width="49%" />
+
+### Email — an optional, non-destructive workspace
+
+A single optional, feature-flagged Email tab with an Outlook-familiar five-region layout and
+an **AI Email Assistant** (Draft + Chat) that drafts and revises replies conversationally.
+The AI never sends and never edits the mailbox — a Copilot-style **Add to email** inserts the
+draft into the editable composer with **Undo**, and Send stays in the composer. Works in both
+dark and light themes.
+
+<img src="docs/screenshots/email-dark.png" alt="Email workspace (dark)" width="100%" />
+
+<details>
+<summary>Light theme</summary>
+
+<img src="docs/screenshots/email-light.png" alt="Email workspace (light)" width="100%" />
+
+</details>
+
+### Coding review and design planning
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/patch-review.png" alt="GitPilot patch review" /></td>
+<td width="50%"><img src="docs/screenshots/matrix-designer.png" alt="Matrix Designer batch roadmap" /></td>
+</tr>
+<tr>
+<td align="center"><b>GitPilot</b> — approval-gated patch review with risk scoring; writes never happen without sign-off.</td>
+<td align="center"><b>Matrix Designer</b> — turns ideas into a dependency-aware batch roadmap that GitPilot builds.</td>
+</tr>
+</table>
+
+### Approval Center
+
+Every sensitive action — email sends, calendar writes, repo writes/PRs, file generation,
+persona enablement — flows through one governed **Approval Center**.
+
+<img src="docs/screenshots/approval-center.png" alt="Approval Center" width="80%" />
+
+### Integrations — one governed gateway
+
+External providers and MCP servers connect through a single **Integration Gateway** with
+one permission model: **reads run immediately; every write, send, or destructive action is
+approval-gated**, audited, and reversible. The AI can only *request* a tool — it never calls
+a provider or MCP server directly.
+
+- **Providers** — Slack (mention → notification → AI draft → approve → send, draft-only by
+  default), GitHub, and Google Calendar, all behind one `IntegrationProvider` interface.
+- **MCP** — attach remote (Streamable HTTP) or local (STDIO) MCP servers; tools are
+  auto-classified read/write/destructive (admin-overridable) and start disabled.
+- **Unified notifications** — every provider normalizes to one event shape and one center,
+  grouped by severity, with per-integration delivery rules.
+- **Cross-integration workflows** — simple, opt-in, predefined (e.g. Slack message → task,
+  GitHub failure → notify) — outbound steps stay approval-gated.
+- **Private platform** — a curated (not public) catalog with tiers, integration manifests, a
+  conformance/certification suite, and an SDK so internal or third-party teams can build
+  integrations **outside** the core repo.
+
+Credentials live in the secrets backend (never the database, logs, or prompts), and
+disconnect revokes them. See [`docs/integrations.md`](docs/integrations.md) and the
+[integration platform plan](docs/integration-platform-plan.md).
+
+### On the phone — a ChatGPT-style mobile shell
+
+Below 768px the full console becomes a dedicated mobile shell: a top app bar (hamburger · title ·
+✦), an off-canvas drawer that combines navigation with recent AI conversations, a single vertical
+Home, and a **full-screen AI chat** with a fixed composer. The installable **mobile PWA** also
+gives a fast offline Today check-in with push-ready approvals.
+
+<p>
+<img src="docs/screenshots/mobile-home.png" alt="Mobile Home" width="30%" />
+<img src="docs/screenshots/mobile-ai.png" alt="Mobile full-screen AI chat" width="30%" />
+<img src="docs/screenshots/mobile-drawer.png" alt="Mobile navigation drawer" width="30%" />
+</p>
+
+### Verified end to end
+
+A real, reproducible **five-day week simulation** for a principal AI/ML engineer pairs DayPilot to
+a local Ollabridge-compatible endpoint and drives planning, coding, email drafting, and RAG with
+**20 real inferences** — while the governance contract holds (0 emails sent, 0 unapproved writes,
+5/5 approvals, continuity carried across days). Run it with `make sim`; the full write-up is
+[`docs/simulation/week_report.md`](docs/simulation/week_report.md).
+
+---
+
+## Why DayPilot
+
+Modern AI products often stop at a chat box. DayPilot starts from the opposite assumption:
+in a professional environment, AI actions must be **observable, reversible, governed,
+auditable, and human-approved**. It is designed for daily use, not occasional
+administration — the operating room for the day.
+
+| Mental mode | User question | DayPilot behavior |
+|---|---|---|
+| Morning planning | What is my day? | Summarize Now / Next / Later, AI running, blockers, documents, approvals. |
+| Focus execution | What do I do now? | Focus Mode: current block, context, allowed actions only. |
+| AI delegation | What can AI do? | Route coding, document, email, design, and scheduling tasks to agents. |
+| Review & approval | What needs me? | One Approval Center queue of decisions that require a human. |
+| Project continuity | Where did I stop? | Restore yesterday's state, linked docs, branches, blockers, next action. |
+| Mobile check-in | What changed while away? | Compact Now / Blocked / AI Running / Approvals on phone. |
+| End-of-day wrap | What happened and what's next? | Progress, risks, generated outputs, and tomorrow's draft plan. |
+
+### Default tool roles
+
+| Tool / agent | Role |
+|---|---|
+| **Ollabridge** | Default LLM provider abstraction; pairs with the local gateway or Ollabridge Cloud (same OpenAI-compatible endpoint) for local / hybrid / cloud routing. |
+| **GitPilot** | Default retro-compatible coding workflow bridge (Ask / Auto / Plan modes). |
+| **Claude Code / Codex** | Optional coding executors behind the same coding-workflow interface. |
+| **Matrix Designer** | Planner and design-quality reviewer for UI, decks, reports, and product surfaces. |
+| **Email Sentinel** | Inbox monitor, urgency classifier, response drafter, schedule-impact detector. |
+| **Document Assistant** | Reads, summarizes, compares, and turns documents into tasks or version-safe outputs. |
+| **Approval Center** | Central queue of human decisions required before sensitive actions. |
+
+---
+
+## Architecture
+
+DayPilot is a production-oriented monorepo separating operator experience, API ingress,
+orchestration, MCP tool governance, knowledge retrieval, model routing, observability,
+local data, infrastructure, and shared contracts.
+
+```text
+Operator UI (web · desktop · mobile PWA)
+        │
+   API Gateway (FastAPI)  ──  request tracing · auth/RBAC · pagination · SSE events
+        │
+   ┌────┴─────────────┬──────────────────┬─────────────────┐
+ Orchestrator     MCP Host          Knowledge Service   Model Serving
+ plan lifecycle   tool contracts    parsers · RAG        Ollabridge routing
+ coding/email/    .hpersona bridge  version-safe outputs  health · fallback
+ design agents    approvals/policy  hybrid retrieval
+ Integration Gateway (providers · MCP · notifications · workflows · catalog)
+        │
+   Postgres · Redis · Qdrant · durable job queue · audit log · observability
+```
 
 ### Repository map
 
 | Area | Path | Purpose |
 |---|---|---|
-| Operator web UI | `apps/operator-web` | React/Vite web operator experience. |
-| Desktop shell | `apps/operator-desktop` | Tauri desktop wrapper for local workstations. |
-| Mobile PWA | `apps/mobile-pwa` | Mobile-friendly operator view. |
-| UI bridge package | `packages/ui-bridge` | Shared DayPilot command-center UI components and styling. |
-| Shared contracts | `packages/shared-types` | TypeScript domain contracts for personas, approvals, tasks, projects, agents, and documents. |
-| API gateway | `services/api-gateway` | FastAPI ingress for health, operator briefing, persona preview, and future external API routes. |
-| Orchestrator | `services/orchestrator` | Approval-first agent runtime and workflow planning. |
-| MCP host | `services/mcp-host` | Governed tool registry and HomePilot `.hpersona` bridge. |
-| Knowledge service | `services/knowledge-service` | Document ingest, chunk persistence, and retrieval foundation. |
-| Model serving | `services/model-serving` | Mock/Ollama/OpenAI-compatible routing layer. |
-| Voice gateway | `services/voice-gateway` | Future ASR/TTS and live voice workflow contracts. |
-| Observability | `services/observability` | Metrics, traces, and structured logging utilities. |
-| Local data | `local_data` | Local-first runtime storage placeholders for documents, indexes, traces, and personas. |
-| Infrastructure | `infra` | Docker, Kubernetes, and Terraform deployment assets. |
-| Tests | `tests` | Python service and contract tests. |
+| Operator web UI | `apps/operator-web` | React/Vite web command center. |
+| Desktop shell | `apps/operator-desktop` | Tauri desktop wrapper. |
+| Mobile PWA | `apps/mobile-pwa` | Installable phone companion (offline Today, push approvals). |
+| HomePilot Family theme | `packages/homepilot-theme` | Shared design tokens, state language, light/dark semantics. |
+| UI bridge | `packages/ui-bridge` | Home, mobile shell, Email workspace, Focus Mode, palette, settings, onboarding + project wizards. |
+| Shared contracts | `packages/shared-types` | TypeScript domain + API contracts. |
+| MCP contracts | `packages/mcp-contracts` | Typed tool contracts incl. the coding-workflow contract. |
+| API gateway | `services/api-gateway` | Ingress: domain APIs, auth/RBAC, tracing, SSE, providers, coding, email, calendar, documents, jobs, integrations, MCP, notifications, catalog. |
+| Orchestrator | `services/orchestrator` | Plan lifecycle, coding/email/design agents, approvals, jobs, security, **integration platform** (`integrations/`: gateway, providers, MCP, notifications, workflows, manifests, SDK). |
+| MCP host | `services/mcp-host` | Tool registry and HomePilot `.hpersona` bridge. |
+| Knowledge service | `services/knowledge-service` | Parsers, permissions, hybrid retrieval, Document AI, RAG eval. |
+| Model serving | `services/model-serving` | Ollabridge client, per-role routing, provider health. |
+| Observability | `services/observability` | Traces, metrics, structured logging. |
+| Infrastructure | `infra` | Docker, Kubernetes, Terraform, Prometheus alerts + Grafana dashboard. |
+| E2E simulation | `scripts/e2e_week_simulation.py` · `scripts/sim/` | Real 5-day week run: pairing + inference + governed workflow (`make sim`). |
 
-### Production deployment checklist
-
-Before a production deployment, verify the following operational controls:
-
-1. **Identity and access:** configure authentication, workspace membership, and admin-only policy management.
-2. **Secrets:** store credentials in a managed secret backend; never commit provider tokens, email credentials, Box credentials, or model API keys.
-3. **Database:** run Alembic migrations and configure backup/restore for Postgres or the chosen production database.
-4. **Document permissions:** explicitly approve local folders, Box scopes, and project vault write permissions. Default to read + index only.
-5. **MCP tools:** review every tool contract for risk level, write behavior, approval requirement, persona access, and workspace scope.
-6. **Model routing:** define Ollabridge local/hybrid/cloud routing and fallback rules per agent role.
-7. **Observability:** enable metrics, traces, structured logs, retention policy, alerts, and audit exports.
-8. **Network boundaries:** expose only the gateway or approved ingress; keep local services and data stores private.
-9. **Approvals:** test human-in-the-loop flows for email, calendar, Git, document generation, and external communications.
-10. **Disaster recovery:** document restore steps for database, vector index, generated files, and persona registry.
-
-## DayPilot Pro Premium UX Architecture
-
-DayPilot Pro is designed as a daily AI operating room, not a passive dashboard. The product promise is:
-
-```text
-DayPilot = Calendar + Tasks + Projects + Agents + Documents + Natural Tools
-```
-
-The user should open DayPilot and immediately understand what to do now, what AI is doing, which project needs attention, what changed since yesterday, which document supports the work, and what needs approval.
-
-### Best Simple UX
-
-The default Command screen should reduce the morning to a single calm summary:
-
-```text
-Good morning. Here is your day.
-
-NOW:      Continue DayPilot UI implementation
-NEXT:     Review GitPilot generated patch
-LATER:    Matrix Designer feedback + client follow-up
-
-AI RUNNING: 4 workflows
-BLOCKERS:   1 needs your approval
-PROJECTS:   6 active, 2 need attention
-
-[Start Focus Mode] [Review AI Work] [Adjust Plan]
-```
-
-DayPilot should not make the user search. It should answer:
-
-- What should I do now?
-- What is AI doing for me?
-- Which project needs attention?
-- What changed since yesterday?
-- What needs my approval?
-
-### Core Workflow
-
-```text
-Open DayPilot
-   ↓
-DayPilot reads calendar, email, projects, GitPilot, HomePilot, Matrix Designer
-   ↓
-AI creates a plan for the day
-   ↓
-User approves or adjusts with chat
-   ↓
-DayPilot schedules work blocks
-   ↓
-AI agents execute background tasks
-   ↓
-DayPilot monitors progress and blockers
-   ↓
-User continues work across projects without losing context
-```
-
-### Sidebar Structure
-
-The default sidebar stays simple and first-class:
-
-```text
-Command
-Calendar
-Tasks
-Projects
-Documents
-Agents
-```
-
-Connected systems such as HomePilot, GitPilot, Matrix Designer, Box, Local Files, Email, and Ollabridge belong in Settings or integration drawers rather than the primary nav.
-
-### Main Screens
-
-1. **Command — Daily Control Center**: the default screen with the Now / Next / Later summary, Strategic Feed, Today’s Plan, and live context for blockers, AI work, approvals, and project attention.
-2. **Calendar — Minute-by-Minute AI Plan**: the actual day distribution, where every block has an owner, source, status, and drawer actions.
-3. **Tasks — You vs AI**: manual commitments stay separate from work DayPilot is doing in the background.
-4. **Projects — Continue Consulting and Internal Work**: each project shows progress, blocker state, AI activity, linked documents, and a Continue Work action. The drawer explains what was done yesterday, what needs to happen today, what AI is doing, linked files/branches/emails, blockers, and the next recommended action.
-5. **Documents — AI File Command Center**: local files, Box, project folders, and the DayPilot Vault are organized by project, time, and relevance. Documents can be chatted with, summarized, compared, converted to tasks, or used to generate Office outputs without overwriting originals.
-6. **Agents — AI Workflow Control**: HomePilot, GitPilot, Matrix Designer, Email Sentinel, Scheduler, Document Assistant, and Project Analyst work stays visible through simple Running, Needs Approval, and Blocked statuses.
-
-
-### Documents Tab
-
-Documents are a first-class DayPilot tab because most daily work lives in contracts, Excel sheets, Word reports, PowerPoint decks, PDFs, project notes, invoices, meeting files, proposals, screenshots, and code/design specs. The Documents tab is not a raw file browser; it is a **Today Context Engine** organized into three panes:
-
-- **Sources**: Local PC files, Box, selected project folders, generated outputs, and the DayPilot Project Vault.
-- **Smart Document Workspace**: today’s documents, project files, recent files, and files needing review.
-- **Document AI**: chat with one document, a project folder, or all files relevant to today.
-
-Supported default business formats include Word (`.doc`, `.docx`, `.rtf`, `.odt`), Excel (`.xls`, `.xlsx`, `.xlsm`, `.csv`, `.tsv`, `.ods`), PowerPoint (`.ppt`, `.pptx`, `.odp`), documents (`.pdf`, `.txt`, `.md`, `.html`), design references (`.png`, `.jpg`, `.webp`, `.svg`), and project data (`.json`, `.yaml`, `.xml`, `.sql`).
-
-The safety model is explicit: source files stay untouched, DayPilot extracts readable text/tables/slides into an internal AI-readable representation, AI indexes chunks into project memory, users chat with the document, and generated outputs are saved as new versions.
-
-### Integration Roles
+### Integration roles
 
 | System | Role |
 |---|---|
-| HomePilot | Local context, personal workflows, environment signals, personas |
+| HomePilot | Local context, personal workflows, personas (`.hpersona` portability) |
 | GitPilot | Coding tasks, branches, PRs, tests, patches, code review |
-| Matrix Designer | UI/UX suggestions, design review, layout critique, product quality |
-| DayPilot | Daily planning, scheduling, task control, monitoring, approvals |
-| Documents | Word, Excel, PowerPoint, PDF, notes, images, Box, local folders, and project vault memory |
-| Ollabridge | AI provider layer for local/online model execution |
-
-### Product Rules
-
-1. Show only Now, Next, Blocked, AI Running, Project Progress, and Needs Approval by default.
-2. Keep everything else in drawers or project detail views.
-3. My Tasks are things the user must do manually.
-4. AI Tasks are things DayPilot is doing for the user.
-5. Every calendar block has an owner, source, and status.
-6. Every project has yesterday, today, AI activity, linked documents, blockers, and next recommended action.
-7. Every document explains why it matters today, which project/meeting needs it, what changed, and what AI can prepare from it.
-8. Original Office and legacy files are never overwritten automatically; DayPilot creates AI-readable representations and saves generated outputs as new versions.
-9. Default document permissions are read + index only, with no destructive edits and no external sharing without approval.
-10. AI can prepare and execute safe workflows, but important actions require approval.
-11. The user should be able to continue consulting and internal projects without losing context.
-
-### Final Product Definition
-
-DayPilot is a personal AI command center that organizes the day, executes safe AI workflows, monitors projects, coordinates HomePilot, GitPilot, and Matrix Designer, and helps the user continue work across consulting and internal projects with minimal effort.
-
-
-## Local Development with Make and UV
-
-DayPilot uses a UV-managed Python environment and a Makefile for a predictable local workflow:
-
-```bash
-make help      # list all supported commands
-make install   # uv sync --group dev, then pnpm install
-make run       # run the FastAPI API gateway with uvicorn
-make run-web   # run the operator web app
-make test      # run Python tests and package tests
-```
-
-The default Python install is intentionally lean (`uv sync --group dev`). Optional heavier extras for RAG, model serving, and observability can be installed with `make install-python-all`.
-
-
-## Documentation Guide
-
-The `docs/` folder is the production knowledge base for implementation, deployment, security, and operating-model decisions. Start with the architecture and security documents, then move into deployment and integration guides.
-
-| Document | Audience | What it explains |
-|---|---|---|
-| [`docs/architecture.md`](docs/architecture.md) | Engineers and architects | Service boundaries, operator UI → API gateway → orchestrator → MCP host → tools/knowledge/models flow, approval queue, and observability placement. |
-| [`docs/security.md`](docs/security.md) | Security, platform, and product owners | Policy-first defaults, high-risk actions, approval requirements, and production prompt-injection/security expectations. |
-| [`docs/deployment.md`](docs/deployment.md) | DevOps and platform teams | Local desktop, local web, cloud gateway, hybrid deployment modes, canonical domain, and Docker Compose baseline. |
-| [`docs/operationalization-gap-analysis.md`](docs/operationalization-gap-analysis.md) | Technical leads | What production-readiness gaps were identified, which infrastructure/runtime files close them, and which areas still require hardening. |
-| [`docs/homepilot-integration.md`](docs/homepilot-integration.md) | Integration engineers | `.hpersona` import flow, dependency inspection, restrictive policy creation, and safe enablement stages for HomePilot personas. |
-| [`docs/persona-policy.md`](docs/persona-policy.md) | Governance and agent developers | Persona install states, allowed tools, blocked actions, rate limits, scopes, retention, and approval rules. |
-| [`docs/mcp-tool-contracts.md`](docs/mcp-tool-contracts.md) | Tool developers | Required MCP tool metadata: input/output schemas, risk level, write behavior, approvals, personas, and workspace scopes. |
-| [`docs/rag-evaluation.md`](docs/rag-evaluation.md) | AI quality and retrieval engineers | RAG evaluation placeholders for precision, recall, faithfulness, relevance, citations, retrieval gaps, and prompt-injection risk. |
-| [`docs/ux-space-bridge-minimalist-portal.md`](docs/ux-space-bridge-minimalist-portal.md) | Product, design, and frontend | Premium minimalist portal principles, visual token contract, command-first flow, drawer behavior, and UI architecture. |
-| [`docs/roadmap.md`](docs/roadmap.md) | Product and delivery teams | Sequenced roadmap from HomePilot import and persona registry to approvals, connectors, RAG, observability, and voice gateway. |
-
-### Recommended reading paths
-
-- **First-time developer:** `README.md` → `docs/architecture.md` → `docs/security.md` → `docs/deployment.md`.
-- **Frontend/product designer:** `README.md` → `docs/ux-space-bridge-minimalist-portal.md` → `packages/ui-bridge`.
-- **Agent/tool developer:** `docs/persona-policy.md` → `docs/mcp-tool-contracts.md` → `services/mcp-host`.
-- **RAG/document engineer:** `docs/rag-evaluation.md` → `services/knowledge-service` → `local_data/README.md`.
-- **Platform/production owner:** `docs/operationalization-gap-analysis.md` → `docs/deployment.md` → `infra/`.
-
-## 1. Executive Summary
-
-**DayPilot Enterprise** is the professional counterpart to **HomePilot**.
-
-HomePilot focuses on local-first personal AI, media generation, voice, memory, and persistent AI identities called **Personas**. DayPilot extends those ideas into a governed workday command center: inbox triage, calendar orchestration, knowledge retrieval, multi-agent operations, approvals, evaluation, and production observability.
-
-The system is designed around one principle:
-
-> **HomePilot creates portable AI identities. DayPilot governs those identities in professional workflows.**
-
-DayPilot is not just a dashboard. It is an operator console for a local-first, cloud-governed, MCP-compatible AI platform. The first release is a complete scaffold containing all major placeholders needed to begin implementation: desktop app, web PWA, mobile PWA, API gateway, agent orchestrator, MCP host, HomePilot persona bridge, knowledge service, voice gateway, model serving adapters, observability, infrastructure, tests, docs, and CI workflows.
-
-**Canonical deployment domain:** `daypilot.ruslanmv.com`  
-**Target environments:** Desktop, Web, Mobile PWA  
-**Lead architect:** Ruslan Magana Vsevolodovna  
-**Primary UX metaphor:** Minimalist tactical **Space Bridge** command center
+| Matrix Designer | UI/UX suggestions, design review, batch roadmap planning |
+| Ollabridge | AI provider layer for local/hybrid/cloud model execution |
+| Integration Gateway | One governed entry for external providers and MCP servers (permission model + approvals + audit) |
+| Slack / GitHub / Google Calendar | External providers behind the shared `IntegrationProvider` interface |
+| MCP servers | Remote (Streamable HTTP) / local (STDIO) tool servers, classified and policy-governed |
+| DayPilot | Daily planning, scheduling, monitoring, approvals, continuity |
 
 ---
 
-## 2. Product Definition
+## Production readiness
 
-DayPilot Enterprise is:
+DayPilot has been built out from scaffold to a production-ready system across an ordered,
+dependency-aware roadmap (see [`docs/production-plan.md`](docs/production-plan.md)). Every
+batch landed as a reviewed changeset with tests and browser-verified UI.
 
-> A futuristic local-first AI command center for professional workflows, powered by governed multi-agent orchestration, HomePilot `.hpersona` portability, MCP tool contracts, private RAG memory, and production-grade observability.
-
-It transforms the personal assistant concept into a professional AI operations layer where users can supervise specialized agents such as:
-
-- **Secretary** — email, calendar, follow-ups, meeting preparation, reminders.
-- **Coder / GitPilot** — repository inspection, pull request review, coding tasks, release notes.
-- **Analyst** — document synthesis, market research, internal knowledge retrieval, reports.
-- **Support Operator** — ticket triage, customer history retrieval, escalation suggestions.
-- **Voice Operator** — future SIP/WebRTC-enabled live voice agent workflows.
-
-Each agent can be loaded as a DayPilot-native persona or imported from a HomePilot `.hpersona` package.
-
----
-
-## 3. Why DayPilot Exists
-
-Modern AI products often stop at a chat box. DayPilot starts from the opposite assumption: in a professional environment, AI actions must be **observable, reversible, governed, auditable, and human-approved**.
-
-DayPilot provides:
-
-1. **A tactical operator UI** for seeing all active AI work.
-2. **A policy layer** that controls what each persona may do.
-3. **An MCP host** that turns external tools into typed contracts.
-4. **A HomePilot bridge** that imports portable `.hpersona` identities.
-5. **A retrieval layer** that supports private knowledge and citations.
-6. **An approval queue** that keeps sensitive actions human-in-the-loop.
-7. **An observability layer** for traces, cost, latency, tool calls, and evaluations.
-
----
-
-## 4. Relationship to HomePilot
-
-The uploaded HomePilot project contains a mature local-first GenAI architecture with the following integration signals detected during scaffold generation:
-
-```json
-[
-  "README.md local-first GenAI application description",
-  "backend/app/personas/export_import.py .hpersona import/export implementation",
-  "frontend/src/ui/personaPortability.ts .hpersona frontend API helpers",
-  "agentic/integrations/mcp/ MCP communication server scaffolds",
-  "docs/PERSONA.md persistent persona primitive documentation",
-  ".github/workflows desktop/mobile/container/persona CI workflows"
-]
-```
-
-HomePilot already provides the core **Persona** primitive:
-
-- A persistent AI identity, not just a prompt.
-- Avatar and visual identity.
-- Voice and communication readiness.
-- Memory and session continuity.
-- Portable `.hpersona` export/import packages.
-- Tool and MCP dependency manifests.
-- Persona-scoped policy concepts.
-
-DayPilot uses these ideas in a professional environment.
-
-### HomePilot → DayPilot Mapping
-
-| HomePilot Concept | DayPilot Enterprise Concept |
+| Area | What's implemented |
 |---|---|
-| Persona | Governed professional agent package |
-| `.hpersona` package | Importable agent bundle with policy review |
-| Persona memory | Scoped local-first professional memory |
-| Voice mode | Future voice operator and call workflow |
-| MCP communication servers | DayPilot MCP tool registry and channel policies |
-| Community persona gallery | Enterprise persona registry / installed agents |
-| Local-first backend | Local DayPilot runtime with optional cloud gateway |
+| **Foundation** | Reproducible toolchain, pinned deps, CI matrix (Python, TS build/typecheck/lint, `docker compose config`, Alembic migration validity, gitleaks secret scan). |
+| **Data & APIs** | Persistent domain model (6 migrations), **cursor pagination** that stays flat at thousands of rows, filters/sort, and an SSE **Today Context** event stream. |
+| **Design system** | Shared HomePilot Family token package, state language, brand guide, and light/dark semantic themes. |
+| **Command experience** | Daily plan state machine (DRAFT→PROPOSED→APPROVED→ACTIVE→WRAPPED), Today engine, Focus Mode, end-of-day wrap-up, continue-from-yesterday. |
+| **Providers** | Ollabridge as the default LLM layer — pairs with the local gateway **or** Ollabridge Cloud — with per-role routing, health/latency, device pairing, and graceful mock fallback. |
+| **Coding** | Shared coding-workflow interface; GitPilot default bridge (retro-compatible), Claude Code + Codex adapters, risk scoring, **approval-gated writes**, patch review UI. |
+| **Planner** | Matrix Designer bundle intake → scheduled coding tasks; design-quality reviews feed projects. |
+| **Email & calendar** | Optional, non-destructive Email module (Mailu/IMAP/SMTP), Email Sentinel triage, **draft-and-approve** (never auto-sends), calendar conflict detection. |
+| **Documents & RAG** | Source permissions, parsers, hybrid retrieval with citations, Document AI chat, **version-safe generated outputs**, project status rules. |
+| **Integrations** | Governed Integration Gateway (Slack/GitHub/Calendar + MCP servers) with one permission model — reads immediate, writes/destructive approval-gated; unified notifications, opt-in cross-integration workflows, and a curated catalog + conformance/certification + SDK for out-of-core integrations. |
+| **Trust** | Auth + RBAC, central Approval Center, prompt-injection defense, secrets abstraction + redaction, audit export. |
+| **Scale** | Durable job queue (retries/backoff/dead-letter), rate limiting/backpressure, retention sweeps, load tests. |
+| **Mobile** | Installable PWA (manifest, service worker, offline snapshot, update flow), push-ready approvals, desktop↔mobile continuity. |
+| **Observability** | Request tracing (X-Request-ID, structured JSON logs, latency metrics), Prometheus alerts + Grafana dashboard, RAG quality gate, UI smoke tests, release + rollback docs. |
 
-### `.hpersona` Package Shape
+### Production deployment checklist
 
-A HomePilot `.hpersona` is a ZIP-like package. DayPilot expects this structure:
-
-```text
-persona.hpersona
-├── manifest.json
-├── preview/card.json
-├── blueprint/
-│   ├── persona_agent.json
-│   ├── persona_appearance.json
-│   └── agentic.json
-├── dependencies/
-│   ├── tools.json
-│   ├── mcp_servers.json
-│   ├── a2a_agents.json
-│   ├── models.json
-│   └── suite.json
-└── assets/
-    ├── avatar_*.png
-    └── thumb_*.webp
-```
-
-DayPilot imports this package, validates the manifest, extracts the persona identity, inspects dependencies, maps HomePilot tools into DayPilot MCP permissions, and creates a governed local agent record.
-
-### Import Policy
-
-Imported personas are **never fully trusted by default**. DayPilot installs them in a safe state:
-
-```text
-INSTALLED_DISABLED → REVIEWED → ENABLED_FOR_READ_ONLY → ENABLED_WITH_APPROVALS → ENABLED_AUTONOMOUS_LIMITED
-```
-
-Sensitive actions always require explicit policy permissions:
-
-- Sending email.
-- Moving or deleting email.
-- Creating or changing calendar events.
-- Contacting someone over WhatsApp, Telegram, VoIP, or SMS.
-- Writing to Git repositories.
-- Executing shell commands.
-- Accessing restricted local files.
+1. **Identity & access:** configure authentication (`DAYPILOT_AUTH_ENABLED` + token→role map), workspace membership, and admin-only policy management.
+2. **Secrets:** store credentials in a managed backend; never commit provider tokens or keys. `redact()` keeps secrets out of logs; gitleaks scans CI.
+3. **Database:** run `alembic upgrade head` and configure Postgres backup/restore.
+4. **Document permissions:** grant local folders / Box scopes explicitly (read + index by default).
+5. **MCP tools:** review every tool contract for risk, write behavior, approval requirement, and workspace scope.
+6. **Model routing:** define Ollabridge local/hybrid/cloud routing and fallback per agent role.
+7. **Observability:** enable metrics, traces, structured logs, alert rules, retention, and audit export.
+8. **Network boundaries:** expose only the gateway; keep local services and data stores private.
+9. **Approvals:** test human-in-the-loop flows for email, calendar, Git, and document generation.
+10. **Disaster recovery:** document restore steps for database, vector index, generated files, and persona registry (see [`docs/operations-runbook.md`](docs/operations-runbook.md)).
 
 ---
 
-## 5. Core Capabilities
+## Quick start
 
-### 5.1 Space Bridge Operator Console
+### Prerequisites
 
-The UI is a minimalist tactical command center. It should feel like operating a mission bridge, not using a generic productivity app.
+- Python 3.11+ · Node.js 20+ · pnpm 9+ · Docker & Docker Compose · (optional) Rust for Tauri desktop builds
 
-Core panels:
-
-- **Daily Briefing** — priorities, unread decisions, meetings, risks.
-- **Inbox Ops** — triage, summarize, classify, draft, approve.
-- **Calendar Ops** — conflicts, briefs, scheduling proposals, deep-work blocks.
-- **Active Agents** — running personas, state, tools, permissions, health.
-- **Approval Queue** — pending outbound actions requiring user confirmation.
-- **Knowledge Inspector** — retrieved documents, citations, confidence, gaps.
-- **Trace Console** — LLM calls, tool calls, spans, costs, latency, failures.
-- **Persona Registry** — installed HomePilot and DayPilot-native personas.
-
-Visual style:
-
-- Obsidian and midnight backgrounds.
-- Cyan information signals.
-- Amber warnings.
-- Red escalation states.
-- Thin grid lines, command palettes, dockable panels.
-- Technical typography, compact cards, visible system status.
-
-### 5.2 Autonomous Inbox Management
-
-DayPilot should connect to Gmail, IMAP, Microsoft Graph, or provider-specific APIs through tool adapters.
-
-Target functions:
-
-- Summarize long threads.
-- Detect intent and urgency.
-- Extract action items.
-- Suggest labels and priorities.
-- Draft replies in the user’s style.
-- Detect follow-up deadlines.
-- Escalate sensitive or high-risk emails.
-- Require approval before sending or deleting.
-
-### 5.3 Dynamic Calendar Orchestration
-
-DayPilot should help the user manage time like a professional operator.
-
-Target functions:
-
-- Find scheduling conflicts.
-- Suggest meeting times.
-- Prepare meeting briefs from related email/docs.
-- Generate agenda notes.
-- Protect deep-work blocks.
-- Detect overdue follow-ups from meetings.
-- Draft calendar changes but require approval.
-
-### 5.4 Local Knowledge and RAG
-
-The knowledge layer should support private retrieval over:
-
-- Email threads.
-- Calendar events.
-- PDFs and office documents.
-- Notes and local folders.
-- Git repositories.
-- Meeting transcripts.
-- HomePilot persona memory exports.
-- `.hpersona` dependency manifests.
-
-The intended retrieval architecture is hybrid:
-
-```text
-Document ingestion → chunking → metadata extraction → embeddings
-                     ↓
-             BM25 / keyword index
-                     ↓
-Hybrid retrieval → reranking → citation assembly → answer generation → evaluation
-```
-
-Evaluation placeholders are included for:
-
-- Context precision.
-- Context recall.
-- Faithfulness.
-- Answer relevance.
-- Hallucination risk.
-- Retrieval gap reporting.
-
-### 5.5 MCP Tool Orchestration
-
-DayPilot uses MCP-style contracts to expose tools safely to agents.
-
-Example tool namespaces:
-
-```text
-daypilot.email.read_inbox
-daypilot.email.summarize_thread
-daypilot.email.draft_reply
-daypilot.email.request_send_approval
-
-daypilot.calendar.search_events
-daypilot.calendar.propose_meeting_times
-daypilot.calendar.create_event_draft
-
-daypilot.knowledge.search_private_memory
-daypilot.knowledge.retrieve_document_context
-daypilot.knowledge.evaluate_rag_answer
-
-daypilot.github.inspect_pull_request
-daypilot.github.propose_patch
-daypilot.github.create_review_comment_draft
-
-daypilot.homepilot.preview_hpersona
-daypilot.homepilot.import_hpersona
-daypilot.homepilot.install_persona_disabled
-
-daypilot.approvals.request_user_approval
-daypilot.observability.record_trace
-```
-
-### 5.6 HomePilot Bridge
-
-The HomePilot bridge is one of the most important parts of this scaffold.
-
-It provides:
-
-- `.hpersona` preview.
-- Manifest validation.
-- Persona identity extraction.
-- Tool dependency extraction.
-- MCP server dependency extraction.
-- Model requirement extraction.
-- Safe installation into `local_data/installed_personas`.
-- DayPilot policy generation from HomePilot allowed tools.
-- A CLI script for previewing imported personas.
-
-The bridge placeholder is located at:
-
-```text
-services/mcp-host/daypilot_mcp_host/homepilot_bridge.py
-scripts/import_homepilot_persona.py
-packages/persona-schema/homepilot-hpersona.schema.json
-```
-
-### 5.7 Voice AI Readiness
-
-Voice is intentionally scaffolded but not enabled in the MVP. The future voice architecture is:
-
-```text
-SIP / WebRTC / microphone
-        ↓
-Voice Activity Detection
-        ↓
-Streaming ASR
-        ↓
-Agent runtime + tool orchestration
-        ↓
-Streaming TTS
-        ↓
-Operator monitor and takeover
-```
-
-The first voice workflows should be narrow:
-
-- Meeting brief playback.
-- Hands-free daily briefing.
-- Support call triage.
-- Operator-supervised outbound follow-up.
-
----
-
-## 6. Architecture
-
-DayPilot is organized into five layers.
-
-### 6.1 Experience Layer
-
-```text
-apps/operator-desktop/   Tauri desktop shell
-apps/operator-web/       Browser PWA at daypilot.ruslanmv.com
-apps/mobile-pwa/         Mobile-first PWA shell
-packages/ui-bridge/      Shared Space Bridge UI components
-```
-
-### 6.2 Control Plane
-
-```text
-services/api-gateway/    Auth, workspace config, API routing
-services/orchestrator/   Agent lifecycle, planning, approvals
-services/mcp-host/       Tool registry, MCP contracts, HomePilot bridge
-```
-
-### 6.3 Intelligence Layer
-
-```text
-services/knowledge-service/  RAG ingestion, retrieval, evaluation
-services/model-serving/      Local/cloud LLM adapters, routing
-services/voice-gateway/      Future ASR/TTS/SIP/WebRTC adapters
-```
-
-### 6.4 Data Layer
-
-```text
-local_data/sqlite/              Local app database placeholder
-local_data/vector_index/        Local vector index placeholder
-local_data/documents/           Local document cache placeholder
-local_data/installed_personas/  Imported HomePilot/DayPilot personas
-local_data/traces/              Local trace export placeholder
-```
-
-### 6.5 Observability and Governance
-
-```text
-services/observability/     OpenTelemetry/Langfuse-style placeholders
-packages/mcp-contracts/     Typed tool contracts and policy metadata
-docs/security.md            Security and governance model
-docs/rag-evaluation.md      Evaluation strategy
-```
-
----
-
-## 7. Repository Structure
-
-```text
-daypilot-enterprise/
-├── .github/workflows/
-│   ├── ci.yml
-│   ├── deploy-gateway.yml
-│   └── release-desktop.yml
-├── apps/
-│   ├── operator-desktop/
-│   ├── operator-web/
-│   └── mobile-pwa/
-├── services/
-│   ├── api-gateway/
-│   ├── orchestrator/
-│   ├── mcp-host/
-│   ├── knowledge-service/
-│   ├── voice-gateway/
-│   ├── model-serving/
-│   └── observability/
-├── packages/
-│   ├── ui-bridge/
-│   ├── shared-types/
-│   ├── persona-schema/
-│   └── mcp-contracts/
-├── docs/
-│   ├── architecture.md
-│   ├── homepilot-integration.md
-│   ├── mcp-tool-contracts.md
-│   ├── rag-evaluation.md
-│   ├── security.md
-│   ├── deployment.md
-│   └── roadmap.md
-├── infra/
-│   ├── docker/
-│   ├── kubernetes/
-│   ├── terraform/
-│   ├── cloudflare/
-│   └── monitoring/
-├── scripts/
-├── tests/
-├── examples/homepilot-personas/
-├── local_data/
-├── docker-compose.yml
-├── package.json
-├── pnpm-workspace.yaml
-├── pyproject.toml
-├── Makefile
-└── README.md
-```
-
----
-
-## 8. Technology Stack
-
-### Frontend
-
-- React
-- Vite
-- TypeScript
-- Tauri for desktop
-- PWA for browser and mobile
-- Shared Space Bridge UI package
-
-### Backend
-
-- Python 3.11+
-- FastAPI
-- Pydantic
-- SQLite for local metadata
-- PostgreSQL placeholder for cloud gateway
-- Redis placeholder for jobs and queues
-
-### AI / ML
-
-- Local and cloud LLM adapter placeholders
-- RAG pipeline placeholders
-- Embedding model adapter placeholders
-- Evaluation dataset placeholders
-- Future LoRA/QLoRA/DPO training recipes
-
-### MCP / Agents
-
-- MCP-style typed tool contracts
-- Persona policy gates
-- Human approval queue
-- HomePilot `.hpersona` bridge
-
-### Observability
-
-- OpenTelemetry-style trace model
-- Langfuse-style LLM traces
-- Cost and latency placeholders
-- Tool-call audit logs
-- Evaluation scorecards
-
----
-
-## 9. Quick Start
-
-### 9.1 Prerequisites
-
-- Python 3.11+
-- Node.js 20+
-- pnpm 9+
-- Docker and Docker Compose
-- Optional: Rust toolchain for Tauri desktop builds
-
-### 9.2 Install
+DayPilot uses a [uv](https://github.com/astral-sh/uv)-managed Python environment and pnpm workspaces.
 
 ```bash
-git clone <your-daypilot-repo-url>
-cd daypilot-enterprise
+git clone https://github.com/ruslanmv/DayPilot.git
+cd DayPilot
 cp .env.example .env
-make install
+
+make install        # uv sync --group dev + pnpm install
+make test           # Python tests + workspace tests
 ```
 
-### 9.3 Run Local API
+### Run locally
 
 ```bash
-make api
-```
-
-API gateway default:
-
-```text
-http://localhost:8080
+make run            # FastAPI gateway on http://localhost:8080
+make run-web        # operator web console on http://localhost:5173
+make run-mobile     # mobile PWA
 ```
 
 Health check:
@@ -718,288 +350,130 @@ Health check:
 curl http://localhost:8080/health
 ```
 
-### 9.4 Run Web Operator Console
+### Seed realistic data
 
 ```bash
-make web
+make migrate        # apply Alembic migrations
+make seed           # 5,000 tasks / 40 projects / 200 docs / 100 agent runs
 ```
 
-Web console default:
+### Run the end-to-end week simulation
 
-```text
-http://localhost:5173
+```bash
+make sim            # pairs to a local Ollabridge-compatible endpoint and runs a
+                    # real 5-day week (planning · coding · email · RAG) for a
+                    # principal AI/ML engineer → docs/simulation/week_report.md
 ```
 
-### 9.5 Run Docker Stack
+### Full Docker stack
 
 ```bash
 docker compose up --build
+# runtime-heavy + observability profiles:
+docker compose --profile runtime --profile observability up --build
+```
+
+### Useful commands
+
+```bash
+make help           # list all targets
+make typecheck      # TypeScript typechecks across the workspace
+make lint           # Ruff + workspace lint
+make ui-smoke       # build + Playwright UI smoke test
 ```
 
 ---
 
-## 10. HomePilot Persona Import
+## Configuration
 
-This scaffold includes a sample HomePilot `.hpersona` file when available from the uploaded HomePilot archive:
-
-```text
-examples/homepilot-personas/atlas.hpersona
-```
-
-Preview it:
+All configuration lives in `.env` (see [`.env.example`](.env.example) for the complete set).
+Highlights:
 
 ```bash
-python scripts/import_homepilot_persona.py examples/homepilot-personas/atlas.hpersona --preview
-```
+# Governance (safe by default)
+DAYPILOT_REQUIRE_APPROVAL=true
+DAYPILOT_WRITE_ENABLED=false
+DAYPILOT_AUTH_ENABLED=false          # local-first; enable + map tokens for teams
 
-Expected output:
+# Default providers — pair with local Ollabridge or Ollabridge Cloud
+DAYPILOT_MODEL_BACKEND=mock          # mock | ollama | vllm | ollabridge
+OLLABRIDGE_MODE=local                # local | cloud (picks the default endpoint)
+OLLABRIDGE_URL=http://localhost:11435/v1                             # local gateway
+OLLABRIDGE_CLOUD_URL=https://ruslanmv-ollabridge-cloud.hf.space/v1  # used when MODE=cloud
+OLLABRIDGE_API_KEY=                  # sk-ollabridge-… (local) or ob_live_…/ob_test_… (cloud)
+DAYPILOT_CODING_EXECUTOR=gitpilot    # gitpilot | claude_code | codex
 
-```json
-{
-  "kind": "homepilot.persona",
-  "name": "Atlas",
-  "role": "Research Assistant",
-  "tools": ["web_search", "document_analysis", "citation_manager"],
-  "safe_install_state": "INSTALLED_DISABLED"
-}
-```
-
-Import it into local DayPilot persona storage:
-
-```bash
-python scripts/import_homepilot_persona.py examples/homepilot-personas/atlas.hpersona --install
-```
-
-Installed personas go to:
-
-```text
-local_data/installed_personas/<persona_id>/
-```
-
-Each import creates:
-
-```text
-persona.json
-policy.json
-dependencies.json
-source_manifest.json
+# Optional Email module (off by default, non-destructive)
+DAYPILOT_EMAIL_ENABLED=false
+DAYPILOT_EMAIL_PROVIDER=mock         # mock | mailu | imap_smtp | gmail | microsoft
+DAYPILOT_EMAIL_ALLOW_SEND=true       # sending still requires per-action approval
 ```
 
 ---
 
-## 11. Environment Variables
+## Documentation
 
-See `.env.example` for the complete placeholder set.
+The [`docs/`](docs/) folder is the production knowledge base.
 
-Important values:
-
-```bash
-DAYPILOT_ENV=local
-DAYPILOT_DOMAIN=daypilot.ruslanmv.com
-DAYPILOT_API_PORT=8080
-DAYPILOT_LOCAL_DATA=./local_data
-DAYPILOT_REQUIRE_APPROVALS=true
-DAYPILOT_HOMEPILOT_IMPORTS_ENABLED=true
-DAYPILOT_MCP_WRITE_ENABLED=false
-DAYPILOT_MCP_DRY_RUN=true
-```
+| Document | For | What it covers |
+|---|---|---|
+| [`production-plan.md`](docs/production-plan.md) | Everyone | The batch roadmap (B0–B14) that took DayPilot from scaffold to production. |
+| [`planner-multi-agent.md`](docs/planner-multi-agent.md) | Product & engineers | The multi-agent day planner: design review, agent graph, critic loop, chat/replan API, and the governed self-optimization loop. |
+| [`integrations.md`](docs/integrations.md) | Platform & integrators | Using the Integration Gateway: connect providers, attach MCP servers, notifications, workflows, catalog/SDK, and the full API. |
+| [`integration-platform-plan.md`](docs/integration-platform-plan.md) | Platform & integrators | Additive, non-destructive batch roadmap (I0–I10) for the Integration Gateway, Slack, MCP, unified notifications, and the private integration platform. |
+| [`setup-and-onboarding.md`](docs/setup-and-onboarding.md) | New users & integrators | First-run wizard, project wizard, Ollabridge pairing (local **and** cloud), and the week simulation. |
+| [`simulation/week_report.md`](docs/simulation/week_report.md) | Everyone | The end-to-end 5-day week simulation report (pairing, inference, governance). |
+| [`homepilot-family-brand-guide.md`](docs/homepilot-family-brand-guide.md) | Design & frontend | Token package, state language, breakpoints, do/don't. |
+| [`operations-runbook.md`](docs/operations-runbook.md) | Platform & on-call | Observability, SLO alerts, incident runbooks, backup/restore, release/rollback. |
+| [`architecture.md`](docs/architecture.md) | Engineers | Service boundaries and request flow. |
+| [`security.md`](docs/security.md) | Security & product | Policy-first defaults, high-risk actions, approvals, injection controls. |
+| [`deployment.md`](docs/deployment.md) | DevOps | Desktop, local web, Docker, Kubernetes, Terraform, cloud gateway modes. |
+| [`email-integration.md`](docs/email-integration.md) | Integration | The optional Email module: architecture, Mailu backend, feature flag, API. |
+| [`email-non-destructive-policy.md`](docs/email-non-destructive-policy.md) | Product & security | The mailbox safety model (safe / risky / forbidden actions). |
+| [`mailu-optional-backend.md`](docs/mailu-optional-backend.md) | Integration | Open-source email-backend evaluation (Mailu / Modoboa / Docker Mailserver). |
+| [`homepilot-integration.md`](docs/homepilot-integration.md) | Integration | `.hpersona` import flow and governed enablement. |
+| [`persona-policy.md`](docs/persona-policy.md) | Governance | Persona install states, allowed tools, blocked actions, rate limits. |
+| [`mcp-tool-contracts.md`](docs/mcp-tool-contracts.md) | Tool developers | Required MCP tool metadata and contracts. |
+| [`rag-evaluation.md`](docs/rag-evaluation.md) | AI quality | RAG evaluation strategy (precision, recall, faithfulness, citations). |
+| [`ux-space-bridge-minimalist-portal.md`](docs/ux-space-bridge-minimalist-portal.md) | Product & design | Premium minimalist portal principles and UI architecture. |
 
 ---
 
-## 12. Security Model
+## Security & governance
 
-DayPilot treats every imported persona, retrieved document, external tool, and model output as untrusted until policy allows it.
-
-Core safety principles:
+DayPilot treats every imported persona, retrieved document, external tool, and model output
+as untrusted until policy allows it.
 
 1. **Least privilege** — each persona gets minimum tool permissions.
-2. **Human approval** — high-impact actions require approval.
-3. **Auditability** — all tool calls generate trace events.
+2. **Human approval** — high-impact actions require approval, enforced at the API/tool layer.
+3. **Auditability** — sensitive actions generate audit records; export as JSONL/CSV.
 4. **Local-first privacy** — private data stays local by default.
-5. **Prompt injection resistance** — retrieved content cannot silently grant permissions.
+5. **Prompt-injection resistance** — retrieved content is scanned and tagged; it cannot silently grant permissions.
 6. **Dry-run by default** — mutating MCP actions start disabled.
-7. **Explicit consent** — outbound communication tools require consent.
-
----
-
-## 13. Development Roadmap
-
-### Phase 1 — Foundation MVP
-
-- Tauri shell placeholder.
-- React Space Bridge UI placeholder.
-- FastAPI gateway with health endpoints.
-- HomePilot `.hpersona` parser.
-- Local persona registry.
-- MCP contract registry placeholders.
-- Approval queue model.
-- Documentation and CI.
-
-### Phase 2 — Inbox and Calendar
-
-- Gmail/Microsoft/IMAP connectors.
-- Email triage agent.
-- Calendar conflict detector.
-- Draft reply and schedule proposal workflows.
-- Approval queue UI.
-
-### Phase 3 — Knowledge and RAG
-
-- Document ingestion.
-- Local vector index.
-- Hybrid retrieval.
-- Citation inspector.
-- RAG evaluation scorecards.
-
-### Phase 4 — Agent Governance
-
-- Persona permissions UI.
-- MCP allowlists.
-- Tool-call replay.
-- Audit log export.
-- Policy simulation.
-
-### Phase 5 — Observability and MLOps
-
-- OpenTelemetry traces.
-- LLM trace dashboards.
-- Cost tracking.
-- Evaluation datasets.
-- Model comparison and release gates.
-
-### Phase 6 — Voice AI
-
-- Voice activity detection.
-- Streaming ASR/TTS adapters.
-- SIP/WebRTC gateway.
-- Live transcript inspector.
-- Operator takeover.
-
----
-
-## 14. Success Metrics
-
-### Product Metrics
-
-- Time saved per day.
-- Email triage accuracy.
-- Draft acceptance rate.
-- Meeting preparation usefulness.
-- Missed follow-up reduction.
-- Approval queue completion rate.
-
-### AI Quality Metrics
-
-- Retrieval precision.
-- Retrieval recall.
-- Faithfulness.
-- Hallucination rate.
-- Tool-call success rate.
-- Agent task completion rate.
-
-### Reliability Metrics
-
-- P95 API latency.
-- Tool-call failure rate.
-- Background job failure rate.
-- Sync failure rate.
-- Model timeout rate.
-- Cost per completed task.
-
-### Safety Metrics
-
-- Unauthorized tool attempts blocked.
-- PII redaction events.
-- Prompt injection detections.
-- User escalations.
-- Approval overrides.
-
----
-
-## 15. Design Principle
-
-DayPilot may let agents think, retrieve, draft, and propose.
-
-But DayPilot governs execution.
+7. **Secrets hygiene** — read from a managed backend, redacted from logs/traces, scanned in CI.
 
 > The model may propose actions, but the platform decides what is allowed.
 
 ---
 
-## 16. Current Scaffold Status
+## Technology stack
 
-This ZIP is a **project bootstrap scaffold**, not a production release. It intentionally contains placeholders so the repository can grow cleanly into the full DayPilot platform.
+**Frontend:** React · Vite · TypeScript · Tauri (desktop) · PWA (web & mobile) · shared HomePilot Family theme.
+**Backend:** Python 3.11+ · FastAPI · Pydantic · SQLAlchemy · Alembic · SQLite (local) / PostgreSQL (cloud) · Redis · Qdrant.
+**AI / agents:** Ollabridge model routing · GitPilot / Claude Code / Codex coding adapters · Matrix Designer planner · MCP-style typed tool contracts · HomePilot `.hpersona` bridge · hybrid RAG.
+**Ops:** Prometheus metrics + alerts · Grafana dashboard · structured JSON logging · OpenTelemetry-ready tracing · durable job queue · gitleaks · CI matrix.
 
-Included now:
+---
 
-- Complete README.
-- Monorepo layout.
-- Web, desktop, and mobile app placeholders.
-- FastAPI service placeholders.
-- MCP host and HomePilot bridge placeholders.
-- `.hpersona` parser utility.
-- Persona schema placeholder.
-- Docs skeleton.
-- Docker Compose placeholder.
-- CI workflow placeholders.
-- Local data directories.
+## Contributing & license
 
-Next implementation target:
+Develop on a feature branch, keep the CI matrix green (`make test`, `make typecheck`, `make lint`),
+and gate sensitive actions behind approvals. See [`docs/production-plan.md`](docs/production-plan.md)
+for the batch structure.
 
-> Build the HomePilot `.hpersona` import flow end-to-end, then connect imported personas to the DayPilot operator console and approval queue.
+**Lead architect:** Ruslan Magana Vsevolodovna · **Canonical domain:** `daypilot.ruslanmv.com`
+Licensed under Apache 2.0.
 
-
-## Operationalization Pack v0.2
-
-This ZIP revision includes the missing production-readiness foundations identified during the workspace review:
-
-- Complete per-service Dockerfiles in `infra/docker/`.
-- Multi-service `docker-compose.yml` with Postgres, Redis, Qdrant, and optional Prometheus.
-- Kubernetes Kustomize manifests in `infra/kubernetes/`.
-- Terraform AWS bootstrap files in `infra/terraform/`.
-- Alembic schema controls plus SQLAlchemy models for users, personas, calendars, inboxes, documents, document chunks, and audit logs.
-- FastAPI runtime surfaces for orchestrator, MCP host, knowledge-service, model-serving, voice-gateway, and observability.
-- Shared UI bridge atomic components for consistent operator screens.
-- Expanded tests for orchestration, persistence, model routing, voice, traces, and API health.
-
-### New local validation commands
-
-```bash
-python scripts/init_db.py
-alembic upgrade head
-python -m pytest -q
-```
-
-### Full service stack
-
-```bash
-docker compose up --build
-```
-
-Runtime-heavy components can be enabled separately:
-
-```bash
-docker compose --profile runtime --profile observability up --build
-```
-
-For a line-by-line operationalization summary, see `docs/operationalization-gap-analysis.md`.
-
-
-## V3 Premium Minimalist Portal Upgrade
-
-This revision adds the production UI/UX blueprint for the DayPilot Premium Minimalist Portal. The visual direction is now intentionally closer to a calm Apple-style command surface than a dense operations dashboard:
-
-- Chat-first Strategic Feed for natural-language scheduling and delegation.
-- Clickable Strategy Blocks for team meetings, deep-work windows, and AI-generated work plans.
-- Day Horizon and Week Horizon calendar views that show how AI distributes work across time.
-- Operational Ledger that separates Commander manual assignments from autonomous `.hpersona` processes.
-- Right-edge context drawer for email/source/GitPilot/RAG telemetry without disruptive modals.
-- Obsidian monochrome token system using Apple Blue, Cyber Cyan, System Purple, and Alert Orange only as state telemetry.
-
-Key files:
-
-- `docs/ux-space-bridge-minimalist-portal.md` — ASCII wireframes and permanent UI rules.
-- `packages/ui-bridge/src/minimalPortal.tsx` — React implementation of the chat/calendar/tasks portal.
-- `packages/ui-bridge/src/spaceBridgeData.ts` — shared sample state for messages and work blocks.
-- `packages/ui-bridge/src/space-bridge.css` — minimalist visual token system and layout styles.
-- `examples/ui/daypilot-premium-minimalist-portal.html` — standalone no-build HTML prototype.
+<div align="center">
+<sub>DayPilot is part of the HomePilot Family. HomePilot creates portable AI identities; DayPilot governs them in professional workflows.</sub>
+</div>

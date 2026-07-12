@@ -10,9 +10,55 @@ try:
 except Exception:  # pragma: no cover - import path differs during early scaffolding
     preview_hpersona_bytes = None
 
+from .routers import (
+    agents,
+    approvals,
+    calendar,
+    catalog,
+    coding,
+    design,
+    documents,
+    email,
+    events,
+    integrations,
+    integrations_mcp,
+    jobs,
+    notifications,
+    plan,
+    planner,
+    projects,
+    providers,
+    tasks,
+)
+
+from .observability import install_observability
+
 REQUESTS = Counter("daypilot_api_gateway_requests_total", "Gateway requests", ["route"])
 
-app = FastAPI(title="DayPilot API Gateway", version="0.2.0")
+app = FastAPI(title="DayPilot API Gateway", version="0.3.0")
+install_observability(app)
+
+for _router in (
+    tasks.router,
+    projects.router,
+    agents.router,
+    documents.router,
+    approvals.router,
+    plan.router,
+    events.router,
+    providers.router,
+    coding.router,
+    design.router,
+    email.router,
+    calendar.router,
+    jobs.router,
+    integrations.router,
+    integrations_mcp.router,
+    notifications.router,
+    catalog.router,
+    planner.router,
+):
+    app.include_router(_router)
 
 SERVICE_MAP = {
     "orchestrator": "http://orchestrator:8002",
@@ -30,7 +76,7 @@ def health() -> dict:
     return {
         "ok": True,
         "service": "daypilot-api-gateway",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "homepilot_imports": preview_hpersona_bytes is not None,
         "services": SERVICE_MAP,
     }

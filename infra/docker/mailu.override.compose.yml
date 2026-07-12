@@ -1,0 +1,52 @@
+# Optional Mailu backend for DayPilot's Email module.
+#
+# Bring up alongside the main stack:
+#   docker compose -f docker-compose.yml -f infra/docker/mailu.override.compose.yml up
+#
+# DayPilot talks to Mailu over the universal IMAP/SMTP content plane (see
+# docs/mailu-optional-backend.md). Mailu-specific configuration (domains, keys,
+# secrets) must be provided via a real Mailu env file — never commit secrets.
+#
+# This override is intentionally minimal and disabled by profile so it does not
+# affect the default DayPilot stack.
+services:
+  mailu-front:
+    image: ghcr.io/mailu/nginx:2024.06
+    profiles: ["mail"]
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "143:143"   # IMAP
+      - "993:993"   # IMAPS
+      - "587:587"   # submission
+    volumes:
+      - mailu_data:/data
+      - mailu_mail:/mail
+
+  mailu-imap:
+    image: ghcr.io/mailu/dovecot:2024.06
+    profiles: ["mail"]
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - mailu_mail:/mail
+
+  mailu-smtp:
+    image: ghcr.io/mailu/postfix:2024.06
+    profiles: ["mail"]
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - mailu_data:/data
+
+  mailu-admin:
+    image: ghcr.io/mailu/admin:2024.06
+    profiles: ["mail"]
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - mailu_data:/data
+
+volumes:
+  mailu_data:
+  mailu_mail:

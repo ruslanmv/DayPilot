@@ -7,7 +7,7 @@ API_HOST ?= 0.0.0.0
 API_PORT ?= 8080
 WEB_PORT ?= 5173
 
-.PHONY: help install install-python install-python-all install-js run run-api run-web run-mobile test lint format typecheck build init-db migrate compose compose-runtime clean preview-persona install-persona
+.PHONY: help install install-python install-python-all install-js run run-api run-web run-mobile test lint format typecheck build init-db migrate seed seed-reset sim ui-smoke compose compose-runtime clean preview-persona install-persona
 
 help: ## Show available make targets.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nDayPilot Enterprise commands\n\n"} /^[a-zA-Z0-9_.-]+:.*##/ {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -47,8 +47,8 @@ lint: ## Run Python and package-level JavaScript linters.
 format: ## Format Python code with Ruff.
 	$(UV) run ruff format services scripts tests
 
-typecheck: ## Run TypeScript builds for workspace packages that define build scripts.
-	$(PNPM) -r build
+typecheck: ## Run TypeScript typechecks across workspace packages.
+	$(PNPM) -r typecheck
 
 build: ## Build all JavaScript workspace packages/apps.
 	$(PNPM) -r build
@@ -58,6 +58,20 @@ init-db: ## Initialize the local database.
 
 migrate: ## Apply Alembic migrations.
 	$(UV) run alembic upgrade head
+
+seed: ## Seed a realistic-volume workspace (5k tasks) for dev and load testing.
+	$(UV) run python scripts/seed_dev_data.py
+
+seed-reset: ## Reset seeded rows and reseed the default workspace.
+	$(UV) run python scripts/seed_dev_data.py --reset
+
+sim: ## Run the end-to-end 5-day week simulation (real pairing + inference).
+	$(UV) run python scripts/e2e_week_simulation.py
+
+ui-smoke: ## Build operator-web and run the Playwright UI smoke test.
+	$(PNPM) --filter @daypilot/operator-web build
+	@echo "Serve dist and run: node tests/ui/smoke.mjs http://localhost:8890"
+	@echo "(requires playwright-core + a Chromium binary; set CHROMIUM_PATH if needed)"
 
 compose: ## Start the Docker Compose development stack.
 	docker compose up --build

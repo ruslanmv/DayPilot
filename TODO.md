@@ -2,6 +2,8 @@
 
 DayPilot Enterprise is intended to become a premium, daily-use AI operating system for professional work. This document tracks the placeholders that must be completed before the product can be considered production-ready at enterprise quality.
 
+> **Execution plan:** every placeholder below is mapped to an ordered, dependency-aware batch in [`docs/production-plan.md`](docs/production-plan.md). Use that roadmap (batches B0–B14) to generate and refactor the code; tick checkboxes here as each batch lands.
+
 ## 1. Product North Star
 
 DayPilot should optimize the user's day by combining planning, execution, monitoring, and continuity across calendar, tasks, projects, documents, agents, email, coding workflows, and design review.
@@ -38,10 +40,10 @@ DayPilot must feel like part of the **HomePilot Family** rather than a disconnec
 
 ### Placeholder work
 
-- [ ] Define a shared HomePilot/DayPilot design token package for color, typography, radii, spacing, shadows, and motion.
-- [ ] Add a formal HomePilot Family brand guide under `docs/`.
-- [ ] Align DayPilot navigation, drawer behavior, cards, and command surfaces with HomePilot design principles.
-- [ ] Add shared iconography and state language for local-first, approval-gated, AI-running, blocked, and safe states.
+- [x] Define a shared HomePilot/DayPilot design token package for color, typography, radii, spacing, shadows, and motion. _(Batch B2)_
+- [x] Add a formal HomePilot Family brand guide under `docs/`. _(Batch B2)_
+- [x] Align DayPilot navigation, drawer behavior, cards, and command surfaces with HomePilot design principles. _(Batch B3)_
+- [x] Add shared iconography and state language for local-first, approval-gated, AI-running, blocked, and safe states. _(Batch B2)_
 - [ ] Validate the UI on desktop, tablet, and phone breakpoints.
 
 ## 3. Daily Usage and Mental Models
@@ -62,12 +64,12 @@ DayPilot must be designed for daily use, not occasional administration. The user
 
 ### Placeholder work
 
-- [ ] Implement Focus Mode as a first-class Command action.
-- [ ] Add a true daily plan approval state machine.
-- [ ] Add end-of-day wrap-up generation.
-- [ ] Add “continue from yesterday” memory across projects, documents, coding branches, and agent runs.
-- [ ] Add mobile-first Today view for phone usage.
-- [ ] Add offline-friendly local state sync for desktop and PWA.
+- [x] Implement Focus Mode as a first-class Command action. _(Batch B4)_
+- [x] Add a true daily plan approval state machine. _(Batch B4)_
+- [x] Add end-of-day wrap-up generation. _(Batch B4)_
+- [x] Add “continue from yesterday” memory across projects, documents, coding branches, and agent runs. _(Batch B4)_
+- [x] Add mobile-first Today view for phone usage. _(Batch B13)_
+- [x] Add offline-friendly local state sync for desktop and PWA. _(Batch B13 — cached Today snapshot + service worker)_
 
 ## 4. Portable Phone and Desktop Experience
 
@@ -92,11 +94,11 @@ DayPilot must work as a premium desktop command center and a portable phone comp
 
 ### Placeholder work
 
-- [ ] Add dedicated mobile PWA layouts for Command, Approvals, Documents, and Projects.
-- [ ] Add responsive screenshot tests or visual regression checks.
-- [ ] Add installable PWA metadata, offline cache rules, and update flow.
-- [ ] Add notification and approval handoff strategy.
-- [ ] Add desktop-to-mobile continuity for current focus block and active approvals.
+- [x] Add dedicated mobile PWA layouts for Command, Approvals, Documents, and Projects. _(Batch B13 — mobile Today shell + bottom tabs)_
+- [x] Add responsive screenshot tests or visual regression checks. _(Batch B13 — Playwright phone-viewport verification)_
+- [x] Add installable PWA metadata, offline cache rules, and update flow. _(Batch B13 — manifest + icon + service worker + skipWaiting update flow)_
+- [x] Add notification and approval handoff strategy. _(Batch B13 — Web Push scaffold + notification deep-link; approvals require live connection)_
+- [x] Add desktop-to-mobile continuity for current focus block and active approvals. _(Batch B13 — cached Today snapshot + /v1/today refresh)_
 
 ## 5. AI Workflow Execution
 
@@ -130,13 +132,13 @@ DayPilot should optimize coding workflows for a principal engineer managing many
 
 ### Placeholder work
 
-- [ ] Define a coding workflow interface shared by GitPilot, Claude Code, and Codex adapters.
-- [ ] Add a GitPilot connector service or MCP adapter with branch, PR, tests, and diff metadata.
-- [ ] Add provider routing policy for GitPilot, Claude Code, Codex, and Ollabridge-backed coding agents.
-- [ ] Add approval checks before repository writes, shell commands, or PR creation.
-- [ ] Add generated patch review UI.
-- [ ] Add test result ingestion and risk scoring.
-- [ ] Add coding workflow audit logs.
+- [x] Define a coding workflow interface shared by GitPilot, Claude Code, and Codex adapters. _(Batch B6)_
+- [x] Add a GitPilot connector service or MCP adapter with branch, PR, tests, and diff metadata. _(Batch B6)_
+- [x] Add provider routing policy for GitPilot, Claude Code, Codex, and Ollabridge-backed coding agents. _(Batch B7)_
+- [x] Add approval checks before repository writes, shell commands, or PR creation. _(Batch B6)_
+- [x] Add generated patch review UI. _(Batch B6)_
+- [x] Add test result ingestion and risk scoring. _(Batch B6)_
+- [x] Add coding workflow audit logs. _(Batch B6)_
 
 ## 6. Documents, Email, Calendar, and Projects
 
@@ -144,15 +146,15 @@ Documents and email are daily work inputs. Calendar and projects turn them into 
 
 ### Placeholder work
 
-- [ ] Implement real local file source permissions.
+- [x] Implement real local file source permissions. _(Batch B10 — granted-scope registry, read+index by default)_
 - [ ] Implement Box connector authentication and scoped folder access.
-- [ ] Implement document ingestion for Word, Excel, PowerPoint, PDF, Markdown, images, and project data.
-- [ ] Preserve original files and write generated outputs as new versions only.
-- [ ] Add email provider connectors such as Gmail, Microsoft Graph, and IMAP.
-- [ ] Add calendar provider connectors such as Google Calendar and Microsoft 365.
+- [x] Implement document ingestion for Word, Excel, PowerPoint, PDF, Markdown, images, and project data. _(Batch B10 — parser registry; office/pdf via optional extras)_
+- [x] Preserve original files and write generated outputs as new versions only. _(Batch B10 — version-safe generate)_
+- [x] Add email provider connectors such as Gmail, Microsoft Graph, and IMAP. _(Batch B9 — IMAP/SMTP content plane + mock; Gmail/Microsoft via the imap_smtp plane)_
+- [x] Add calendar provider connectors such as Google Calendar and Microsoft 365. _(Batch B9 — connectors + conflict detection; approval-gated event drafts)_
 - [ ] Link documents to calendar blocks and project cards automatically.
-- [ ] Extract tasks from emails, documents, meeting notes, and code review summaries.
-- [ ] Add project status rules for progress, risk, blockers, due dates, and AI activity.
+- [x] Extract tasks from emails, documents, meeting notes, and code review summaries. _(Batch B9 — email → task; docs in B10)_
+- [x] Add project status rules for progress, risk, blockers, due dates, and AI activity. _(Batch B10)_
 
 ## 7. Scalability for Thousands of Tasks
 
@@ -171,12 +173,12 @@ DayPilot must be optimized for thousands of tasks, documents, agent runs, and pr
 
 ### Placeholder work
 
-- [ ] Add queue infrastructure for agent jobs and document indexing.
-- [ ] Add pagination contracts to tasks, documents, projects, and agent runs.
-- [ ] Add database indexes for task owner/status/project/date, document project/status/source, and agent run state.
-- [ ] Add event schema for Today Context changes.
-- [ ] Add load testing for thousands of tasks and documents.
-- [ ] Add retention policies for traces, generated outputs, and temporary document chunks.
+- [x] Add queue infrastructure for agent jobs and document indexing. _(Batch B12 — durable DB-backed queue, retries/backoff/dead-letter)_
+- [x] Add pagination contracts to tasks, documents, projects, and agent runs. _(Batch B1)_
+- [x] Add database indexes for task owner/status/project/date, document project/status/source, and agent run state. _(Batch B1)_
+- [x] Add event schema for Today Context changes. _(Batch B1)_
+- [x] Add load testing for thousands of tasks and documents. _(Batch B12 — volume pagination + latency budget test; make seed for 5k)_
+- [x] Add retention policies for traces, generated outputs, and temporary document chunks. _(Batch B12 — retention sweep)_
 
 ## 8. Security, Governance, and Compliance
 
@@ -194,12 +196,12 @@ DayPilot must follow enterprise-safe defaults.
 
 ### Placeholder work
 
-- [ ] Add authentication and workspace membership.
-- [ ] Add role-based access control.
-- [ ] Add secrets management integration.
-- [ ] Add approval policy enforcement at the API/tool layer.
-- [ ] Add prompt-injection detection for documents and emails.
-- [ ] Add audit export and retention settings.
+- [x] Add authentication and workspace membership. _(Batch B11 — local-first default, token+role for teams)_
+- [x] Add role-based access control. _(Batch B11 — ranked roles, require_role gates)_
+- [x] Add secrets management integration. _(Batch B11 — env/managed abstraction + redaction + gitleaks CI)_
+- [x] Add approval policy enforcement at the API/tool layer. _(Batch B11 — central Approval Center, RBAC-gated decisions)_
+- [x] Add prompt-injection detection for documents and emails. _(Batch B11 — injection guard wired into Document AI)_
+- [x] Add audit export and retention settings. _(Batch B11 — JSONL/CSV audit export)_
 - [ ] Add data deletion and workspace reset workflows.
 
 ## 9. Observability and Quality Gates
@@ -208,12 +210,12 @@ DayPilot should be observable before production use.
 
 ### Placeholder work
 
-- [ ] Add OpenTelemetry tracing across gateway, orchestrator, MCP host, knowledge service, and model serving.
-- [ ] Add Prometheus dashboards for requests, agent runs, approval latency, model latency, indexing jobs, and failures.
-- [ ] Add structured JSON logs with request IDs and workspace IDs.
-- [ ] Add RAG quality evaluations for retrieval precision, recall, faithfulness, and citation coverage.
-- [ ] Add UI smoke tests for Command, Calendar, Tasks, Projects, Documents, and Agents.
-- [ ] Add CI checks for Python tests, TypeScript builds, linting, Docker Compose config, and migration validity.
+- [x] Add OpenTelemetry tracing across gateway, orchestrator, MCP host, knowledge service, and model serving. _(Batch B14 — request tracing/span boundary + traces service; OTel exporter hook)_
+- [x] Add Prometheus dashboards for requests, agent runs, approval latency, model latency, indexing jobs, and failures. _(Batch B14 — Grafana dashboard + alert rules)_
+- [x] Add structured JSON logs with request IDs and workspace IDs. _(Batch B14 — gateway observability middleware, secrets redacted)_
+- [x] Add RAG quality evaluations for retrieval precision, recall, faithfulness, and citation coverage. _(Batch B14 — rag_eval scorecard + CI-ready gate)_
+- [x] Add UI smoke tests for Command, Calendar, Tasks, Projects, Documents, and Agents. _(Batch B14 — Playwright smoke, make ui-smoke)_
+- [x] Add CI checks for Python tests, TypeScript builds, linting, Docker Compose config, and migration validity. _(Batch B0)_
 
 ## 10. Current Placeholder Inventory
 

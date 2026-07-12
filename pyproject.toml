@@ -26,6 +26,12 @@ observability = ["opentelemetry-api", "opentelemetry-sdk", "prometheus-client"]
 line-length = 100
 src = ["services", "scripts", "tests"]
 
+[tool.ruff.lint.per-file-ignores]
+# These modules intentionally manipulate sys.path before importing the
+# mcp-host package, so E402 (import not at top of file) is expected.
+"scripts/import_homepilot_persona.py" = ["E402"]
+"tests/test_homepilot_bridge.py" = ["E402"]
+
 [tool.pytest.ini_options]
 pythonpath = [
   "services/mcp-host",

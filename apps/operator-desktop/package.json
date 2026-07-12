@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build",
+    "build": "echo 'operator-desktop is built via the release-desktop workflow (pnpm run build:tauri, requires the Rust toolchain)'",
+    "build:tauri": "tauri build",
+    "typecheck": "echo 'no TypeScript sources to typecheck in operator-desktop'",
     "lint": "echo placeholder lint",
     "test": "echo placeholder test"
   },
-  "dependencies": {
-    "@tauri-apps/api": "latest",
-    "@tauri-apps/cli": "latest"
+  "devDependencies": {
+    "@tauri-apps/api": "^2.1.1",
+    "@tauri-apps/cli": "^2.1.0"
   }
 }
