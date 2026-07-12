@@ -1,14 +1,99 @@
 name: CI
+
 on:
   push:
   pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  python:
+    name: Python tests & lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: '3.11'
-      - run: pip install -e .[dev]
-      - run: pytest -q
+          python-version: "3.11"
+      - name: Sync dev environment
+        run: uv sync --group dev
+      - name: Ruff lint
+        run: uv run ruff check services scripts tests
+      - name: Pytest
+        run: uv run pytest -q
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  frontend:
+    name: TypeScript build & typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm -r typecheck
+      - name: Build
+        run: pnpm -r build
+      - name: Lint
+        run: pnpm -r lint
+
+  compose:
+    name: Docker Compose config validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provide env file
+        run: cp .env.example .env
+      - name: Validate default profile
+        run: docker compose config >/dev/null
+      - name: Validate runtime + observability profiles
+        run: docker compose --profile runtime --profile observability config >/dev/null
+
+  migrations:
+    name: Alembic migration validity
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: daypilot
+          POSTGRES_USER: daypilot
+          POSTGRES_PASSWORD: daypilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U daypilot -d daypilot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://daypilot:daypilot@localhost:5432/daypilot
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Sync dev environment
+        run: uv sync --group dev
+      - name: Apply migrations to disposable Postgres
+        run: uv run alembic upgrade head

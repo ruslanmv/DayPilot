@@ -1,0 +1,20 @@
+{
+  "name": "DayPilot Mobile",
+  "short_name": "DayPilot",
+  "description": "Your AI operating room — a fast daily check-in for the day's plan, blockers, and approvals.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080c14",
+  "theme_color": "#007aff",
+  "categories": ["productivity", "business"],
+  "icons": [
+    {
+      "src": "/daypilot-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

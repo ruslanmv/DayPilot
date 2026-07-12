@@ -1,0 +1,185 @@
+/*
+ * HomePilot Family — canonical design tokens.
+ *
+ * One source of truth for color, typography, radii, spacing, elevation, blur,
+ * and motion across HomePilot (local/personal) and DayPilot (professional).
+ * Canonical variables use the shared `--hp-*` prefix established by HomePilot;
+ * DayPilot's existing `--dp-*` variables are kept as thin aliases so component
+ * styles need not change when the palette evolves.
+ *
+ * Theme: a calm, premium obsidian workspace with restrained Apple-system
+ * accents used only as state telemetry — never decoration.
+ */
+:root {
+  /* --- Surfaces (obsidian, layered) --- */
+  --hp-bg: #080c14;
+  --hp-bg-alt: #090d16;
+  --hp-surface: #111625;
+  --hp-surface-elevated: #151b2b;
+  --hp-surface-glass: rgba(17, 22, 37, 0.58);
+
+  /* --- Lines --- */
+  --hp-border: rgba(255, 255, 255, 0.06);
+  --hp-border-strong: rgba(255, 255, 255, 0.11);
+
+  /* --- Text --- */
+  --hp-text: #f8fafc;
+  --hp-text-muted: #94a3b8;
+  --hp-text-faint: #64748b;
+
+  /* --- Accents (state telemetry only) --- */
+  --hp-accent-blue: #007aff;   /* primary / active */
+  --hp-accent-cyan: #00f0ff;   /* AI signal / info */
+  --hp-accent-purple: #af52de; /* persona / planner */
+  --hp-accent-orange: #ff9500; /* warning / needs attention */
+  --hp-accent-green: #34c759;  /* safe / success */
+  --hp-accent-red: #ff3b30;    /* escalation / blocked */
+  --hp-focus-ring: rgba(175, 82, 222, 0.55);
+
+  /* --- Typography --- */
+  --hp-font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --hp-font-mono: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --hp-text-2xs: 0.68rem;
+  --hp-text-xs: 0.72rem;
+  --hp-text-sm: 0.82rem;
+  --hp-text-md: 0.92rem;
+  --hp-text-lg: 1.05rem;
+  --hp-text-xl: 1.2rem;
+  --hp-text-2xl: 1.5rem;
+  --hp-weight-normal: 420;
+  --hp-weight-medium: 520;
+  --hp-weight-strong: 620;
+  --hp-tracking-eyebrow: 0.16em;
+
+  /* --- Radii --- */
+  --hp-radius-sm: 8px;
+  --hp-radius-md: 12px;
+  --hp-radius-lg: 18px;
+  --hp-radius-pill: 999px;
+
+  /* --- Spacing scale --- */
+  --hp-space-1: 0.25rem;
+  --hp-space-2: 0.45rem;
+  --hp-space-3: 0.62rem;
+  --hp-space-4: 0.9rem;
+  --hp-space-5: 1.1rem;
+  --hp-space-6: 1.4rem;
+  --hp-space-8: 2rem;
+
+  /* --- Elevation --- */
+  --hp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --hp-shadow-md: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --hp-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.45);
+
+  /* --- Blur (glass surfaces) --- */
+  --hp-blur-sm: 12px;
+  --hp-blur-md: 28px;
+  --hp-blur-lg: 40px;
+
+  /* --- Motion (calm amplitudes) --- */
+  --hp-motion-fast: 120ms;
+  --hp-motion-base: 220ms;
+  --hp-motion-slow: 420ms;
+  --hp-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --hp-ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+  --hp-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* --- State language colors (see state.ts) --- */
+  --hp-state-local-first: var(--hp-accent-green);
+  --hp-state-approval-gated: var(--hp-accent-orange);
+  --hp-state-ai-running: var(--hp-accent-cyan);
+  --hp-state-blocked: var(--hp-accent-red);
+  --hp-state-safe: var(--hp-accent-green);
+  --hp-state-needs-attention: var(--hp-accent-orange);
+
+  /* ---------------------------------------------------------------------
+   * DayPilot aliases — map legacy --dp-* onto the canonical family tokens.
+   * ------------------------------------------------------------------- */
+  --dp-bg: var(--hp-bg);
+  --dp-bg-alt: var(--hp-bg-alt);
+  --dp-surface: var(--hp-surface);
+  --dp-surface-elevated: var(--hp-surface-elevated);
+  --dp-surface-glass: var(--hp-surface-glass);
+  --dp-border: var(--hp-border);
+  --dp-border-strong: var(--hp-border-strong);
+  --dp-text: var(--hp-text);
+  --dp-text-muted: var(--hp-text-muted);
+  --dp-blue: var(--hp-accent-blue);
+  --dp-cyan: var(--hp-accent-cyan);
+  --dp-purple: var(--hp-accent-purple);
+  --dp-orange: var(--hp-accent-orange);
+  --dp-green: var(--hp-accent-green);
+  --dp-font-sans: var(--hp-font-sans);
+  --dp-font-mono: var(--hp-font-mono);
+
+  /* ---------------------------------------------------------------------
+   * Semantic theme variables. Surfaces that must adapt to light/dark
+   * reference these (never raw palette values). Dark obsidian is the default
+   * identity; a light theme is provided below. The token names match the
+   * product design contract.
+   * ------------------------------------------------------------------- */
+  /* Dark: layered blue-charcoal surfaces (never pure black). */
+  --background: #08111c;
+  --nav-bg: #0a1421;
+  --surface: #0d1825;
+  --surface-subtle: #111e2c;
+  --surface-elevated: #172536;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text-primary: #f2f6fb;
+  --text-secondary: #aab8c8;
+  --text-tertiary: #75879b;
+  --accent: #2f80ff;
+  --accent-hover: #4992ff;
+  --accent-subtle: rgba(47, 128, 255, 0.14);
+  --selected: #112a47;
+  --hover: #192b3e;
+  --unread: #2f80ff;
+  --success: #64c77b;
+  --danger: #ff6b6b;
+}
+
+/* Light theme: warm neutral surfaces, fine gray dividers — same structure. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --background: #f6f8fb;
+    --nav-bg: #ffffff;
+    --surface: #ffffff;
+    --surface-subtle: #f7f9fc;
+    --surface-elevated: #eef3f8;
+    --border: #e4e9f0;
+    --border-strong: #d4dbe6;
+    --text-primary: #18212f;
+    --text-secondary: #5e6b7c;
+    --text-tertiary: #8a96a6;
+    --accent: #0f6cbd;
+    --accent-hover: #1478cc;
+    --accent-subtle: rgba(15, 108, 189, 0.10);
+    --selected: rgba(15, 108, 189, 0.10);
+    --hover: rgba(15, 108, 189, 0.05);
+    --unread: #0f6cbd;
+    --success: #2e9e57;
+    --danger: #d64545;
+  }
+}
+
+:root[data-theme="light"] {
+  --background: #f6f8fb;
+  --nav-bg: #ffffff;
+  --surface: #ffffff;
+  --surface-subtle: #f7f9fc;
+  --surface-elevated: #eef3f8;
+  --border: #e4e9f0;
+  --border-strong: #d4dbe6;
+  --text-primary: #18212f;
+  --text-secondary: #5e6b7c;
+  --text-tertiary: #8a96a6;
+  --accent: #0f6cbd;
+  --accent-hover: #1478cc;
+  --accent-subtle: rgba(15, 108, 189, 0.10);
+  --selected: rgba(15, 108, 189, 0.10);
+  --hover: rgba(15, 108, 189, 0.05);
+  --unread: #0f6cbd;
+  --success: #2e9e57;
+  --danger: #d64545;
+}

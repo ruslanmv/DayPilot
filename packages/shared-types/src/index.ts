@@ -128,3 +128,411 @@ export type DayPilotDocumentSource = {
   allowed: boolean
   children: string[]
 }
+
+// ---------------------------------------------------------------------------
+// API contracts (batch B1)
+//
+// These mirror the FastAPI gateway responses. List endpoints return a
+// cursor-paginated `Page<T>`; the Today Context event stream emits `DayPilotEvent`.
+// ---------------------------------------------------------------------------
+
+/** One page of a cursor-paginated ledger. `nextCursor` is null when exhausted. */
+export type Page<T> = {
+  items: T[]
+  nextCursor: string | null
+  hasMore: boolean
+  limit: number
+}
+
+/** Shared query shape for every list endpoint. */
+export type PageQuery = {
+  cursor?: string
+  limit?: number
+  sort?: string
+  order?: 'asc' | 'desc'
+}
+
+export type DayPilotAgentRunState =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+
+/** Durable agent run as persisted by the orchestrator/gateway. */
+export type DayPilotAgentRun = {
+  id: string
+  workspaceId: string
+  name: string
+  agentKind: string
+  currentWork: string
+  state: DayPilotAgentRunState
+  status: DayPilotAgentStatus
+  provider: string
+  model: string
+  mode: 'Local' | 'Hybrid' | 'Cloud'
+  latencyMs: number
+  detail: string
+  attempts: number
+  lastError: string | null
+  projectId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type DayPilotApprovalStatus = 'pending' | 'approved' | 'rejected'
+
+export type DayPilotApproval = {
+  id: string
+  workspaceId: string
+  personaId: string | null
+  action: string
+  summary: string
+  risk: DayPilotRiskLevel
+  status: DayPilotApprovalStatus
+  resourceType: string | null
+  resourceId: string | null
+  reason: string | null
+  createdAt: string
+  decidedAt: string | null
+}
+
+export type DayPilotDayPlanState =
+  | 'DRAFT'
+  | 'PROPOSED'
+  | 'APPROVED'
+  | 'ACTIVE'
+  | 'ADJUSTED'
+  | 'WRAPPED'
+
+export type DayPilotPlanBlock = {
+  id: string
+  taskId: string | null
+  title: string
+  start: string | null
+  end: string | null
+  owner: DayPilotTaskOwner
+  source: string
+  status: string
+  orderIndex: number
+}
+
+export type DayPilotDayPlan = {
+  id: string
+  workspaceId: string
+  planDate: string
+  state: DayPilotDayPlanState
+  summary: string
+  blocks: DayPilotPlanBlock[]
+  createdAt: string
+  updatedAt: string
+}
+
+/** Canonical Today Context event types emitted on the SSE stream. */
+export type DayPilotEventType =
+  | 'plan.updated'
+  | 'block.started'
+  | 'approval.requested'
+  | 'agent.state_changed'
+  | 'blocker.raised'
+
+export type DayPilotEvent = {
+  seq: number
+  id: string
+  workspaceId: string
+  type: DayPilotEventType
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
+/** Aggregated morning summary returned by GET /v1/today. */
+export type DayPilotTodayContext = {
+  workspaceId: string
+  now: DayPilotTask | null
+  next: DayPilotTask | null
+  later: DayPilotTask[]
+  counts: {
+    aiRunning: number
+    approvals: number
+    blockers: number
+    projectsActive: number
+    projectsNeedAttention: number
+  }
+}
+
+/** Plan lifecycle actions accepted by POST /v1/plans/{date}/transition. */
+export type DayPilotPlanAction =
+  | 'propose'
+  | 'approve'
+  | 'adjust'
+  | 'activate'
+  | 'wrap'
+  | 'redraft'
+
+/** A day plan plus the lifecycle actions currently available from its state. */
+export type DayPilotDayPlanView = DayPilotDayPlan & {
+  allowedActions: DayPilotPlanAction[]
+}
+
+/** Focus Mode context returned by POST /v1/focus/{taskId}. */
+export type DayPilotFocusContext = {
+  task: DayPilotTask
+  project: { id: string; name: string } | null
+  allowedActions: Array<'done' | 'blocked' | 'hand_to_ai'>
+  context: string
+}
+
+/** End-of-day wrap-up returned by GET /v1/plans/{date}/wrapup. */
+export type DayPilotWrapup = {
+  workspaceId: string
+  planDate: string
+  progress: { tasksDone: number; tasksTotal: number; completionRate: number }
+  unresolvedRisks: Array<{ kind: string; id: string; title: string; risk?: string }>
+  generatedOutputs: Array<{ id: string; repo: string; branch: string | null; status: string }>
+  tomorrow: { planDate: string; state: DayPilotDayPlanState } | null
+}
+
+/** A retrieval citation returned by Document AI chat. */
+export type DayPilotCitation = {
+  documentId: string
+  documentTitle: string
+  chunkIndex: number
+  score: number
+}
+
+/** Document AI chat answer, grounded in retrieved passages. */
+export type DayPilotDocumentChatResult = {
+  answer: string
+  citations: DayPilotCitation[]
+  grounded: boolean
+}
+
+/** Result of a version-safe generated output (original never modified). */
+export type DayPilotGeneratedOutput = {
+  generatedDocumentId: string
+  sourceDocumentId: string
+  version: number
+  originalPreserved: boolean
+  status: string
+}
+
+export type DayPilotEmailUrgency = 'low' | 'medium' | 'high' | 'critical'
+export type DayPilotEmailStatus = 'new' | 'classified' | 'drafted' | 'needs_approval' | 'sent' | 'archived'
+
+/** An inbox item after Email Sentinel triage. */
+export type DayPilotEmailItem = {
+  id: string
+  externalId: string
+  subject: string
+  sender: string
+  urgency: DayPilotEmailUrgency
+  intent: string
+  status: DayPilotEmailStatus
+  scheduleImpact: boolean
+  actionItems: string[]
+  preview?: string
+}
+
+export type DayPilotEmailFolder = { name: string; count?: number }
+
+export type DayPilotCodingExecutor = 'gitpilot' | 'claude_code' | 'codex'
+export type DayPilotCodingMode = 'ask' | 'auto' | 'plan'
+export type DayPilotCodingStatus =
+  | 'queued'
+  | 'running'
+  | 'needs_review'
+  | 'approved'
+  | 'rejected'
+  | 'merged'
+  | 'failed'
+
+/** A coding run normalized across GitPilot / Claude Code / Codex adapters. */
+export type DayPilotCodingRun = {
+  id: string
+  workspaceId: string
+  executor: DayPilotCodingExecutor
+  repo: string
+  branch: string | null
+  prUrl: string | null
+  mode: DayPilotCodingMode
+  status: DayPilotCodingStatus
+  filesChanged: number
+  testsPassed: number | null
+  testsTotal: number | null
+  risk: DayPilotRiskLevel
+  riskScore: number | null
+  diffSummary: string
+  projectId: string | null
+  taskId: string | null
+  approvalId?: string | null
+  approvalStatus?: DayPilotApprovalStatus | null
+}
+
+export type DayPilotCodingReviewDecision = 'approve' | 'request_changes' | 'reject'
+
+/** One ordered batch in a Matrix Designer Design Bundle. */
+export type DayPilotDesignBatch = {
+  id: string
+  title: string
+  description: string
+  dependsOn: string[]
+  acceptance: string[]
+  estimateHours: number | null
+}
+
+/** A Matrix Designer Design Bundle: the plan before the build. */
+export type DayPilotDesignBundle = {
+  bundleId: string
+  title: string
+  framework: string
+  visualTarget: string
+  architecture: string
+  acceptanceCriteria: string[]
+  batches: DayPilotDesignBatch[]
+}
+
+export type DayPilotDesignFinding = {
+  severity: 'info' | 'minor' | 'major' | 'critical'
+  area: string
+  note: string
+}
+
+/** A Matrix Designer design-quality review of a UI, deck, or document. */
+export type DayPilotDesignReview = {
+  reviewId: string
+  target: string
+  score: number
+  grade: string
+  findings: DayPilotDesignFinding[]
+  suggestions: string[]
+  projectId: string | null
+}
+
+/** Ollabridge routing policy for one agent role (GET /v1/providers/routes). */
+export type DayPilotProviderRoute = {
+  role: string
+  model: string
+  tier: 'local' | 'hybrid' | 'cloud'
+  latencyBudgetMs: number
+  fallback: string[]
+}
+
+export type DayPilotProviderStatus = 'healthy' | 'degraded' | 'offline'
+
+/** Ollabridge provider health snapshot (GET /v1/providers/health). */
+export type DayPilotProviderHealth = {
+  provider: 'ollabridge'
+  url: string
+  status: DayPilotProviderStatus
+  latencyMs: number | null
+  models: string[]
+  defaultModel: string
+  fallbackBackend: string | null
+  degraded: boolean
+  routes: DayPilotProviderRoute[]
+}
+
+/** Per-project continue-from-yesterday record returned by GET /v1/continuity. */
+export type DayPilotContinuity = {
+  projectId: string
+  name: string
+  risk: DayPilotRiskLevel
+  progress: number
+  yesterday: string[]
+  today: string[]
+  aiActivity: string
+  linkedSources: string[]
+  branches: string[]
+  blockers: string[]
+  nextAction: string
+  continueAction: string
+}
+
+// --- Integration platform (batch I0/I1) ------------------------------------
+
+/** A capability's action classification, driving the default permission model. */
+export type IntegrationCapabilityKind = 'read' | 'write' | 'destructive'
+
+/** Effective permission for a capability on a connection. */
+export type IntegrationPermission = 'allowed' | 'approval_required' | 'blocked'
+
+export type IntegrationCapability = {
+  id: string
+  kind: IntegrationCapabilityKind
+  description: string
+  /** Present on GET /v1/integrations/{id}/capabilities. */
+  permission?: IntegrationPermission
+}
+
+/** A workspace's connection to an external provider. Credentials are never
+ *  included — they live in the secrets backend keyed by connection id. */
+export type IntegrationConnection = {
+  id: string
+  workspaceId: string
+  provider: string
+  status: 'connected' | 'error' | 'expired'
+  authType: 'oauth' | 'api_key' | 'mcp'
+  capabilities: string[]
+  detail: string
+  lastActivityAt: string | null
+}
+
+/** Result of POST /v1/integrations/{id}/execute. A read is executed inline; a
+ *  write/destructive action opens an approval and a durable job instead. */
+export type IntegrationExecuteResult =
+  | { status: 'executed'; capability: string; result: unknown }
+  | { status: 'approval_required'; capability: string; approvalId: string; jobId: string }
+
+/** The minimum provider interface every integration implements (native or MCP).
+ *  DayPilot never learns which transport a provider uses internally. */
+export interface IntegrationProvider {
+  connect(): Promise<void>
+  disconnect(): Promise<void>
+  listCapabilities(): Promise<IntegrationCapability[]>
+  execute(action: string, input: unknown): Promise<unknown>
+  getHealth(): Promise<IntegrationHealth>
+}
+
+export type IntegrationHealth = {
+  status: 'connected' | 'error' | 'expired'
+  detail: string
+  latencyMs: number | null
+}
+
+// --- Integration platform: manifests & SDK (batch I9/I10) ------------------
+
+export type IntegrationTier = 'verified' | 'certified' | 'private' | 'experimental'
+
+/** Every integration declares a manifest; the catalog is curated, not public. */
+export type IntegrationManifest = {
+  id: string
+  name: string
+  version: string          // semver x.y.z
+  publisher: string
+  transport: 'streamable-http' | 'streamable_http' | 'stdio' | 'native'
+  capabilities: string[]
+  events: string[]
+  risk: 'low' | 'medium' | 'high'
+}
+
+export type CatalogEntry = {
+  id: string
+  name: string
+  version: string
+  publisher: string
+  risk: 'low' | 'medium' | 'high'
+  tier: IntegrationTier
+  certified: boolean
+}
+
+export type ConformanceCheck = { name: string; ok: boolean; detail: string }
+export type ConformanceResult = { passed: boolean; checks: ConformanceCheck[] }
+
+/** The SDK surface an out-of-core integration implements. */
+export interface DayPilotIntegration {
+  manifest: IntegrationManifest
+  connect(): Promise<void>
+  capabilities(): Promise<IntegrationCapability[]>
+  execute(action: string, input: unknown): Promise<unknown>
+  health(): Promise<IntegrationHealth>
+}

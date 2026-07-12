@@ -1,8 +1,51 @@
-import React, { FormEvent, useMemo, useState } from 'react'
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { DayPilotAgent, DayPilotDocument, DayPilotDocumentSource, DayPilotMessage, DayPilotProject, DayPilotTask } from '@daypilot/shared-types'
 import { dayHours, documentSources, initialAgents, initialDocuments, initialMessages, initialProjects, initialTasks, weekDays, weekSlots } from './spaceBridgeData'
+import { SettingsMenu } from './shell/SettingsMenu'
+import { SettingsPanel } from './shell/SettingsPanel'
+import { CommandPalette, type PaletteAction } from './shell/CommandPalette'
+import { FocusMode } from './shell/FocusMode'
+import { PatchReview } from './coding/PatchReview'
+import { DesignReview } from './design/DesignReview'
+import { EmailWorkspace } from './email/EmailWorkspace'
+import { ApprovalCenter } from './approvals/ApprovalCenter'
+import { HomeWorkspace } from './home/HomeWorkspace'
+import { PlanningWorkspace } from './planning/PlanningWorkspace'
+import { OnboardingWizard } from './onboarding/OnboardingWizard'
+import { ProjectWizard, type NewProject } from './projects/ProjectWizard'
+import {
+  AI_PLAN_BULLETS,
+  AI_SEED,
+  AI_WELCOME,
+  CONTINUE_ITEMS,
+  HOME_SUGGESTIONS,
+  NEXT_PRIORITY,
+  TODAY_PLAN,
+  aiReply,
+  type HomeTurn,
+} from './home/homeData'
+import type { SettingsSectionId } from './settings/settingsData'
 
-type PortalView = 'command' | 'calendar' | 'tasks' | 'projects' | 'documents' | 'agents'
+type NavItem = { id: PortalView; label: string; icon: NavIconName }
+const NAV_BASE: NavItem[] = [
+  { id: 'home', label: 'Home', icon: 'home' },
+  { id: 'planning', label: 'Planning', icon: 'planning' },
+  { id: 'calendar', label: 'Calendar', icon: 'calendar' },
+  { id: 'tasks', label: 'Tasks', icon: 'tasks' },
+  { id: 'projects', label: 'Projects', icon: 'projects' },
+  { id: 'documents', label: 'Documents', icon: 'documents' },
+  { id: 'agents', label: 'Agents', icon: 'agents' },
+]
+// Email is an optional, feature-flagged tab (placed before Documents); DayPilot
+// works without it.
+const EMAIL_NAV: NavItem = { id: 'email', label: 'Email', icon: 'email' }
+function navViews(emailEnabled: boolean): NavItem[] {
+  if (!emailEnabled) return NAV_BASE
+  const docsIndex = NAV_BASE.findIndex((n) => n.id === 'documents')
+  return [...NAV_BASE.slice(0, docsIndex), EMAIL_NAV, ...NAV_BASE.slice(docsIndex)]
+}
+
+type PortalView = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'documents' | 'agents' | 'email'
 type CalendarMode = 'day' | 'week'
 type DrawerItem =
   | { kind: 'task'; item: DayPilotTask }
@@ -12,6 +55,8 @@ type DrawerItem =
 
 type SpaceBridgeShellProps = {
   compact?: boolean
+  /** Optional Email tab. DayPilot works fully without it. */
+  emailEnabled?: boolean
 }
 
 const commandSummary = {
@@ -97,10 +142,32 @@ function createAiTask(input: string): DayPilotTask {
   }
 }
 
-function NavButton({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
+type NavIconName = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'email' | 'documents' | 'agents' | 'settings'
+
+function NavIcon({ name }: { name: NavIconName }) {
+  const p: Record<NavIconName, React.ReactNode> = {
+    home: <path d="M3 10.5 12 3l9 7.5M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" />,
+    planning: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>,
+    calendar: <><rect x="3.5" y="4.5" width="17" height="16" rx="2" /><path d="M3.5 9h17M8 3v3M16 3v3" /></>,
+    tasks: <><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.4 2.4L16 9.5" /></>,
+    projects: <><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M3.5 9.5h17M9 4.5v15" /></>,
+    email: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 6.5 8 6 8-6" /></>,
+    documents: <><path d="M6 3h7l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M13 3v5h5M8.5 13h7M8.5 16.5h7" /></>,
+    agents: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.5 3.1-5.5 7-5.5s7 2 7 5.5" /></>,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 13.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.1a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9Z" /></>,
+  }
+  return (
+    <svg className="dp-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {p[name]}
+    </svg>
+  )
+}
+
+function NavButton({ active, icon, children, onClick }: { active: boolean; icon?: NavIconName; children: React.ReactNode; onClick: () => void }) {
   return (
     <button type="button" className={cx(active && 'is-active')} onClick={onClick}>
-      {children}
+      {icon && <NavIcon name={icon} />}
+      <span className="dp-nav__label">{children}</span>
     </button>
   )
 }
@@ -356,10 +423,31 @@ function OperationalLedger({ tasks, onSelect }: { tasks: DayPilotTask[]; onSelec
   )
 }
 
-function ProjectsCore({ projects, documents, onSelect }: {
+function newProjectFrom(np: NewProject): DayPilotProject {
+  return {
+    id: `proj-${Date.now()}`,
+    name: np.name,
+    progress: 0,
+    status: 'Active',
+    aiActivity: 'Ready to start',
+    nextHumanAction: np.milestone || np.goal || 'Define the first milestone',
+    continueAction: np.goal || 'Kick off the first milestone',
+    risk: 'low',
+    aiActions: [],
+    designerInput: [],
+    recentSignals: np.stack ? [`Stack: ${np.stack}`] : [],
+    linkedSources: np.repo ? [np.repo] : [],
+    yesterday: [],
+    today: np.goal ? [np.goal] : [],
+    blocked: [],
+  }
+}
+
+function ProjectsCore({ projects, documents, onSelect, onNew }: {
   projects: DayPilotProject[]
   documents: DayPilotDocument[]
   onSelect: (project: DayPilotProject) => void
+  onNew?: () => void
 }) {
   return (
     <section className="dp-projects-screen">
@@ -368,7 +456,7 @@ function ProjectsCore({ projects, documents, onSelect }: {
           <h3>Projects</h3>
           <p>Continue consulting and internal work without losing yesterday’s context.</p>
         </div>
-        <span className="dp-pill">CONTINUE WORK</span>
+        {onNew && <button type="button" className="dp-ghost-button" onClick={onNew}>+ New project</button>}
       </div>
       <div className="dp-project-grid">
         {projects.map((project) => (
@@ -534,11 +622,21 @@ function DetailDrawer({ selected, documents, onClose }: { selected?: DrawerItem;
   )
 }
 
-export function SpaceBridgeShell({ compact = false }: SpaceBridgeShellProps) {
-  const [view, setView] = useState<PortalView>('command')
+export function SpaceBridgeShell({ compact = false, emailEnabled = false }: SpaceBridgeShellProps) {
+  const isMobile = useIsMobile()
+  const NAV_VIEWS = navViews(emailEnabled)
+  const [view, setView] = useState<PortalView>('home')
   const [messages, setMessages] = useState<DayPilotMessage[]>(initialMessages)
   const [tasks, setTasks] = useState<DayPilotTask[]>(initialTasks)
+  const [projects, setProjects] = useState<DayPilotProject[]>(initialProjects)
+  const [projectWizardOpen, setProjectWizardOpen] = useState(false)
   const [selected, setSelected] = useState<DrawerItem | undefined>()
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId | undefined>()
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [focusTask, setFocusTask] = useState<DayPilotTask | undefined>()
+  const [patchReviewOpen, setPatchReviewOpen] = useState(false)
+  const [designOpen, setDesignOpen] = useState(false)
+  const [approvalsOpen, setApprovalsOpen] = useState(false)
   const selectedTaskId = selected?.kind === 'task' ? selected.item.id : undefined
 
   function addDirective(directive: string) {
@@ -561,64 +659,521 @@ export function SpaceBridgeShell({ compact = false }: SpaceBridgeShellProps) {
   }
 
   function startFocusMode() {
-    const focusTask = tasks.find((task) => task.title.includes('Deep Coding')) ?? tasks[0]
-    setSelected({ kind: 'task', item: focusTask })
+    const target = tasks.find((task) => task.title.includes('Deep Coding')) ?? tasks[0]
+    if (target) setFocusTask(target)
   }
+
+  function exitFocus(outcome: 'done' | 'blocked' | 'hand_to_ai' | 'cancel') {
+    if (focusTask && outcome !== 'cancel') {
+      const nextStatus = outcome === 'done' ? 'done' : outcome === 'blocked' ? 'blocked' : 'running'
+      setTasks((current) =>
+        current.map((t) => (t.id === focusTask.id ? { ...t, status: nextStatus } : t)),
+      )
+    }
+    setFocusTask(undefined)
+  }
+
+  const paletteActions: PaletteAction[] = useMemo(() => {
+    const navActions: PaletteAction[] = NAV_VIEWS.map((nav, index) => ({
+      id: `nav-${nav.id}`,
+      label: `Go to ${nav.label}`,
+      hint: `⌘${index + 1}`,
+      keywords: 'navigate view',
+      run: () => setView(nav.id),
+    }))
+    return [
+      ...navActions,
+      { id: 'new-project', label: 'New project', hint: 'create', keywords: 'add project create new', run: () => setProjectWizardOpen(true) },
+      { id: 'focus', label: 'Start Focus Mode', hint: 'F', keywords: 'focus deep work', run: startFocusMode },
+      { id: 'review-ai', label: 'Review AI Work', keywords: 'agents approvals', run: () => setView('agents') },
+      { id: 'approvals', label: 'Approval Center', hint: 'approvals', keywords: 'approve reject sensitive actions queue', run: () => setApprovalsOpen(true) },
+      { id: 'patch-review', label: 'Review AI Patches · GitPilot', hint: 'coding', keywords: 'gitpilot diff patch code', run: () => setPatchReviewOpen(true) },
+      { id: 'matrix-designer', label: 'Matrix Designer · Batch Roadmap', hint: 'design', keywords: 'design bundle review planner batches', run: () => setDesignOpen(true) },
+      { id: 'settings', label: 'Open Settings', hint: '⌘,', keywords: 'preferences', run: () => setSettingsSection('profile') },
+      { id: 'providers', label: 'AI Providers · Ollabridge', keywords: 'model health routing', run: () => setSettingsSection('providers') },
+      { id: 'integrations', label: 'Integrations · GitPilot · Matrix Designer', keywords: 'connect', run: () => setSettingsSection('integrations') },
+    ]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks])
+
+  // Global keyboard shortcuts: ⌘K palette, ⌘, settings, F focus, ⌘1–6 nav.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const meta = event.metaKey || event.ctrlKey
+      const target = event.target as HTMLElement | null
+      const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')
+      if (meta && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setPaletteOpen((open) => !open)
+        return
+      }
+      if (meta && event.key === ',') {
+        event.preventDefault()
+        setSettingsSection('profile')
+        return
+      }
+      if (meta && /^[1-6]$/.test(event.key)) {
+        event.preventDefault()
+        setView(NAV_VIEWS[Number(event.key) - 1].id)
+        return
+      }
+      if (!meta && !typing && event.key.toLowerCase() === 'f') {
+        startFocusMode()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks])
+
+  // Phones get a dedicated ChatGPT-style shell (hamburger drawer, single-page
+  // views, full-screen AI) rather than a squeezed desktop layout.
+  if (isMobile) return <MobilePortal emailEnabled={emailEnabled} />
 
   return (
     <div className={cx('dp-shell', compact && 'dp-shell--compact')}>
       <aside className="dp-rail">
-        <div className="dp-identity">
-          <div className="dp-eyebrow">DayPilot Pro</div>
-          <h1>Enterprise OS</h1>
-          <div className="dp-status-line">● OLLABRIDGE LIVE · LOCAL MODE</div>
+        <div className="dp-brand">
+          <svg className="dp-brand__mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <path d="M16 3.5 28.5 28 16 22.2 3.5 28Z" fill="currentColor" opacity="0.5" />
+            <path d="M16 3.5 28.5 28 16 22.2Z" fill="currentColor" />
+          </svg>
+          <span className="dp-brand__word">DayPilot</span>
         </div>
         <nav className="dp-nav" aria-label="DayPilot views">
-          <NavButton active={view === 'command'} onClick={() => setView('command')}>Command</NavButton>
-          <NavButton active={view === 'calendar'} onClick={() => setView('calendar')}>Calendar</NavButton>
-          <NavButton active={view === 'tasks'} onClick={() => setView('tasks')}>Tasks</NavButton>
-          <NavButton active={view === 'projects'} onClick={() => setView('projects')}>Projects</NavButton>
-          <NavButton active={view === 'documents'} onClick={() => setView('documents')}>Documents</NavButton>
-          <NavButton active={view === 'agents'} onClick={() => setView('agents')}>Agents</NavButton>
+          {NAV_VIEWS.map((nav) => (
+            <NavButton key={nav.id} active={view === nav.id} icon={nav.icon} onClick={() => setView(nav.id)}>
+              {nav.label}
+            </NavButton>
+          ))}
         </nav>
-        <div className="dp-more">More: Inbox · GitPilot · Settings</div>
+        <div className="dp-rail-spacer" />
+        <nav className="dp-nav dp-nav--secondary" aria-label="Settings">
+          <NavButton active={false} icon="settings" onClick={() => setSettingsSection('profile')}>Settings</NavButton>
+        </nav>
+        <SettingsMenu
+          workspaceName="Product Lead"
+          onOpenSection={(section) => setSettingsSection(section)}
+          onSignOut={() => setSettingsSection('profile')}
+        />
       </aside>
 
       <main className="dp-core">
-        <header className="dp-topbar">
-          <div>
-            <h2>{view === 'command' ? 'Daily Control Center' : view === 'calendar' ? 'Minute Plan' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : 'AI Workflows'}</h2>
-            <p>DayPilot = Calendar + Tasks + Projects + Agents + Documents + Natural Tools.</p>
-          </div>
-          <span className="dp-pill">NOW · DOCUMENTS · AI RUNNING · APPROVALS</span>
-        </header>
-
-        <div className="dp-view">
-          {view === 'command' && (
-            <div className="dp-command-view">
-              <MorningCommandCard
-                agents={initialAgents}
-                projects={initialProjects}
-                onFocus={startFocusMode}
-                onReviewAi={() => setView('agents')}
-                onAdjust={() => addDirective('Adjust today around coding first, admin after lunch, and client follow-up later.')}
-              />
-              <div className="dp-bridge">
-                <StrategicFeed messages={messages} onSubmit={addDirective} />
-                <TodayPlan tasks={tasks} selectedTaskId={selectedTaskId} onSelect={(item) => setSelected({ kind: 'task', item })} />
-                <LiveContext projects={initialProjects} agents={initialAgents} />
+        {view === 'home' ? (
+          <HomeWorkspace
+            onStartFocus={startFocusMode}
+            onNavigate={(target) => setView(target)}
+            onOpenPalette={() => setPaletteOpen(true)}
+          />
+        ) : (
+          <>
+            <header className="dp-topbar">
+              <div>
+                <h2>{view === 'planning' ? 'Day Planner' : view === 'calendar' ? 'Minute Plan' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : view === 'email' ? 'Email' : 'AI Workflows'}</h2>
+                <p>DayPilot = Calendar + Tasks + Projects + Agents + Documents + Natural Tools.</p>
               </div>
+              <span className="dp-pill">NOW · DOCUMENTS · AI RUNNING · APPROVALS</span>
+            </header>
+
+            <div className="dp-view">
+              {view === 'planning' && <PlanningWorkspace onStartFocus={startFocusMode} />}
+              {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
+              {view === 'tasks' && <OperationalLedger tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
+              {view === 'projects' && <ProjectsCore projects={projects} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
+              {view === 'documents' && <DocumentsCore sources={documentSources} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'document', item })} />}
+              {view === 'agents' && <AgentsCore agents={initialAgents} onSelect={(item) => setSelected({ kind: 'agent', item })} />}
+              {view === 'email' && <EmailWorkspace />}
             </div>
-          )}
-          {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
-          {view === 'tasks' && <OperationalLedger tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
-          {view === 'projects' && <ProjectsCore projects={initialProjects} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'project', item })} />}
-          {view === 'documents' && <DocumentsCore sources={documentSources} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'document', item })} />}
-          {view === 'agents' && <AgentsCore agents={initialAgents} onSelect={(item) => setSelected({ kind: 'agent', item })} />}
-        </div>
+          </>
+        )}
       </main>
 
       <DetailDrawer selected={selected} documents={initialDocuments} onClose={() => setSelected(undefined)} />
+
+      <CommandPalette open={paletteOpen} actions={paletteActions} onClose={() => setPaletteOpen(false)} />
+      {settingsSection && (
+        <SettingsPanel section={settingsSection} onClose={() => setSettingsSection(undefined)} />
+      )}
+      {focusTask && <FocusMode task={focusTask} onExit={exitFocus} />}
+      {patchReviewOpen && <PatchReview onClose={() => setPatchReviewOpen(false)} />}
+      {designOpen && <DesignReview onClose={() => setDesignOpen(false)} />}
+      {approvalsOpen && <ApprovalCenter onClose={() => setApprovalsOpen(false)} />}
+      <ProjectWizard
+        open={projectWizardOpen}
+        onClose={() => setProjectWizardOpen(false)}
+        onCreate={(np) => { const p = newProjectFrom(np); setProjects((cur) => [p, ...cur]); setView('projects'); setSelected({ kind: 'project', item: p }) }}
+      />
+      <OnboardingWizard />
+    </div>
+  )
+}
+
+/* ============================================================
+   Mobile shell — a ChatGPT-style phone experience: a fixed top
+   app bar (hamburger · title · sparkle), an off-canvas navigation
+   drawer, single-page vertical views, and a full-screen AI chat.
+   ============================================================ */
+
+function useIsMobile(breakpoint = 767): boolean {
+  const query = `(max-width: ${breakpoint}px)`
+  const [matches, setMatches] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(query).matches,
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia(query)
+    const onChange = () => setMatches(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [query])
+  return matches
+}
+
+const MOBILE_TITLES: Record<PortalView, string> = {
+  home: 'Home',
+  planning: 'Planning',
+  calendar: 'Calendar',
+  tasks: 'Tasks',
+  projects: 'Projects',
+  email: 'Email',
+  documents: 'Documents',
+  agents: 'Agents',
+}
+
+const RECENT_AI = ['Email workspace status', 'Prepare Client Alpha meeting', "Today's plan"]
+
+function MobilePortal({ emailEnabled }: { emailEnabled: boolean }) {
+  const NAV = navViews(emailEnabled)
+  const [view, setView] = useState<PortalView>('home')
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiSeed, setAiSeed] = useState<string | undefined>()
+  const [tasks] = useState<DayPilotTask[]>(initialTasks)
+  const [projects, setProjects] = useState<DayPilotProject[]>(initialProjects)
+  const [projectWizardOpen, setProjectWizardOpen] = useState(false)
+  const [selected, setSelected] = useState<DrawerItem | undefined>()
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId | undefined>()
+  const [focusTask, setFocusTask] = useState<DayPilotTask | undefined>()
+
+  // Escape closes the top-most overlay.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (aiOpen) setAiOpen(false)
+      else if (drawerOpen) setDrawerOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [aiOpen, drawerOpen])
+
+  // Lock body scroll while the drawer or AI is open.
+  useEffect(() => {
+    const locked = drawerOpen || aiOpen
+    const prev = document.body.style.overflow
+    if (locked) document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [drawerOpen, aiOpen])
+
+  function go(target: PortalView) {
+    setView(target)
+    setDrawerOpen(false)
+  }
+  function openAi(seed?: string) {
+    setAiSeed(seed)
+    setAiOpen(true)
+    setDrawerOpen(false)
+  }
+  function startFocus() {
+    const target = tasks.find((t) => t.title.includes('Deep Coding')) ?? tasks[0]
+    if (target) setFocusTask(target)
+  }
+
+  return (
+    <div className="dp-m">
+      <header className="dp-m__bar">
+        <button className="dp-m__iconbtn" aria-label="Open menu" onClick={() => setDrawerOpen(true)}>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+        <h1 className="dp-m__title">{MOBILE_TITLES[view]}</h1>
+        <button className="dp-m__spark" aria-label="Open AI Assistant" onClick={() => openAi()}>
+          <span aria-hidden="true">✦</span>
+        </button>
+      </header>
+
+      <main className="dp-m__main">
+        {view === 'home' && <MobileHome onStartFocus={startFocus} onNavigate={go} onAsk={openAi} />}
+        {view === 'planning' && <PlanningWorkspace onStartFocus={startFocus} />}
+        {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
+        {view === 'tasks' && <OperationalLedger tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
+        {view === 'projects' && <ProjectsCore projects={projects} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
+        {view === 'documents' && <DocumentsCore sources={documentSources} documents={initialDocuments} onSelect={(item) => setSelected({ kind: 'document', item })} />}
+        {view === 'agents' && <AgentsCore agents={initialAgents} onSelect={(item) => setSelected({ kind: 'agent', item })} />}
+        {view === 'email' && <EmailWorkspace />}
+      </main>
+
+      {/* Off-canvas navigation drawer */}
+      {drawerOpen && (
+        <>
+          <div className="dp-m__scrim" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
+          <nav className="dp-m__drawer" aria-label="Navigation">
+            <div className="dp-m__drawer-brand">
+              <svg className="dp-brand__mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+                <path d="M16 3.5 28.5 28 16 22.2 3.5 28Z" fill="currentColor" opacity="0.5" />
+                <path d="M16 3.5 28.5 28 16 22.2Z" fill="currentColor" />
+              </svg>
+              <span className="dp-brand__word">DayPilot</span>
+            </div>
+            <div className="dp-m__drawer-nav">
+              {NAV.map((nav) => (
+                <button key={nav.id} className={'dp-m__navitem' + (view === nav.id ? ' is-active' : '')} onClick={() => go(nav.id)}>
+                  <NavIcon name={nav.icon} />
+                  <span>{nav.label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="dp-m__drawer-section">Recent AI conversations</div>
+            <div className="dp-m__drawer-nav">
+              {RECENT_AI.map((c) => (
+                <button key={c} className="dp-m__recent" onClick={() => openAi(c)}>
+                  <span className="dp-m__recent-spark" aria-hidden="true">✦</span>
+                  <span className="dp-m__recent-text">{c}</span>
+                </button>
+              ))}
+            </div>
+            <div className="dp-m__drawer-foot">
+              <button className="dp-m__navitem" onClick={() => { setProjectWizardOpen(true); setDrawerOpen(false) }}>
+                <NavIcon name="projects" />
+                <span>New project</span>
+              </button>
+              <button className="dp-m__navitem" onClick={() => { setSettingsSection('profile'); setDrawerOpen(false) }}>
+                <NavIcon name="settings" />
+                <span>Settings</span>
+              </button>
+              <button className="dp-m__profile" onClick={() => { setSettingsSection('profile'); setDrawerOpen(false) }}>
+                <span className="dp-m__avatar" aria-hidden="true">RM</span>
+                <span className="dp-m__profile-text">
+                  <span className="dp-m__profile-name">Ruslan M.</span>
+                  <span className="dp-m__profile-role">Product Lead</span>
+                </span>
+              </button>
+            </div>
+          </nav>
+        </>
+      )}
+
+      {/* Full-screen AI conversation */}
+      {aiOpen && <MobileAI seed={aiSeed} onClose={() => setAiOpen(false)} onNavigate={go} />}
+
+      <DetailDrawer selected={selected} documents={initialDocuments} onClose={() => setSelected(undefined)} />
+      {settingsSection && <SettingsPanel section={settingsSection} onClose={() => setSettingsSection(undefined)} />}
+      {focusTask && <FocusMode task={focusTask} onExit={() => setFocusTask(undefined)} />}
+      <ProjectWizard
+        open={projectWizardOpen}
+        onClose={() => setProjectWizardOpen(false)}
+        onCreate={(np) => { const p = newProjectFrom(np); setProjects((cur) => [p, ...cur]); go('projects'); setSelected({ kind: 'project', item: p }) }}
+      />
+      <OnboardingWizard />
+    </div>
+  )
+}
+
+function MobileHome({ onStartFocus, onNavigate, onAsk }: {
+  onStartFocus: () => void
+  onNavigate: (view: PortalView) => void
+  onAsk: (seed?: string) => void
+}) {
+  return (
+    <div className="dp-m__page">
+      <section className="dp-m__ready">
+        <h2 className="dp-m__ready-title"><span className="dp-m__ready-icon" aria-hidden="true">☼</span> Your day is ready</h2>
+        <p className="dp-m__ready-sub">Focus on your top priority and keep the momentum.</p>
+      </section>
+
+      <section className="dp-m__card">
+        <div className="dp-m__label">Next priority</div>
+        <div className="dp-m__np">
+          <span className="dp-m__np-icon" aria-hidden="true">🖥</span>
+          <div className="dp-m__np-body">
+            <div className="dp-m__np-title">{NEXT_PRIORITY.title}</div>
+            <div className="dp-m__np-meta"><span>🗓 {NEXT_PRIORITY.time}</span><span className="dp-m__dot">·</span><span className="dp-chip">{NEXT_PRIORITY.project}</span></div>
+          </div>
+        </div>
+        <p className="dp-m__np-support">{NEXT_PRIORITY.support}</p>
+        <button className="dp-m__cta" onClick={onStartFocus}>▶ Start focus</button>
+        <button className="dp-m__ghostlink" onClick={() => onNavigate('projects')}>View project ↗</button>
+      </section>
+
+      <section className="dp-m__card">
+        <h3 className="dp-m__card-title"><span aria-hidden="true">🗓</span> Today's plan</h3>
+        <ul className="dp-m__agenda">
+          {TODAY_PLAN.map((item) => (
+            <li key={item.time} className="dp-m__agenda-row" onClick={() => onNavigate('calendar')}>
+              <span className="dp-m__agenda-dot" aria-hidden="true" />
+              <span className="dp-m__agenda-time">{item.time}</span>
+              <span className="dp-m__agenda-title">{item.title}</span>
+              <span className="dp-m__agenda-tag">{item.tag}</span>
+              <span className="dp-m__agenda-chev" aria-hidden="true">›</span>
+            </li>
+          ))}
+        </ul>
+        <button className="dp-m__more" onClick={() => onNavigate('calendar')}>View full calendar →</button>
+      </section>
+
+      <section className="dp-m__card">
+        <h3 className="dp-m__card-title"><span aria-hidden="true">⟳</span> Continue from yesterday</h3>
+        <div className="dp-m__continue">
+          {CONTINUE_ITEMS.map((c) => (
+            <button key={c.id} className="dp-m__cont" onClick={() => onNavigate('projects')}>
+              <span className={'dp-m__cont-icon dp-continue__icon--' + c.accent} aria-hidden="true">{c.icon}</span>
+              <span className="dp-m__cont-body">
+                <span className="dp-m__cont-name">{c.name}</span>
+                <span className="dp-m__cont-status">{c.status}</span>
+                <span className="dp-m__cont-bar"><span className={'dp-continue__fill dp-continue__fill--' + c.accent} style={{ width: `${c.progress}%` }} /></span>
+                <span className="dp-m__cont-next">Next: {c.next}</span>
+              </span>
+              <span className="dp-m__cont-pct">{c.progress}%</span>
+            </button>
+          ))}
+        </div>
+        <button className="dp-m__more" onClick={() => onNavigate('projects')}>View all projects →</button>
+      </section>
+
+      <section className="dp-m__askrow">
+        <button className="dp-m__ask" onClick={() => onAsk()}>
+          <span className="dp-m__ask-spark" aria-hidden="true">✦</span> Ask the AI Assistant
+        </button>
+      </section>
+    </div>
+  )
+}
+
+function MobileAI({ seed, onClose, onNavigate }: {
+  seed?: string
+  onClose: () => void
+  onNavigate: (view: PortalView) => void
+}) {
+  const [turns, setTurns] = useState<HomeTurn[]>(AI_SEED)
+  const [input, setInput] = useState('')
+  const [thinking, setThinking] = useState(false)
+  const [atBottom, setAtBottom] = useState(true)
+  const logRef = useRef<HTMLDivElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const seededRef = useRef(false)
+
+  const scrollToBottom = () => {
+    const el = logRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }
+
+  // Auto-scroll to the latest message only when the user is already at the
+  // bottom — never yank them away while reading older messages.
+  useEffect(() => {
+    if (atBottom) scrollToBottom()
+  }, [turns, thinking, atBottom])
+
+  const send = React.useCallback((text: string) => {
+    const q = text.trim()
+    if (!q) return
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    setTurns((t) => [...t, { role: 'user', body: q, time }])
+    setInput('')
+    setAtBottom(true)
+    setThinking(true)
+    if (taRef.current) taRef.current.style.height = 'auto'
+    window.setTimeout(() => {
+      const rtime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      setTurns((t) => [...t, { role: 'assistant', body: aiReply(q), time: rtime }])
+      setThinking(false)
+    }, 400)
+  }, [])
+
+  // Seed the composer from a tapped "recent conversation" suggestion.
+  useEffect(() => {
+    if (seed && !seededRef.current) {
+      seededRef.current = true
+      send(seed)
+    }
+  }, [seed, send])
+
+  function onScroll() {
+    const el = logRef.current
+    if (!el) return
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 48)
+  }
+
+  function grow() {
+    const ta = taRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'
+  }
+
+  return (
+    <div className="dp-m__ai" role="dialog" aria-label="AI Assistant">
+      <header className="dp-m__bar">
+        <button className="dp-m__iconbtn" aria-label="Back" onClick={onClose}>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m15 5-7 7 7 7" />
+          </svg>
+        </button>
+        <h1 className="dp-m__title"><span className="dp-m__title-spark" aria-hidden="true">✦</span> AI Assistant</h1>
+        <button className="dp-m__iconbtn" aria-label="More">⋯</button>
+      </header>
+
+      <div className="dp-m__ailog" ref={logRef} onScroll={onScroll}>
+        <div className="dp-home-ai__turn dp-home-ai__turn--assistant">
+          <div className="dp-home-ai__bubble">
+            <p style={{ whiteSpace: 'pre-line', margin: 0 }}>{AI_WELCOME}</p>
+            <ul className="dp-home-ai__plan">{AI_PLAN_BULLETS.map((b) => <li key={b}>{b}</li>)}</ul>
+          </div>
+        </div>
+        {turns.map((t, i) => (
+          <div key={i} className={'dp-home-ai__turn dp-home-ai__turn--' + t.role}>
+            <div className="dp-home-ai__bubble">
+              <p style={{ margin: 0 }}>{t.body}</p>
+              {t.action && <button className="dp-home-ai__inline" onClick={() => { onNavigate(t.action!.target as PortalView); onClose() }}>↗ {t.action.label}</button>}
+              {t.time && <span className="dp-home-ai__time">{t.time}</span>}
+            </div>
+          </div>
+        ))}
+        {thinking && <div className="dp-home-ai__turn dp-home-ai__turn--assistant"><div className="dp-home-ai__bubble dp-home-ai__bubble--loading">Thinking…</div></div>}
+      </div>
+
+      {!atBottom && (
+        <button className="dp-m__jump" onClick={() => { setAtBottom(true); scrollToBottom() }} aria-label="Jump to latest">
+          ↓ Latest
+        </button>
+      )}
+
+      <div className="dp-m__aifoot-wrap">
+        <div className="dp-m__chips">
+          {HOME_SUGGESTIONS.map((s) => (
+            <button key={s.label} className="dp-m__chip" onClick={() => send(s.label)}>
+              <span aria-hidden="true">{s.icon}</span> {s.label}
+            </button>
+          ))}
+        </div>
+        <form className="dp-m__composer" onSubmit={(e) => { e.preventDefault(); send(input) }}>
+          <button type="button" className="dp-m__attach" aria-label="Attach">+</button>
+          <textarea
+            ref={taRef}
+            className="dp-m__ta"
+            value={input}
+            rows={1}
+            onChange={(e) => { setInput(e.target.value); grow() }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
+            placeholder="Ask anything or give an instruction…"
+            aria-label="Ask anything or give an instruction"
+          />
+          <button type="submit" className="dp-m__sendbtn" aria-label="Send" disabled={!input.trim()}>➤</button>
+        </form>
+        <div className="dp-m__aidisc">AI responses may be incorrect.</div>
+      </div>
     </div>
   )
 }

@@ -19,16 +19,16 @@ services:
       dockerfile: infra/docker/api-gateway.Dockerfile
     ports:
       - "8080:8080"
+    # model-serving and voice-gateway are optional runtime-profile services,
+    # so the always-on gateway must not hard-depend on them (that would make
+    # `docker compose config` fail for the default profile). They are reached
+    # over the network via SERVICE_MAP URLs when the runtime profile is up.
     depends_on:
       orchestrator:
         condition: service_started
       mcp-host:
         condition: service_started
       knowledge-service:
-        condition: service_started
-      model-serving:
-        condition: service_started
-      voice-gateway:
         condition: service_started
 
   orchestrator:

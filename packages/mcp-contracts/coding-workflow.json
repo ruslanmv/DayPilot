@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DayPilot Coding Workflow Contract",
+  "description": "The normalized contract implemented by every coding executor (GitPilot default, Claude Code, Codex). Adapters propose changes; DayPilot's approval layer gates all repository writes.",
+  "version": "1.0.0",
+  "modes": {
+    "ask": "Approval-gated (default). Human approves each dangerous action.",
+    "auto": "Only permitted for personas in ENABLED_AUTONOMOUS_LIMITED.",
+    "plan": "Read-only. Produce a plan/diff, never write."
+  },
+  "runStatuses": ["queued", "running", "needs_review", "approved", "rejected", "merged", "failed"],
+  "definitions": {
+    "CodingRunSpec": {
+      "type": "object",
+      "required": ["task", "repo"],
+      "properties": {
+        "task": { "type": "string" },
+        "repo": { "type": "string" },
+        "mode": { "enum": ["ask", "auto", "plan"], "default": "ask" },
+        "branch": { "type": ["string", "null"] },
+        "baseBranch": { "type": "string", "default": "main" },
+        "workspaceId": { "type": "string" },
+        "projectId": { "type": ["string", "null"] },
+        "taskId": { "type": ["string", "null"] }
+      }
+    },
+    "NormalizedRun": {
+      "type": "object",
+      "required": ["runId", "executor", "status", "repo", "mode"],
+      "properties": {
+        "runId": { "type": "string" },
+        "executor": { "enum": ["gitpilot", "claude_code", "codex"] },
+        "status": { "enum": ["queued", "running", "needs_review", "approved", "rejected", "merged", "failed"] },
+        "repo": { "type": "string" },
+        "mode": { "enum": ["ask", "auto", "plan"] },
+        "branch": { "type": ["string", "null"] },
+        "prUrl": { "type": ["string", "null"] },
+        "diff": { "$ref": "#/definitions/DiffSummary" },
+        "tests": { "$ref": "#/definitions/TestResults" },
+        "risk": { "enum": ["low", "medium", "high"] },
+        "riskScore": { "type": ["integer", "null"] }
+      }
+    },
+    "DiffSummary": {
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string" },
+              "additions": { "type": "integer" },
+              "deletions": { "type": "integer" }
+            }
+          }
+        },
+        "patch": { "type": "string" },
+        "humanSummary": { "type": "string" }
+      }
+    },
+    "TestResults": {
+      "type": "object",
+      "properties": {
+        "passed": { "type": ["integer", "null"] },
+        "total": { "type": ["integer", "null"] },
+        "failedNames": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  },
+  "adapterMethods": ["create_run", "get_run", "get_diff", "get_tests", "cancel"],
+  "writePolicy": "No repository write, PR creation, or shell command executes without an approved DayPilot approval record. Enforced server-side, not in the UI.",
+  "defaultExecutor": "gitpilot"
+}

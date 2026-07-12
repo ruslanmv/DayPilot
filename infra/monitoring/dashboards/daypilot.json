@@ -1,0 +1,49 @@
+{
+  "title": "DayPilot Operations",
+  "uid": "daypilot-ops",
+  "schemaVersion": 39,
+  "editable": true,
+  "tags": ["daypilot"],
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Gateway request rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(daypilot_gateway_request_seconds_count[1m])) by (route)", "legendFormat": "{{route}}" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Gateway p95 latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(daypilot_gateway_request_seconds_bucket[5m])) by (le, route))", "legendFormat": "{{route}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Model generations",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [{ "expr": "sum(rate(daypilot_model_generations_total[5m])) by (backend)", "legendFormat": "{{backend}}" }]
+    },
+    {
+      "id": 4,
+      "title": "Agent run state transitions",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [{ "expr": "sum(rate(daypilot_orchestrator_state_transitions_total[5m])) by (state)", "legendFormat": "{{state}}" }]
+    },
+    {
+      "id": 5,
+      "title": "Documents ingested (total)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [{ "expr": "daypilot_knowledge_documents_ingested_total" }]
+    }
+  ]
+}

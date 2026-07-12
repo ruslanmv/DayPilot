@@ -1,0 +1,43 @@
+import type { DayPilotCodingRun } from '@daypilot/shared-types'
+
+/** Seed coding runs for the Patch Review surface until live data is wired. */
+export const CODING_RUNS: DayPilotCodingRun[] = [
+  {
+    id: 'cr-1',
+    workspaceId: 'default',
+    executor: 'gitpilot',
+    repo: 'ruslanmv/DayPilot',
+    branch: 'feature/api-gateway-tests',
+    prUrl: null,
+    mode: 'ask',
+    status: 'needs_review',
+    filesChanged: 6,
+    testsPassed: 200,
+    testsTotal: 200,
+    risk: 'medium',
+    riskScore: 34,
+    diffSummary: 'Add domain routers and cursor pagination; all tests green.',
+    projectId: 'p-daypilot',
+    taskId: null,
+    approvalStatus: 'pending',
+  },
+  {
+    id: 'cr-2',
+    workspaceId: 'default',
+    executor: 'gitpilot',
+    repo: 'ruslanmv/ollabridge',
+    branch: 'fix/health-latency',
+    prUrl: null,
+    mode: 'ask',
+    status: 'needs_review',
+    filesChanged: 22,
+    testsPassed: 140,
+    testsTotal: 200,
+    risk: 'high',
+    riskScore: 71,
+    diffSummary: 'Refactor routing + migration; tests not fully green, touches infra.',
+    projectId: 'p-ollabridge',
+    taskId: null,
+    approvalStatus: 'pending',
+  },
+]
