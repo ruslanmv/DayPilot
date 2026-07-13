@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { STATE_LANGUAGE } from '@daypilot/homepilot-theme'
 import { IntegrationsPanel } from '../integrations/IntegrationsPanel'
+import { AiProvidersPanel } from '../settings/AiProvidersPanel'
+import { getTheme, setTheme, type ThemeMode } from '../theme'
 import {
   KNOWLEDGE_SOURCES,
   MAIL_SETTINGS,
   OLLABRIDGE_PAIRING,
   PERMISSION_DEFAULTS,
   PROFILE,
-  PROVIDER_ROUTES,
-  PROVIDER_SUMMARY,
   SOURCES_SUMMARY,
   SHORTCUTS,
   type ConfigField,
@@ -67,58 +67,45 @@ function FieldRows({ fields }: { fields: ConfigField[] }) {
   )
 }
 
+function AppearanceSection() {
+  const [theme, setThemeState] = useState<ThemeMode>(() => getTheme())
+  function choose(mode: ThemeMode) { setThemeState(mode); setTheme(mode) }
+  return (
+    <div className="dp-settings-list">
+      <p className="dp-muted">Appearance. DayPilot is dark by default; switch to light if you prefer.</p>
+      <div className="dp-theme-toggle" role="radiogroup" aria-label="Theme">
+        {(['dark', 'light'] as ThemeMode[]).map((mode) => (
+          <button
+            key={mode}
+            role="radio"
+            aria-checked={theme === mode}
+            className={'dp-theme-opt dp-theme-opt--' + mode + (theme === mode ? ' is-active' : '')}
+            onClick={() => choose(mode)}
+          >
+            <span className="dp-theme-opt__swatch" aria-hidden="true" />
+            <span className="dp-theme-opt__label">{mode === 'dark' ? '🌙 Dark' : '☀ Light'}{theme === mode ? ' · Active' : ''}</span>
+          </button>
+        ))}
+      </div>
+      <p className="dp-muted" style={{ marginTop: '0.75rem' }}>Accent-as-telemetry — colors signal state, never decoration.</p>
+      <div className="dp-swatches">
+        {Object.entries(STATE_LANGUAGE).map(([key, s]) => (
+          <div key={key} className="dp-swatch">
+            <span className="dp-dot" style={{ background: s.color }} aria-hidden="true" />
+            <span>{s.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function SectionBody({ section }: { section: SettingsSectionId }) {
   if (section === 'integrations') {
     return <IntegrationsPanel />
   }
   if (section === 'providers') {
-    return (
-      <div className="dp-settings-list">
-        {/* Ollabridge pairing — local gateway or Ollabridge Cloud */}
-        <div className="dp-settings-row">
-          <div className="dp-settings-row__head">
-            <StateDot tone="default" />
-            <strong>{PROVIDER_SUMMARY.provider} · pairing</strong>
-            <span className="dp-pill dp-pill--muted">{OLLABRIDGE_PAIRING.modeEnv}</span>
-          </div>
-          <p>{OLLABRIDGE_PAIRING.detail}</p>
-          <div className="dp-mode-grid">
-            {OLLABRIDGE_PAIRING.modes.map((m) => (
-              <div key={m.id} className={'dp-mode-card' + (OLLABRIDGE_PAIRING.activeMode === m.id ? ' is-active' : '')}>
-                <div className="dp-mode-card__head">
-                  <strong>{m.label}</strong>
-                  {OLLABRIDGE_PAIRING.activeMode === m.id ? <span className="dp-tag dp-tag--healthy">active</span> : <ConnBadge status={m.status} />}
-                </div>
-                <p className="dp-mode-card__detail">{m.detail}</p>
-                <FieldRows
-                  fields={[
-                    { label: 'Endpoint', value: m.endpoint, hint: m.endpointEnv },
-                    { label: 'API key', value: m.keyFormat, hint: 'Bearer · OLLABRIDGE_API_KEY' },
-                  ]}
-                />
-                {m.pairing && <p className="dp-mode-card__pairing">🔗 {m.pairing}</p>}
-              </div>
-            ))}
-          </div>
-          <FieldRows fields={OLLABRIDGE_PAIRING.fields} />
-          <div className="dp-settings-actions">
-            <button className="dp-ghost-button" type="button">Test connection</button>
-            <button className="dp-ghost-button" type="button">Pair with Cloud (device code)</button>
-          </div>
-        </div>
-        <p className="dp-muted">Routing policy per agent role (fallback in order):</p>
-        {PROVIDER_ROUTES.map((r) => (
-          <div key={r.role} className="dp-settings-row dp-settings-row--grid">
-            <strong>{r.role}</strong>
-            <span>{r.model}</span>
-            <span className="dp-pill dp-pill--muted">{r.tier}</span>
-            <span>{r.latencyMs}ms</span>
-            <span className={'dp-tag dp-tag--' + r.status}>{r.status}</span>
-            <span className="dp-provider-fallback">↳ {r.fallback.join(' · ') || 'none'}</span>
-          </div>
-        ))}
-      </div>
-    )
+    return <AiProvidersPanel />
   }
   if (section === 'mail') {
     return (
@@ -194,19 +181,7 @@ function SectionBody({ section }: { section: SettingsSectionId }) {
     )
   }
   if (section === 'appearance') {
-    return (
-      <div className="dp-settings-list">
-        <p className="dp-muted">HomePilot Family theme. Obsidian workspace with accent-as-telemetry.</p>
-        <div className="dp-swatches">
-          {Object.entries(STATE_LANGUAGE).map(([key, s]) => (
-            <div key={key} className="dp-swatch">
-              <span className="dp-dot" style={{ background: s.color }} aria-hidden="true" />
-              <span>{s.label}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+    return <AppearanceSection />
   }
   return (
     <div className="dp-settings-list">

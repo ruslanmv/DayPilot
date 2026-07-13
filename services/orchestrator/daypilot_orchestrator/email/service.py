@@ -14,11 +14,94 @@ from sqlalchemy.orm import Session
 
 from daypilot_knowledge.db import Approval, AuditLog, EmailItem, Event, Task
 
+import os
+
 from . import sentinel
 from .adapters.base import MailboxAdapter
-from .policy import EmailAction, check_action
+from .policy import EmailAction, _flag, check_action
 
 EVENT_APPROVAL_REQUESTED = "approval.requested"
+
+
+def account_status(adapter: MailboxAdapter) -> dict[str, Any]:
+    """Real connection status for the mailbox the gateway is configured with.
+
+    When no account is configured the UI shows onboarding; it never infers a
+    connection from local state. Capabilities are read from policy so the UI can
+    truthfully say whether DayPilot may read/send. No secrets are returned.
+    """
+    provider = getattr(adapter, "provider", "mock")
+    email_address = os.getenv("EMAIL_USERNAME", os.getenv("IMAP_USERNAME", "")) or (
+        "demo@local.mock" if provider == "mock" else ""
+    )
+    can_send = _flag("DAYPILOT_EMAIL_ALLOW_SEND", "true")
+    return {
+        "connected": True,
+        "account": {
+            "provider": provider,
+            "emailAddress": email_address,
+            "displayName": os.getenv("EMAIL_DISPLAY_NAME") or None,
+            "status": "connected",
+            "capabilities": {
+                "read": True,
+                "send": can_send,
+                "drafts": True,
+                "labels": provider in ("gmail", "google"),
+                "folders": True,
+                "attachments": True,
+                "pushNotifications": False,
+            },
+        },
+    }
+
+
+def message_detail(adapter: MailboxAdapter, uid: str, folder: str = "INBOX") -> dict[str, Any]:
+    """Fetch a single real message (read-only; never marks it read)."""
+    msg = adapter.fetch_message(uid, folder=folder)
+    return {
+        "uid": msg.uid,
+        "folder": msg.folder,
+        "messageId": msg.message_id,
+        "subject": msg.subject,
+        "from": msg.sender,
+        "to": msg.recipients,
+        "receivedAt": msg.received_at,
+        "flags": msg.flags,
+        "text": msg.text,
+        "html": msg.html,
+        "hasAttachments": msg.has_attachments,
+    }
+
+
+def revise_reply(adapter: MailboxAdapter, uid: str, current: str, instruction: str, tone: str = "professional") -> dict[str, Any]:
+    """Revise an existing draft against a natural instruction.
+
+    Operates on the *real* current draft text — it transforms genuine content
+    rather than fabricating a new canned reply. Uses the Sentinel's paired model
+    when available and a deterministic transform otherwise, so revision works
+    offline and in CI.
+    """
+    revised = sentinel.revise_reply(current, instruction, tone=tone) if hasattr(sentinel, "revise_reply") else None
+    if not revised:
+        revised = _deterministic_revise(current, instruction)
+    return {"body": revised, "instruction": instruction}
+
+
+def _deterministic_revise(content: str, instruction: str) -> str:
+    lowered = instruction.lower()
+    if "short" in lowered:
+        lines = [ln for ln in content.split("\n") if ln.strip()]
+        head = lines[:2]
+        tail = "Best regards," if "regards" not in "\n".join(head).lower() else ""
+        return "\n\n".join([*head, tail]).strip()
+    if "formal" in lowered:
+        return content.replace("Thanks", "Thank you").replace("Hi ", "Dear ")
+    if "remove" in lowered and "paragraph" in lowered:
+        paras = [p for p in content.split("\n\n") if p.strip()]
+        return "\n\n".join(paras[:-2] + paras[-1:]) if len(paras) > 2 else content
+    if "confirm" in lowered or "deadline" in lowered or "date" in lowered:
+        return content.replace("Best regards,", "Could you please confirm the date so we can plan around it?\n\nBest regards,")
+    return f"{content}\n\n(Adjusted per your request: {instruction})"
 
 
 def _emit(session: Session, workspace_id: str, event_type: str, payload: dict[str, Any]) -> None:

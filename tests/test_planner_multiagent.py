@@ -112,6 +112,33 @@ def test_generate_plan_persists_blocks_and_metrics():
     assert blocks == len(result["blocks"])
 
 
+def test_readiness_reports_real_source_counts():
+    ws = "ws_readiness"
+    from daypilot_orchestrator.planner.service import planner_readiness
+    with session_scope(ENGINE) as s:
+        empty = planner_readiness(s, ws, "2026-07-13")
+    assert empty["tasksOpen"] == 0 and empty["sufficient"] is False and empty["hasPlan"] is False
+    _seed_tasks(ws)
+    with session_scope(ENGINE) as s:
+        ready = planner_readiness(s, ws, "2026-07-13")
+    assert ready["tasksOpen"] == len(TASKS) and ready["sufficient"] is True
+    # Gateway route returns the same shape.
+    resp = client.get(f"/v1/planner/plans/2026-07-13/readiness?workspaceId={ws}")
+    assert resp.status_code == 200 and resp.json()["tasksOpen"] == len(TASKS)
+
+
+def test_generate_includes_block_type_reason_and_quality():
+    ws = "ws_quality"
+    _seed_tasks(ws)
+    with session_scope(ENGINE) as s:
+        result = generate_plan(s, ws, "2026-07-13")
+    assert "quality" in result and result["quality"]["label"] in ("Strong", "Balanced", "Needs work")
+    # Real, derived per-block type + reason (not invented rationale).
+    blk = next(b for b in result["blocks"] if b["kind"] != "break")
+    assert blk["type"] in ("focus", "meeting", "admin", "task")
+    assert blk["reason"]  # non-empty, built from the block's real facts
+
+
 def test_read_plan_returns_persisted_blocks_with_kind():
     ws = "ws_read"
     _seed_tasks(ws)

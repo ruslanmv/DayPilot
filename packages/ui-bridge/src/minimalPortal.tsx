@@ -1,8 +1,9 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { DayPilotAgent, DayPilotDocument, DayPilotDocumentSource, DayPilotMessage, DayPilotProject, DayPilotTask } from '@daypilot/shared-types'
-import { dayHours, weekDays, weekSlots } from './spaceBridgeData'
+import { MinutePlanCalendar } from './calendar/MinutePlanCalendar'
 import { isDemoMode, seedAgents, seedDocumentSources, seedDocuments, seedMessages, seedProjects, seedTasks } from './demoData'
 import { askAssistant } from './assistant'
+import { initTheme } from './theme'
 import { SettingsMenu } from './shell/SettingsMenu'
 import { SettingsPanel } from './shell/SettingsPanel'
 import { CommandPalette, type PaletteAction } from './shell/CommandPalette'
@@ -48,7 +49,6 @@ function navViews(emailEnabled: boolean): NavItem[] {
 }
 
 type PortalView = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'documents' | 'agents' | 'email'
-type CalendarMode = 'day' | 'week'
 type DrawerItem =
   | { kind: 'task'; item: DayPilotTask }
   | { kind: 'project'; item: DayPilotProject }
@@ -74,10 +74,6 @@ function cx(...classes: Array<string | false | undefined>) {
 
 function normalizeDirective(input: string) {
   return input.replace(/\s+/g, ' ').trim()
-}
-
-function taskHour(task: DayPilotTask) {
-  return task.start.slice(0, 2)
 }
 
 function ownerLabel(task: DayPilotTask) {
@@ -310,78 +306,10 @@ function LiveContext({ projects, agents }: { projects: DayPilotProject[]; agents
   )
 }
 
-function DayCalendar({ tasks, onSelect }: { tasks: DayPilotTask[]; onSelect: (task: DayPilotTask) => void }) {
-  return (
-    <div className="dp-day-grid">
-      {dayHours.map((hour) => {
-        const hourTasks = tasks.filter((task) => task.start.startsWith(hour))
-        return (
-          <div className="dp-time-row" key={hour}>
-            <div className="dp-time-label">{hour}</div>
-            <div className="dp-time-cell">
-              {hourTasks.length === 0 ? <div className="dp-empty">quiet buffer</div> : hourTasks.map((task) => (
-                <button key={task.id} type="button" className={cx('dp-calendar-card', `dp-calendar-card--${task.owner}`)} onClick={() => onSelect(task)}>
-                  <div className="dp-title">{task.title}</div>
-                  <div className="dp-meta-row">
-                    <span>{ownerLabel(task)}</span>
-                    <span>{task.source}</span>
-                    <span>{task.status.replace('_', ' ')}</span>
-                    <span>{task.risk} risk</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function WeekCalendar({ tasks, onSelect }: { tasks: DayPilotTask[]; onSelect: (task: DayPilotTask) => void }) {
-  return (
-    <div className="dp-week-grid" aria-label="Week horizon calendar matrix">
-      <div className="dp-week-head" />
-      {weekDays.map((day) => <div key={day} className="dp-week-head"><strong>{day.slice(0, 3)}</strong><span>Active</span></div>)}
-      {weekSlots.map((slot) => (
-        <React.Fragment key={slot}>
-          <div className="dp-week-time">{slot}</div>
-          {weekDays.map((day) => (
-            <div key={`${day}-${slot}`} className="dp-week-cell">
-              {tasks.filter((task) => task.day === day && taskHour(task) === slot.slice(0, 2)).map((task) => (
-                <button key={task.id} type="button" className={cx('dp-week-chip', `dp-week-chip--${task.owner}`)} onClick={() => onSelect(task)}>
-                  {task.title}
-                </button>
-              ))}
-            </div>
-          ))}
-        </React.Fragment>
-      ))}
-    </div>
-  )
-}
-
+/** Minute Plan calendar — professional Day + Week timetable with an
+ *  Outlook-style live current-time indicator (see calendar/MinutePlanCalendar). */
 function CalendarCore({ tasks, onSelect }: { tasks: DayPilotTask[]; onSelect: (task: DayPilotTask) => void }) {
-  const [mode, setMode] = useState<CalendarMode>('day')
-  const todayTasks = useMemo(() => tasks.filter((task) => task.day === 'Thursday'), [tasks])
-
-  return (
-    <section className="dp-calendar-screen">
-      <div className="dp-calendar-controls">
-        <div>
-          <h3>Minute-by-Minute AI Plan</h3>
-          <p>Each block shows owner, source, status, and drawer actions.</p>
-        </div>
-        <div className="dp-calendar-toggle" role="tablist" aria-label="Calendar horizon">
-          <button type="button" className={cx(mode === 'day' && 'is-active')} onClick={() => setMode('day')}>Day</button>
-          <button type="button" className={cx(mode === 'week' && 'is-active')} onClick={() => setMode('week')}>Week</button>
-        </div>
-      </div>
-      <div className="dp-calendar-area">
-        {mode === 'day' ? <DayCalendar tasks={todayTasks} onSelect={onSelect} /> : <WeekCalendar tasks={tasks} onSelect={onSelect} />}
-      </div>
-    </section>
-  )
+  return <MinutePlanCalendar tasks={tasks} onSelect={onSelect} />
 }
 
 function LedgerCard({ task, onSelect }: { task: DayPilotTask; onSelect: () => void }) {
@@ -626,6 +554,9 @@ function DetailDrawer({ selected, documents, onClose }: { selected?: DrawerItem;
 
 export function SpaceBridgeShell({ compact = false, emailEnabled = false }: SpaceBridgeShellProps) {
   const isMobile = useIsMobile()
+  // Apply the persisted theme (dark by default) so the shell is consistent even
+  // when the host app didn't call initTheme() itself.
+  useEffect(() => { initTheme() }, [])
   const NAV_VIEWS = navViews(emailEnabled)
   const [view, setView] = useState<PortalView>('home')
   const [messages, setMessages] = useState<DayPilotMessage[]>(seedMessages)

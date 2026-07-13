@@ -11,14 +11,17 @@
 type ViteEnv = Record<string, string | boolean | undefined>
 
 function readEnv(): ViteEnv {
-  // `import.meta.env` is defined by Vite in the browser build. Guard so the
-  // module is also importable outside Vite (tests, SSR) without throwing.
+  // Reference `import.meta.env` as a single, contiguous expression so Vite
+  // statically inlines the VITE_* values at build time. Reading it indirectly
+  // (e.g. `const m = import.meta; m.env`) defeats that replacement and yields
+  // `undefined` in a production bundle, which would silently disable demo mode
+  // and the configured API base.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const meta = import.meta as any
-    if (meta && meta.env) return meta.env as ViteEnv
+    // @ts-ignore - Vite injects `import.meta.env` in the browser build.
+    const env = import.meta.env as ViteEnv | undefined
+    if (env) return env
   } catch {
-    /* not a module-env runtime */
+    /* not a Vite/ESM runtime (tests, SSR) */
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const g = globalThis as any

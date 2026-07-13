@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { isDemoMode } from '../env'
 import { chatPlan, generatePlan, loadPlan, type PlannerBlock } from '../plannerClient'
+import { PlannerBoard } from './PlannerBoard'
 import {
   INITIAL_FOCUS_MINUTES,
   INITIAL_PLAN,
@@ -34,7 +35,13 @@ function toUiBlock(b: PlannerBlock, i: number): PlanUIBlock {
  * Mirrors the backend graph: deep work mornings, meetings after lunch, admin
  * last, lunch protected; the score badge is the critic's verdict.
  */
+/** Planning dispatches to the connected Day Planner board in production; demo
+ *  mode keeps the offline sample timeline below. */
 export function PlanningWorkspace({ onStartFocus }: { onStartFocus?: () => void }) {
+  return DEMO ? <DemoPlanning onStartFocus={onStartFocus} /> : <PlannerBoard onStartFocus={onStartFocus} />
+}
+
+function DemoPlanning({ onStartFocus }: { onStartFocus?: () => void }) {
   const [blocks, setBlocks] = useState<PlanUIBlock[]>(DEMO ? INITIAL_PLAN : [])
   const [score, setScore] = useState(DEMO ? INITIAL_SCORE : 0)
   const [focusMinutes, setFocusMinutes] = useState(DEMO ? INITIAL_FOCUS_MINUTES : 0)

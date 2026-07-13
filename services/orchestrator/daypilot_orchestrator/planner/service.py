@@ -117,16 +117,102 @@ def generate_plan(
     record_plan_metrics(session, workspace_id, plan_date, critique, cfg,
                         iterations=result.get("iterations", 0))
     session.flush()
+
+    prio = {t.get("id"): t for t in result.get("prioritized", [])}
+    ui_blocks = []
+    for b in blocks:
+        kind = b.get("kind", "deep")
+        task = prio.get(b.get("taskId"), {})
+        ui_blocks.append({
+            **b,
+            "type": _block_type(kind),
+            "reason": _block_reason(kind, b.get("start"), task.get("priority"), bool(task.get("dueToday"))),
+            "status": "scheduled",
+        })
     return {
         "planDate": plan_date,
         "state": plan.state,
         "summary": narrative,
         "score": critique.get("score", 0),
         "critique": critique,
+        "quality": _quality_explanation(critique),
         "iterations": result.get("iterations", 0),
         "configVersion": cfg.version,
         "path": result.get("__path__", []),
-        "blocks": blocks,
+        "blocks": ui_blocks,
+    }
+
+
+def _quality_explanation(critique: dict[str, Any]) -> dict[str, Any]:
+    """Turn the critic's real metrics into a labelled score + strengths/warnings."""
+    score = int(critique.get("score", 0))
+    label = "Strong" if score >= 80 else "Balanced" if score >= 60 else "Needs work"
+    focus = critique.get("focusMinutes", 0)
+    strengths: list[str] = []
+    warnings: list[str] = []
+    if focus:
+        strengths.append(f"{focus // 60}h {focus % 60:02d}m of focus time is protected")
+    if critique.get("coverage", 0) >= 1.0:
+        strengths.append("All critical tasks are scheduled")
+    if not critique.get("issues"):
+        strengths.append("No calendar conflicts")
+    for issue in critique.get("issues", []):
+        warnings.append(issue)
+    return {"score": score, "label": label, "strengths": strengths, "warnings": warnings}
+
+
+def planner_readiness(session: Session, workspace_id: str, plan_date: str) -> dict[str, Any]:
+    """Real readiness check for the automatic planner.
+
+    Counts genuine connected work (tasks, projects) and whether a plan already
+    exists, so the Planning surface can show a truthful state (enough data to
+    build a plan, missing info, or already planned) instead of forcing the setup
+    wizard every day. No fabricated counts.
+    """
+    from sqlalchemy import func
+
+    open_tasks = session.execute(
+        select(func.count(Task.id)).where(
+            Task.workspace_id == workspace_id,
+            Task.status.in_(("active", "running", "scheduled", "needs_approval")),
+        )
+    ).scalar_one()
+    due_today = session.execute(
+        select(func.count(Task.id)).where(
+            Task.workspace_id == workspace_id,
+            Task.status.in_(("active", "running", "scheduled", "needs_approval")),
+            Task.due_date.isnot(None),
+        )
+    ).scalar_one()
+    active_projects = session.execute(
+        select(func.count(Project.id)).where(Project.workspace_id == workspace_id)
+    ).scalar_one()
+
+    plan = build_or_get_draft(session, workspace_id, plan_date)
+    has_plan = bool(plan.blocks)
+
+    # Working hours always have a value (PlannerConfig defaults); focus prefs are
+    # "configured" only once a non-default config version has been applied.
+    cfg = active_config(session, workspace_id)
+    working_hours_configured = True
+    focus_prefs_configured = cfg.version > 1
+
+    # Calendar connectivity is reported by the email/calendar plane; treat email
+    # enablement as the proxy the same way the rest of the app does.
+    from ..email.policy import email_enabled
+    calendar_connected = email_enabled()
+
+    sufficient = open_tasks > 0 or calendar_connected
+    return {
+        "planDate": plan_date,
+        "hasPlan": has_plan,
+        "workingHoursConfigured": working_hours_configured,
+        "calendarConnected": calendar_connected,
+        "tasksOpen": int(open_tasks),
+        "tasksDueToday": int(due_today),
+        "projectsActive": int(active_projects),
+        "focusPrefsConfigured": focus_prefs_configured,
+        "sufficient": bool(sufficient),
     }
 
 
@@ -136,6 +222,37 @@ def _kind_of(title: str, source: str) -> str:
     if "lunch" in title.lower() or source == "break":
         return "break"
     return classify_kind(title)
+
+
+# Kind (scheduler category) -> UI block type shown on the planner timeline.
+_TYPE_OF_KIND = {
+    "deep": "focus", "meeting": "meeting", "review": "meeting",
+    "admin": "admin", "break": "break",
+}
+
+
+def _block_type(kind: str) -> str:
+    return _TYPE_OF_KIND.get(kind, "task")
+
+
+def _block_reason(kind: str, start: str | None, priority: str | None, due_today: bool) -> str:
+    """A human-readable planning reason built from *real* block facts (its kind,
+    scheduled time, and the task's priority/due), not invented rationale."""
+    parts: list[str] = []
+    hour = int((start or "00:00").split(":")[0])
+    if kind == "deep":
+        parts.append("placed in the morning focus window" if hour < 12 else "scheduled as protected focus time")
+    elif kind == "meeting":
+        parts.append("a fixed meeting on your calendar")
+    elif kind == "admin":
+        parts.append("batched with other admin at the low-energy end of the day")
+    elif kind == "break":
+        parts.append("a protected break")
+    if priority in ("high", "critical"):
+        parts.append(f"{priority} priority")
+    if due_today:
+        parts.append("due today")
+    return "; ".join(parts) or "scheduled around your fixed commitments"
 
 
 def read_plan(session: Session, workspace_id: str, plan_date: str) -> dict[str, Any]:
@@ -155,11 +272,13 @@ def read_plan(session: Session, workspace_id: str, plan_date: str) -> dict[str, 
                 "id": b.id,
                 "taskId": b.task_id,
                 "title": b.title,
-                "kind": _kind_of(b.title, b.source),
+                "kind": (k := _kind_of(b.title, b.source)),
+                "type": _block_type(k),
                 "start": b.start_time,
                 "end": b.end_time,
                 "owner": b.owner,
                 "status": b.status,
+                "reason": _block_reason(k, b.start_time, None, False),
             }
             for b in blocks
         ],

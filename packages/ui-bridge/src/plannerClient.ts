@@ -9,22 +9,29 @@
 import { api } from './apiClient'
 import { workspaceId } from './env'
 
+export type PlannerBlockType = 'calendar_event' | 'focus' | 'task' | 'admin' | 'meeting' | 'break' | 'buffer'
+
 export type PlannerBlock = {
   id?: string
   taskId?: string | null
   title: string
   kind: 'deep' | 'meeting' | 'admin' | 'review' | 'break'
+  type?: PlannerBlockType
   start: string
   end: string
   owner?: string
   status?: string
+  reason?: string
 }
+
+export type PlannerQuality = { score: number; label: string; strengths: string[]; warnings: string[] }
 
 export type PlannerPlan = {
   planDate: string
   state?: string
   summary?: string
   score?: number
+  quality?: PlannerQuality
   blocks: PlannerBlock[]
 }
 
@@ -38,6 +45,23 @@ function isoToday(): string {
   const d = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+export type PlannerReadiness = {
+  planDate: string
+  hasPlan: boolean
+  workingHoursConfigured: boolean
+  calendarConnected: boolean
+  tasksOpen: number
+  tasksDueToday: number
+  projectsActive: number
+  focusPrefsConfigured: boolean
+  sufficient: boolean
+}
+
+export async function loadReadiness(date = isoToday()): Promise<PlannerReadiness | null> {
+  const res = await api.get<PlannerReadiness>(`/v1/planner/plans/${date}/readiness?workspaceId=${workspaceId()}`)
+  return res.ok ? res.data : null
 }
 
 export async function loadPlan(date = isoToday()): Promise<PlannerPlan | null> {
