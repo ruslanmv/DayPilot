@@ -139,30 +139,9 @@
   --danger: #ff6b6b;
 }
 
-/* Light theme: warm neutral surfaces, fine gray dividers — same structure. */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --background: #f6f8fb;
-    --nav-bg: #ffffff;
-    --surface: #ffffff;
-    --surface-subtle: #f7f9fc;
-    --surface-elevated: #eef3f8;
-    --border: #e4e9f0;
-    --border-strong: #d4dbe6;
-    --text-primary: #18212f;
-    --text-secondary: #5e6b7c;
-    --text-tertiary: #8a96a6;
-    --accent: #0f6cbd;
-    --accent-hover: #1478cc;
-    --accent-subtle: rgba(15, 108, 189, 0.10);
-    --selected: rgba(15, 108, 189, 0.10);
-    --hover: rgba(15, 108, 189, 0.05);
-    --unread: #0f6cbd;
-    --success: #2e9e57;
-    --danger: #d64545;
-  }
-}
-
+/* DayPilot is dark by default and does NOT follow the OS light preference —
+   the obsidian workspace is the product identity. Light is opt-in only, via
+   Settings → Appearance, which sets :root[data-theme="light"] below. */
 :root[data-theme="light"] {
   --background: #f6f8fb;
   --nav-bg: #ffffff;
@@ -182,4 +161,21 @@
   --unread: #0f6cbd;
   --success: #2e9e57;
   --danger: #d64545;
+
+  /* Also flip the canonical --hp-* family so the shell (which reads --dp-*
+     aliases of --hp-*) is light too — keeping the whole app coherent, not just
+     the email/settings surfaces. Accent hues stay (they are state telemetry). */
+  --hp-bg: #f6f8fb;
+  --hp-bg-alt: #eef2f7;
+  --hp-surface: #ffffff;
+  --hp-surface-elevated: #eef3f8;
+  --hp-surface-glass: rgba(255, 255, 255, 0.72);
+  --hp-border: #e4e9f0;
+  --hp-border-strong: #d4dbe6;
+  --hp-text: #18212f;
+  --hp-text-muted: #5e6b7c;
+  --hp-text-faint: #8a96a6;
+  --hp-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --hp-shadow-md: 0 10px 30px rgba(15, 23, 42, 0.10);
+  --hp-shadow-lg: 0 24px 60px rgba(15, 23, 42, 0.16);
 }

@@ -52,10 +52,45 @@ class CreateTaskBody(BaseModel):
     workspaceId: str = "default"
 
 
+class ReviseBody(BaseModel):
+    uid: str
+    current: str
+    instruction: str
+    tone: str = "professional"
+    workspaceId: str = "default"
+
+
+# Providers the onboarding screen can offer. gmail/microsoft ride OAuth; imap is
+# available only where the production infra is configured.
+_ONBOARDING_PROVIDERS = [
+    {"id": "microsoft", "label": "Microsoft 365", "auth": "oauth"},
+    {"id": "google", "label": "Gmail", "auth": "oauth"},
+    {"id": "imap", "label": "Other email provider (IMAP/SMTP)", "auth": "imap"},
+]
+
+
 @router.get("/status")
 def status() -> dict[str, Any]:
-    """Always reachable so the UI can show/hide the tab without a 404 storm."""
-    return {"enabled": email_enabled()}
+    """Real connection status. Always reachable (no 404 storm). When no account
+    is connected, returns the onboarding providers so the UI shows a genuine
+    connect-your-email state rather than fabricated data."""
+    if not email_enabled():
+        return {"enabled": False, "connected": False, "account": None, "providers": _ONBOARDING_PROVIDERS}
+    return {"enabled": True, **email_service.account_status(get_adapter())}
+
+
+@router.get("/messages/{uid}")
+def message(uid: str, folder: str = "INBOX") -> dict[str, Any]:
+    """Fetch one real message/thread for the reading pane (read-only)."""
+    _require_enabled()
+    return email_service.message_detail(get_adapter(), uid, folder=folder)
+
+
+@router.post("/ai/revise")
+def ai_revise(body: ReviseBody) -> dict[str, Any]:
+    """Revise the current real draft against an instruction (never sends)."""
+    _require_enabled()
+    return email_service.revise_reply(get_adapter(), body.uid, body.current, body.instruction, body.tone)
 
 
 @router.get("/folders")
@@ -65,10 +100,13 @@ def folders() -> dict[str, Any]:
 
 
 @router.get("/messages")
-def messages(session: Session = Depends(get_session), workspaceId: str = "default") -> dict[str, Any]:
+def messages(session: Session = Depends(get_session), workspaceId: str = "default", q: str | None = None) -> dict[str, Any]:
     _require_enabled()
     items = email_service.sync_inbox(session, get_adapter(), workspaceId)
-    return {"items": items}
+    if q:
+        needle = q.lower()
+        items = [i for i in items if needle in (i.get("subject", "") + " " + i.get("sender", "")).lower()]
+    return {"items": items, "query": q}
 
 
 @router.post("/messages/{uid}/draft-reply", status_code=201)

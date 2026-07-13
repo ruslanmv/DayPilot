@@ -78,10 +78,63 @@ def test_sentinel_drafts_reply_without_sending():
 
 # --- Gateway: feature flag + draft-and-approve ------------------------------
 
-def test_email_disabled_returns_404_but_status_ok(monkeypatch):
+def test_email_disabled_returns_onboarding_state(monkeypatch):
     monkeypatch.delenv("DAYPILOT_EMAIL_ENABLED", raising=False)
-    assert client.get("/v1/email/status").json()["enabled"] is False
+    status = client.get("/v1/email/status").json()
+    assert status["enabled"] is False and status["connected"] is False
+    assert status["account"] is None
+    # Onboarding providers are offered so the UI shows a real connect state.
+    ids = {p["id"] for p in status["providers"]}
+    assert {"microsoft", "google", "imap"} <= ids
     assert client.get("/v1/email/messages").status_code == 404
+
+
+def test_status_returns_account_and_capabilities_when_connected(monkeypatch):
+    monkeypatch.setenv("DAYPILOT_EMAIL_ENABLED", "true")
+    monkeypatch.setenv("DAYPILOT_EMAIL_PROVIDER", "mock")
+    monkeypatch.setenv("DAYPILOT_EMAIL_ALLOW_SEND", "true")
+    status = client.get("/v1/email/status").json()
+    assert status["connected"] is True
+    acct = status["account"]
+    assert acct["provider"] == "mock" and acct["status"] == "connected"
+    caps = acct["capabilities"]
+    assert caps["read"] is True and caps["send"] is True and caps["drafts"] is True
+    # No secrets are ever returned in the status payload.
+    assert "password" not in acct and "token" not in acct
+
+
+def test_message_detail_returns_real_message(monkeypatch):
+    monkeypatch.setenv("DAYPILOT_EMAIL_ENABLED", "true")
+    monkeypatch.setenv("DAYPILOT_EMAIL_PROVIDER", "mock")
+    detail = client.get("/v1/email/messages/10492").json()
+    assert detail["uid"] == "10492" and detail["subject"]
+    assert "from" in detail and "text" in detail
+
+
+def test_search_filters_messages_server_side(monkeypatch):
+    monkeypatch.setenv("DAYPILOT_EMAIL_ENABLED", "true")
+    monkeypatch.setenv("DAYPILOT_EMAIL_PROVIDER", "mock")
+    ws = _ws()
+    all_items = client.get(f"/v1/email/messages?workspaceId={ws}").json()["items"]
+    assert all_items
+    subj = all_items[0]["subject"].split()[0]
+    filtered = client.get(f"/v1/email/messages?workspaceId={ws}&q={subj}").json()
+    assert filtered["query"] == subj
+    assert all(subj.lower() in (i["subject"] + " " + i["sender"]).lower() for i in filtered["items"])
+    none = client.get(f"/v1/email/messages?workspaceId={ws}&q=zzz-no-match-zzz").json()["items"]
+    assert none == []
+
+
+def test_ai_revise_transforms_real_draft(monkeypatch):
+    monkeypatch.setenv("DAYPILOT_EMAIL_ENABLED", "true")
+    monkeypatch.setenv("DAYPILOT_EMAIL_PROVIDER", "mock")
+    current = "Hi Anna,\n\nThank you for the update.\n\nBest regards,\nRuslan"
+    revised = client.post(
+        "/v1/email/ai/revise",
+        json={"uid": "10492", "current": current, "instruction": "make it shorter"},
+    ).json()
+    assert revised["body"] and revised["body"] != current
+    assert revised["instruction"] == "make it shorter"
 
 
 def test_draft_and_approve_send_flow(monkeypatch):

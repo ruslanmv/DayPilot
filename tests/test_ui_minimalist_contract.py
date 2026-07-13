@@ -14,7 +14,8 @@ def test_minimalist_ux_spec_contains_required_ascii_views():
 
 
 def test_react_portal_contains_calendar_and_ledger_state_surfaces():
-    source = (ROOT / 'packages' / 'ui-bridge' / 'src' / 'minimalPortal.tsx').read_text(encoding='utf-8')
+    ui = ROOT / 'packages' / 'ui-bridge' / 'src'
+    source = (ui / 'minimalPortal.tsx').read_text(encoding='utf-8')
     assert 'StrategicFeed' in source
     assert 'PlanBlock' in source
     assert 'CalendarCore' in source
@@ -22,6 +23,18 @@ def test_react_portal_contains_calendar_and_ledger_state_surfaces():
     assert 'DetailDrawer' in source
     assert 'createHumanTask' in source
     assert 'createAiTask' in source
+
+    # The Minute Plan calendar is a real Day/Week timetable with an Outlook-style
+    # live current-time indicator and minute-based event positioning.
+    assert 'MinutePlanCalendar' in source
+    cal = (ui / 'calendar' / 'MinutePlanCalendar.tsx').read_text(encoding='utf-8')
+    assert 'DayView' in cal and 'WeekView' in cal
+    assert 'dp-now' in cal and 'Now ' in cal  # current-time indicator (day)
+    assert 'dp-wnow' in cal  # current-time indicator (week)
+    assert 'is-today' in cal and 'All day' in cal  # today highlight + all-day row
+    data = (ui / 'calendar' / 'calendarData.ts').read_text(encoding='utf-8')
+    assert 'DAY_START_MIN' in data and 'layoutColumns' in data  # minute geometry + overlap
+    assert 'weekDates' in data
 
 
 def test_sidebar_nav_and_settings_menu_contract():
@@ -42,6 +55,16 @@ def test_sidebar_nav_and_settings_menu_contract():
     assert 'Chat with your plan' in planning or 'Chat with your day plan' in planning
     assert 'dp-plan__popover' in planning  # every block is clickable
     assert 'Start focus' in planning and 'Mark done' in planning
+
+    # Connected Day Planner: state-model-driven (not empty-array), real readiness
+    # gate, quality only after a plan, AI assistant shares the plan state.
+    board = (ui / 'planning' / 'PlannerBoard.tsx').read_text(encoding='utf-8')
+    assert 'PlannerBoard' in planning  # Planning dispatches to it in production
+    for state in ('initial_setup_required', 'ready_to_create', 'creating', 'plan_ready'):
+        assert state in board
+    assert 'loadReadiness' in board and 'Create my plan' in board
+    assert 'AI Planning Assistant' in board and 'Why DayPilot scheduled this here' in board
+    assert 'We couldn’t update your plan right now' in board  # friendly failure, no backend jargon
 
     # Clean product branding only: no "DayPilot Pro" / "Enterprise OS" / Ollabridge
     # environment labels in the main shell.
@@ -94,8 +117,34 @@ def test_sidebar_nav_and_settings_menu_contract():
     assert 'Connect' in integ and 'Disconnect' in integ
     assert 'Last activity' in integ and 'dp-cap-chip' in integ
 
+    # The Email page is production-connected by default: no hard-coded senders,
+    # a real onboarding state, safe HTML rendering, and demo gated behind flag.
+    email = (ui / 'email' / 'EmailWorkspace.tsx').read_text(encoding='utf-8')
+    assert 'ConnectedEmailWorkspace' in email and 'DemoEmailWorkspace' in email
+    assert 'isDemoMode()' in email  # demo is opt-in; production connects to the API
+    assert 'Connect your email' in email and 'never paste your Gmail' in email
+    assert 'sanitizeEmailHtml' in email  # untrusted email HTML is sanitized
+    assert 'emailApi' in email
+    client_src = (ui / 'email' / 'emailClient.ts').read_text(encoding='utf-8')
+    assert '/v1/email/status' in client_src and '/v1/email/messages' in client_src
+    sani = (ui / 'email' / 'sanitizeEmailHtml.ts').read_text(encoding='utf-8')
+    assert 'ALLOWED_TAGS' in sani and 'javascript' in sani and 'allowRemoteImages' in sani
+
     panel = (ui / 'shell' / 'SettingsPanel.tsx').read_text(encoding='utf-8')
     assert 'IntegrationsPanel' in panel
+    assert 'AiProvidersPanel' in panel
+
+    # AI providers → familiar "Sign in with Ollabridge Cloud" flow: no manual
+    # token for normal setup, advanced collapsed, tokens never shown, auth and
+    # active status separate, sign-out confirmation.
+    aip = (ui / 'settings' / 'AiProvidersPanel.tsx').read_text(encoding='utf-8')
+    assert 'Sign in with Ollabridge Cloud' in aip
+    assert 'Advanced setup' in aip and 'Advanced connection details' in aip
+    assert 'Connecting to Ollabridge Cloud' in aip
+    assert "'connected'" in aip and "'expired'" in aip and "'failed'" in aip
+    assert 'Use Ollabridge Cloud' in aip and 'Use Local Gateway' in aip
+    assert 'Sign out of Ollabridge Cloud?' in aip and 'aria-live' in aip
+    assert 'maskKey' in aip  # keys are masked, never shown in full
     # The panel has an in-panel section nav so phones reach every section.
     assert 'dp-settings-panel__nav' in panel
     for sect in ('mail', 'sources', 'providers'):
