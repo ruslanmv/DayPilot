@@ -439,8 +439,9 @@ The [`docs/`](docs/) folder is the production knowledge base.
 | [`simulation/week_report.md`](docs/simulation/week_report.md) | Everyone | The end-to-end 5-day week simulation report (pairing, inference, governance). |
 | [`homepilot-family-brand-guide.md`](docs/homepilot-family-brand-guide.md) | Design & frontend | Token package, state language, breakpoints, do/don't. |
 | [`operations-runbook.md`](docs/operations-runbook.md) | Platform & on-call | Observability, SLO alerts, incident runbooks, backup/restore, release/rollback. |
-| [`architecture.md`](docs/architecture.md) | Engineers | Service boundaries and request flow. |
-| [`security.md`](docs/security.md) | Security & product | Policy-first defaults, high-risk actions, approvals, injection controls. |
+| [`architecture.md`](docs/architecture.md) | Engineers | Service boundaries, request flow, and the backend-owned model (identity, providers, mail, assistant). |
+| [`assistant-orchestrator.md`](docs/assistant-orchestrator.md) | Engineers & security | Backend assistant: `/v1/assistant` API, intents, tool risk classes, approval/job linkage, injection controls, limited mode. |
+| [`security.md`](docs/security.md) | Security & product | Policy-first defaults, high-risk actions, approvals, tool risk classes, secrets-by-reference, workspace isolation, injection controls. |
 | [`deployment.md`](docs/deployment.md) | DevOps | Desktop, local web, Docker, Kubernetes, Terraform, cloud gateway modes. |
 | [`email-integration.md`](docs/email-integration.md) | Integration | The optional Email module: architecture, Mailu backend, feature flag, API. |
 | [`email-non-destructive-policy.md`](docs/email-non-destructive-policy.md) | Product & security | The mailbox safety model (safe / risky / forbidden actions). |

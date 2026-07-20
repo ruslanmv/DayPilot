@@ -23,15 +23,22 @@ from .policy import EmailAction, _flag, check_action
 EVENT_APPROVAL_REQUESTED = "approval.requested"
 
 
-def account_status(adapter: MailboxAdapter) -> dict[str, Any]:
+def account_status(
+    adapter: MailboxAdapter,
+    email_address: str | None = None,
+    display_name: str | None = None,
+    provider: str | None = None,
+) -> dict[str, Any]:
     """Real connection status for the mailbox the gateway is configured with.
 
     When no account is configured the UI shows onboarding; it never infers a
     connection from local state. Capabilities are read from policy so the UI can
-    truthfully say whether DayPilot may read/send. No secrets are returned.
+    truthfully say whether DayPilot may read/send. No secrets are returned. The
+    connection's real email/provider (from the backend-owned MailboxConnection)
+    are preferred over environment fallbacks.
     """
-    provider = getattr(adapter, "provider", "mock")
-    email_address = os.getenv("EMAIL_USERNAME", os.getenv("IMAP_USERNAME", "")) or (
+    provider = provider or getattr(adapter, "provider", "mock")
+    email_address = email_address or os.getenv("EMAIL_USERNAME", os.getenv("IMAP_USERNAME", "")) or (
         "demo@local.mock" if provider == "mock" else ""
     )
     can_send = _flag("DAYPILOT_EMAIL_ALLOW_SEND", "true")
@@ -40,7 +47,7 @@ def account_status(adapter: MailboxAdapter) -> dict[str, Any]:
         "account": {
             "provider": provider,
             "emailAddress": email_address,
-            "displayName": os.getenv("EMAIL_DISPLAY_NAME") or None,
+            "displayName": display_name or os.getenv("EMAIL_DISPLAY_NAME") or None,
             "status": "connected",
             "capabilities": {
                 "read": True,

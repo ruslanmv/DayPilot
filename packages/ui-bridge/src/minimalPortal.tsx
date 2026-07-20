@@ -59,6 +59,10 @@ type SpaceBridgeShellProps = {
   compact?: boolean
   /** Optional Email tab. DayPilot works fully without it. */
   emailEnabled?: boolean
+  /** Sign out of the DayPilot workspace (separate from disconnecting an AI
+   *  provider). Provided by the auth gate; when absent, Sign out opens the
+   *  profile settings (local-first default). */
+  onSignOut?: () => void
 }
 
 const commandSummary = {
@@ -552,7 +556,7 @@ function DetailDrawer({ selected, documents, onClose }: { selected?: DrawerItem;
   )
 }
 
-export function SpaceBridgeShell({ compact = false, emailEnabled = false }: SpaceBridgeShellProps) {
+export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSignOut }: SpaceBridgeShellProps) {
   const isMobile = useIsMobile()
   // Apply the persisted theme (dark by default) so the shell is consistent even
   // when the host app didn't call initTheme() itself.
@@ -691,7 +695,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false }: Spac
         <SettingsMenu
           workspaceName="Product Lead"
           onOpenSection={(section) => setSettingsSection(section)}
-          onSignOut={() => setSettingsSection('profile')}
+          onSignOut={() => (onSignOut ? onSignOut() : setSettingsSection('profile'))}
         />
       </aside>
 

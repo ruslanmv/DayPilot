@@ -18,9 +18,29 @@ export type EmailAccount = {
   status: string; capabilities: EmailCapabilities
 }
 export type OnboardingProvider = { id: string; label: string; auth: string }
+export type MailboxConnection = {
+  id: string; provider: string; emailAddress: string; displayName?: string | null
+  imapHost?: string | null; imapPort: number; imapSecurity: string
+  smtpHost?: string | null; smtpPort: number; smtpSecurity: string
+  status: string; lastTestedAt?: string | null; lastErrorCode?: string | null
+}
 export type EmailStatus = {
   enabled: boolean; connected: boolean
   account: EmailAccount | null; providers?: OnboardingProvider[]
+  connection?: MailboxConnection | null
+}
+export type MailboxTestInput = {
+  provider: string; emailAddress?: string; displayName?: string | null
+  username?: string; password?: string
+  imapHost?: string; imapPort?: number; imapSecurity?: string
+  smtpHost?: string; smtpPort?: number; smtpSecurity?: string
+}
+export type MailboxProbeResult = {
+  code: string; checks?: Record<string, string>; degraded?: boolean
+  connection?: MailboxConnection | null
+}
+export type OAuthStartResult = {
+  available: boolean; reason?: string; fallback?: string; message?: string; provider?: string
 }
 export type EmailSummary = {
   id: string; externalId: string; subject: string; sender: string
@@ -47,6 +67,35 @@ export const emailApi = {
     '/v1/email/ai/revise', { uid, current, instruction, tone, workspaceId: ws() }),
   send: (draftUid: string, to: string[], subject: string, text: string, approved: boolean) => api.post<{ smtpStatus: string; sentUid?: string }>(
     '/v1/email/drafts/send', { draftUid, to, subject, text, workspaceId: ws(), approval: { confirmed_by_user: approved, visible_action_text: subject } }),
+
+  // --- mailbox setup wizard (Batch 3) ---------------------------------------
+  test: (input: MailboxTestInput) => api.post<MailboxProbeResult>(
+    '/v1/email/test', { ...input, workspaceId: ws() }),
+  connect: (input: MailboxTestInput) => api.post<MailboxProbeResult>(
+    '/v1/email/connect', { ...input, workspaceId: ws() }),
+  disconnect: () => api.post<{ disconnected: boolean; connection: MailboxConnection | null }>(
+    '/v1/email/disconnect', { workspaceId: ws() }),
+  reconnect: () => api.post<MailboxProbeResult>('/v1/email/reconnect', { workspaceId: ws() }),
+  oauthStart: (provider: string) => api.post<OAuthStartResult>(
+    `/v1/email/oauth/${encodeURIComponent(provider)}/start`, { workspaceId: ws() }),
+}
+
+/** Human-readable, honest explanation for a probe error code. */
+export function mailErrorMessage(code: string): string {
+  switch (code) {
+    case 'connected': return 'Connected.'
+    case 'missing_host': return 'Enter the IMAP server hostname.'
+    case 'missing_credentials': return 'Enter your email address and password.'
+    case 'dns_error': return "That server hostname couldn't be found. Check the IMAP/SMTP host."
+    case 'connection_refused': return 'The server refused the connection. Check the host and port.'
+    case 'timeout': return 'The server took too long to respond. Check the host, port, and network.'
+    case 'tls_error': return 'The secure connection failed. Try switching between SSL and STARTTLS.'
+    case 'imap_auth_failed': return 'IMAP sign-in was rejected. Check the username and password (or app password).'
+    case 'imap_select_failed': return 'Signed in, but the INBOX could not be opened.'
+    case 'smtp_auth_failed': return 'Sending sign-in was rejected. Reads work, but sending would fail.'
+    case 'smtp_error': return 'The outgoing (SMTP) server could not be reached. Reads work, but sending would fail.'
+    default: return 'The mailbox could not be verified. Check the settings and try again.'
+  }
 }
 
 /** Classify a backend folder name into a stable type for icon/semantics. */

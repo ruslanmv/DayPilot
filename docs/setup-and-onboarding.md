@@ -25,6 +25,27 @@ wizard. On phones the same wizard renders full-screen.
 
 > Reset onboarding for a demo: clear `daypilot.onboarded` from local storage.
 
+### Connecting a mailbox (backend-owned)
+
+The mailbox connection is owned by the backend, not inferred in the browser. The
+**shared Mail Setup Wizard** (Email onboarding **and** Settings → Mail) walks
+through *Provider → Auth → Test → Permissions → Save*:
+
+- **Provider** — Gmail, Microsoft 365, or generic IMAP/SMTP. Gmail/Microsoft use
+  OAuth where the deployment configured it, and honestly fall back to an app
+  password over IMAP/SMTP otherwise.
+- **Test** runs a real, **non-destructive** probe: it opens the INBOX read-only
+  and authenticates to SMTP without ever sending, reporting a specific result per
+  service (incoming/outgoing). A mailbox is only saved after the probe succeeds.
+- **Secrets** (password / OAuth token) are stored server-side by reference and
+  never shown in the app. Reconnect and Disconnect live in Settings → Mail;
+  disconnect removes DayPilot's access.
+
+DayPilot reads and drafts; it **never sends without your approval** and never
+deletes mail. The `MockMailAdapter` is confined to tests and explicit demo mode
+(`DAYPILOT_EMAIL_PROVIDER=mock`) — production shows a genuine connect-your-email
+state until a real mailbox is connected.
+
 ## 2. Create a project
 
 A small, essentials-only **project wizard** captures name, goal, stack,

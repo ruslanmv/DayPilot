@@ -4,8 +4,8 @@ import {
   heightPx, minutesOf, slotLabels, topPx,
 } from '../calendar/calendarData'
 import {
-  chatPlan, generatePlan, loadPlan, loadReadiness,
-  type PlannerBlock, type PlannerPlan, type PlannerQuality, type PlannerReadiness,
+  applyProposal, chatPlan, dailyReview, discardProposal, generatePlan, loadPlan, loadReadiness, syncPlan,
+  type PlanProposal, type PlannerBlock, type PlannerPlan, type PlannerQuality, type PlannerReadiness,
 } from '../plannerClient'
 
 /**
@@ -55,7 +55,10 @@ export function PlannerBoard({ onStartFocus }: { onStartFocus?: () => void }) {
 
   const refresh = useCallback(() => {
     setExp('loading')
-    Promise.all([loadReadiness(), loadPlan()]).then(([r, p]) => {
+    // The daily review runs first: it reconciles yesterday's statuses and
+    // auto-builds today's optimized plan when sources are ready, so opening
+    // Planning on a new day never requires pressing Generate.
+    dailyReview().then(() => Promise.all([loadReadiness(), loadPlan()])).then(([r, p]) => {
       setReadiness(r)
       if (p && p.blocks.length > 0) { setPlan(p); setExp('plan_ready') }
       else if (!r) setExp('failed')
@@ -154,9 +157,50 @@ function PlanReadyView({ plan, readiness, busy, onReplan, onChat, onStartFocus }
   const now = useNowMinute()
   const [selected, setSelected] = useState<string | null>(null)
   const [aiOpen, setAiOpen] = useState(true)
+  const [proposal, setProposal] = useState<PlanProposal | null>(null)
+  const [notice, setNotice] = useState('')
   const labels = useMemo(slotLabels, [])
   const scrollRef = useRef<HTMLDivElement>(null)
   const autoScrolled = useRef(false)
+  const liveRef = useRef<HTMLDivElement>(null)
+
+  // Smart sync: a pass on open and every 3 minutes. Minor status updates apply
+  // silently (the plan reloads); new work surfaces as a discardable proposal.
+  useEffect(() => {
+    let cancelled = false
+    const pass = () => {
+      syncPlan().then((res) => {
+        if (cancelled || !res) return
+        if (res.statusUpdates.length > 0) {
+          loadPlan().then((p) => { if (!cancelled && p) onChat(p) })
+          setNotice(res.statusUpdates[0])
+        }
+        if (res.proposal) {
+          setProposal(res.proposal)
+          if (liveRef.current) liveRef.current.textContent = 'DayPilot suggests a plan update. Review it above the timeline.'
+        }
+      })
+    }
+    pass()
+    const id = window.setInterval(pass, 180_000)
+    return () => { cancelled = true; window.clearInterval(id) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function acceptProposal() {
+    if (!proposal) return
+    const updated = await applyProposal(proposal)
+    setProposal(null)
+    if (updated) { onChat(updated); setNotice('Plan updated with the new work.') }
+    else setNotice('We couldn’t apply the update. Your plan is unchanged.')
+  }
+
+  async function dismissProposal() {
+    if (!proposal) return
+    await discardProposal(proposal)
+    setProposal(null)
+    setNotice('Dismissed — your current plan is kept.')
+  }
 
   const nowMin = now.getHours() * 60 + now.getMinutes()
   const inRange = nowMin >= DAY_START_MIN && nowMin <= DAY_END_MIN
@@ -206,6 +250,28 @@ function PlanReadyView({ plan, readiness, busy, onReplan, onChat, onStartFocus }
           <div className="dp-pl__explain">
             {quality.strengths.map((s) => <span key={s} className="dp-pl__explain-item is-ok">✓ {s}</span>)}
             {quality.warnings.map((w) => <span key={w} className="dp-pl__explain-item is-warn">△ {w}</span>)}
+          </div>
+        )}
+
+        {/* Plan-update notifications: proposals never change the plan silently,
+            and can be dismissed when the user is already on the new work. */}
+        <div ref={liveRef} aria-live="polite" className="dp-sr-live" />
+        {proposal && (
+          <div className="dp-pl__notice" role="alert">
+            <div className="dp-pl__notice-body">
+              <strong>Suggested plan update — {proposal.title}</strong>
+              <ul>{proposal.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+            </div>
+            <div className="dp-pl__notice-actions">
+              <button className="dp-pl__primary" onClick={acceptProposal}>Apply update</button>
+              <button className="dp-ghost-button" onClick={dismissProposal}>Dismiss — I’m already on it</button>
+            </div>
+          </div>
+        )}
+        {!proposal && notice && (
+          <div className="dp-pl__notice dp-pl__notice--quiet" role="status">
+            <span>{notice}</span>
+            <button className="dp-icon-button" aria-label="Dismiss notice" onClick={() => setNotice('')}>✕</button>
           </div>
         )}
 

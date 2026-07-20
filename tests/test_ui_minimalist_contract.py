@@ -66,6 +66,36 @@ def test_sidebar_nav_and_settings_menu_contract():
     assert 'AI Planning Assistant' in board and 'Why DayPilot scheduled this here' in board
     assert 'We couldn’t update your plan right now' in board  # friendly failure, no backend jargon
 
+    # Smart sync: daily review on open, periodic sync pass, and plan-update
+    # notifications with apply / "I'm already on it" discard — never silent.
+    assert 'dailyReview' in board and 'syncPlan' in board
+    assert 'Suggested plan update' in board
+    assert 'Apply update' in board and 'already on it' in board
+    pc = (ui / 'plannerClient.ts').read_text(encoding='utf-8')
+    assert '/sync' in pc and '/daily-review' in pc
+    assert 'discardProposal' in pc and 'applyProposal' in pc
+
+    # API client is content-type-safe: HTML never surfaces as a JSON parse crash.
+    ac = (ui / 'apiClient.ts').read_text(encoding='utf-8')
+    assert 'gateway_html_response' in ac and 'invalid_json' in ac
+    assert 'content-type' in ac.lower()
+
+    # Identity & login (Batch 1): a real logged-out entry — bootstrap + login,
+    # cookie sessions (no token in localStorage), identity separate from AI.
+    gate = (ui / 'auth' / 'AppGate.tsx').read_text(encoding='utf-8')
+    assert 'bootstrap_required' in gate and 'unauthenticated' in gate and 'authenticated' in gate
+    login = (ui / 'auth' / 'LoginPage.tsx').read_text(encoding='utf-8')
+    # Premium split-screen sign-in with a real first-run bootstrap mode.
+    assert 'Welcome back' in login and 'Create your workspace' in login
+    assert "mode === 'bootstrap'" in login or "mode==='bootstrap'" in login
+    assert 'cloud inference is never activated without your confirmation' in login.lower()
+    # Cloud + SSO only render when the backend reports them available.
+    assert 'cloudAvailable' in login and 'ssoAvailable' in login
+    authc = (ui / 'authClient.ts').read_text(encoding='utf-8')
+    assert '/v1/auth/config' in authc and '/v1/auth/local/login' in authc
+    assert "credentials: 'include'" in authc and 'X-CSRF-Token' in authc
+    assert 'localStorage.setItem' not in authc  # sessions are cookies, never stored
+
     # Clean product branding only: no "DayPilot Pro" / "Enterprise OS" / Ollabridge
     # environment labels in the main shell.
     assert 'dp-brand__word' in portal and '>DayPilot<' in portal
@@ -122,11 +152,18 @@ def test_sidebar_nav_and_settings_menu_contract():
     email = (ui / 'email' / 'EmailWorkspace.tsx').read_text(encoding='utf-8')
     assert 'ConnectedEmailWorkspace' in email and 'DemoEmailWorkspace' in email
     assert 'isDemoMode()' in email  # demo is opt-in; production connects to the API
-    assert 'Connect your email' in email and 'never paste your Gmail' in email
+    assert 'MailSetupWizard' in email  # onboarding uses the real setup wizard
     assert 'sanitizeEmailHtml' in email  # untrusted email HTML is sanitized
     assert 'emailApi' in email
+    # The shared mailbox setup wizard (Batch 3): real probe, honest states, no
+    # fabricated connection, and a clear non-destructive guarantee.
+    wiz = (ui / 'email' / 'MailSetupWizard.tsx').read_text(encoding='utf-8')
+    assert 'Connect your email' in wiz and 'Test connection' in wiz
+    assert 'never sends without your approval' in wiz
+    assert 'emailApi.test' in wiz and 'emailApi.connect' in wiz
     client_src = (ui / 'email' / 'emailClient.ts').read_text(encoding='utf-8')
     assert '/v1/email/status' in client_src and '/v1/email/messages' in client_src
+    assert '/v1/email/test' in client_src and '/v1/email/connect' in client_src
     sani = (ui / 'email' / 'sanitizeEmailHtml.ts').read_text(encoding='utf-8')
     assert 'ALLOWED_TAGS' in sani and 'javascript' in sani and 'allowRemoteImages' in sani
 
@@ -134,17 +171,18 @@ def test_sidebar_nav_and_settings_menu_contract():
     assert 'IntegrationsPanel' in panel
     assert 'AiProvidersPanel' in panel
 
-    # AI providers → familiar "Sign in with Ollabridge Cloud" flow: no manual
-    # token for normal setup, advanced collapsed, tokens never shown, auth and
-    # active status separate, sign-out confirmation.
+    # AI providers → backend-owned (Batch 2): state comes from /v1/providers,
+    # local is detected (not assumed), Cloud is authenticated server-side, and
+    # no key/token is ever stored client-side.
     aip = (ui / 'settings' / 'AiProvidersPanel.tsx').read_text(encoding='utf-8')
-    assert 'Sign in with Ollabridge Cloud' in aip
-    assert 'Advanced setup' in aip and 'Advanced connection details' in aip
-    assert 'Connecting to Ollabridge Cloud' in aip
-    assert "'connected'" in aip and "'expired'" in aip and "'failed'" in aip
+    assert 'providersApi' in aip and 'Sign in with email' in aip
+    assert 'Detect again' in aip and 'Not detected' in aip  # local not assumed connected
     assert 'Use Ollabridge Cloud' in aip and 'Use Local Gateway' in aip
     assert 'Sign out of Ollabridge Cloud?' in aip and 'aria-live' in aip
-    assert 'maskKey' in aip  # keys are masked, never shown in full
+    assert 'localStorage' not in aip  # provider state is server-owned, not stored
+    pcl = (ui / 'providersClient.ts').read_text(encoding='utf-8')
+    assert '/v1/providers/status' in pcl and '/v1/providers/local/test' in pcl
+    assert '/v1/providers/cloud/login' in pcl
     # The panel has an in-panel section nav so phones reach every section.
     assert 'dp-settings-panel__nav' in panel
     for sect in ('mail', 'sources', 'providers'):
@@ -166,15 +204,13 @@ def test_sidebar_nav_and_settings_menu_contract():
     assert 'isDemoMode' in demo and 'seedTasks' in demo
     assert 'dp-demo-badge' in portal and 'Demo mode' in portal
 
-    # The assistant is connected to the backend (intent routing), not a canned
-    # menu, and persistent chat sessions back the history UI.
+    # The assistant is a thin client over the backend orchestrator (Batch 4):
+    # the browser sends the message and renders the result; it no longer routes
+    # intents or calls planner/integration endpoints itself.
     assistant = (ui / 'assistant.ts').read_text(encoding='utf-8')
-    assert 'classifyIntent' in assistant and 'askAssistant' in assistant
-    assert "/v1/planner/plans/" in assistant and '/v1/providers/health' in assistant
-    # "Can you access my email?" must be answered truthfully from connection
-    # status, not guessed — the classifier and a specific access answer exist.
-    assert "can you access" in assistant and 'accessAnswer' in assistant
-    assert '/v1/integrations' in assistant
+    assert 'askAssistant' in assistant and "/v1/assistant/turn" in assistant
+    assert 'classifyIntent' not in assistant  # routing moved server-side
+    assert 'AssistantTurn' in assistant  # renders the orchestrator's typed result
     chat = (ui / 'chatSessions.ts').read_text(encoding='utf-8')
     assert '/v1/chat/sessions' in chat and 'appendMessage' in chat
     assert 'Conversation history' in home or 'New conversation' in home

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from daypilot_orchestrator.planner.revision import active_config, apply_config, review_planner
 from daypilot_orchestrator.planner.service import chat_with_plan, generate_plan, planner_readiness, read_plan
+from daypilot_orchestrator.planner.sync import apply_proposal, daily_review, discard_proposal, sync_plan
 
 from ..db import get_session
 
@@ -35,10 +36,53 @@ class ApplyBody(BaseModel):
     workspaceId: str = "default"
 
 
+class SyncBody(BaseModel):
+    workspaceId: str = "default"
+    now: str | None = None  # HH:MM override for tests; defaults to wall clock
+
+
+class ProposalApplyBody(BaseModel):
+    proposalId: str
+    instruction: str
+    workspaceId: str = "default"
+
+
+class ProposalDiscardBody(BaseModel):
+    proposalId: str
+    signature: str
+    reason: str = "user_already_working"
+    workspaceId: str = "default"
+
+
 @router.get("/plans/{plan_date}/readiness")
 def readiness(plan_date: str, workspaceId: str = "default", session: Session = Depends(get_session)) -> dict[str, Any]:
     """Real readiness/source counts driving the automatic Planning experience."""
     return planner_readiness(session, workspaceId, plan_date)
+
+
+@router.post("/plans/{plan_date}/sync")
+def sync(plan_date: str, body: SyncBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """One smart-sync pass: minor status updates applied, new work proposed."""
+    return sync_plan(session, body.workspaceId, plan_date, now=body.now)
+
+
+@router.post("/plans/{plan_date}/daily-review")
+def review_day(plan_date: str, body: SyncBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Start-of-day review: reconcile statuses; auto-build the plan when ready."""
+    return daily_review(session, body.workspaceId, plan_date, now=body.now)
+
+
+@router.post("/plans/{plan_date}/proposal/apply")
+def proposal_apply(plan_date: str, body: ProposalApplyBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    try:
+        return apply_proposal(session, body.workspaceId, plan_date, body.proposalId, body.instruction)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.post("/plans/{plan_date}/proposal/discard")
+def proposal_discard(plan_date: str, body: ProposalDiscardBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    return discard_proposal(session, body.workspaceId, plan_date, body.proposalId, body.signature, body.reason)
 
 
 @router.get("/plans/{plan_date}")

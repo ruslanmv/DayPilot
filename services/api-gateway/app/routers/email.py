@@ -12,8 +12,8 @@ from daypilot_orchestrator.email.policy import (
     EmailApprovalRequired,
     email_enabled,
 )
-from daypilot_orchestrator.email.providers.registry import get_adapter
 
+from .. import mail_setup
 from ..db import get_session
 
 router = APIRouter(prefix="/v1/email", tags=["email"])
@@ -22,6 +22,10 @@ router = APIRouter(prefix="/v1/email", tags=["email"])
 def _require_enabled() -> None:
     if not email_enabled():
         raise HTTPException(status_code=404, detail="Email feature is disabled")
+
+
+class WsBody(BaseModel):
+    workspaceId: str = "default"
 
 
 class DraftReplyBody(BaseModel):
@@ -60,49 +64,119 @@ class ReviseBody(BaseModel):
     workspaceId: str = "default"
 
 
-# Providers the onboarding screen can offer. gmail/microsoft ride OAuth; imap is
-# available only where the production infra is configured.
-_ONBOARDING_PROVIDERS = [
-    {"id": "microsoft", "label": "Microsoft 365", "auth": "oauth"},
-    {"id": "google", "label": "Gmail", "auth": "oauth"},
-    {"id": "imap", "label": "Other email provider (IMAP/SMTP)", "auth": "imap"},
-]
+class MailboxTestBody(BaseModel):
+    provider: str = "imap"
+    emailAddress: str = ""
+    displayName: str | None = None
+    username: str | None = None
+    password: str | None = None
+    imapHost: str | None = None
+    imapPort: int | None = None
+    imapSecurity: str | None = None
+    smtpHost: str | None = None
+    smtpPort: int | None = None
+    smtpSecurity: str | None = None
+    workspaceId: str = "default"
+
+
+def _demo_mail() -> bool:
+    import os
+    return os.getenv("DAYPILOT_EMAIL_PROVIDER", "").lower() == "mock"
 
 
 @router.get("/status")
-def status() -> dict[str, Any]:
-    """Real connection status. Always reachable (no 404 storm). When no account
-    is connected, returns the onboarding providers so the UI shows a genuine
-    connect-your-email state rather than fabricated data."""
+def status(session: Session = Depends(get_session), workspaceId: str = "default") -> dict[str, Any]:
+    """Real connection status. Always reachable (no 404 storm). Backed by the
+    workspace's MailboxConnection — when nothing is connected the UI shows a
+    genuine connect-your-email state rather than fabricated data."""
     if not email_enabled():
-        return {"enabled": False, "connected": False, "account": None, "providers": _ONBOARDING_PROVIDERS}
-    return {"enabled": True, **email_service.account_status(get_adapter())}
+        return {"enabled": False, "connected": False, "account": None, **mail_setup.mailbox_status(session, workspaceId)}
+    mb = mail_setup.mailbox_status(session, workspaceId)
+    if not mb["connected"] and not _demo_mail():
+        return {"enabled": True, "connected": False, "account": None,
+                "connection": mb["connection"], "providers": mb["providers"]}
+    adapter = mail_setup.adapter_for_workspace(session, workspaceId)
+    conn = mb["connection"] or {}
+    return {
+        "enabled": True,
+        "connection": mb["connection"],
+        **email_service.account_status(
+            adapter,
+            email_address=conn.get("emailAddress"),
+            display_name=conn.get("displayName"),
+            provider=conn.get("provider"),
+        ),
+    }
+
+
+# ---- mailbox setup wizard (Batch 3) -----------------------------------------
+
+@router.post("/test")
+def mailbox_test(body: MailboxTestBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Non-destructive IMAP/SMTP probe. Never sends, never marks read, never
+    persists credentials. Returns a specific error code on failure."""
+    _require_enabled()
+    return mail_setup.test_mailbox(session, body.workspaceId, body.model_dump())
+
+
+@router.post("/connect")
+def mailbox_connect(body: MailboxTestBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Probe and, only on success, persist the connection + store the secret by
+    reference. Draft-and-approve send enforcement is unchanged."""
+    _require_enabled()
+    return mail_setup.connect_mailbox(session, body.workspaceId, body.model_dump())
+
+
+@router.post("/disconnect")
+def mailbox_disconnect(body: WsBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    _require_enabled()
+    return mail_setup.disconnect(session, body.workspaceId)
+
+
+@router.post("/reconnect")
+def mailbox_reconnect(body: WsBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    _require_enabled()
+    return mail_setup.reconnect(session, body.workspaceId)
+
+
+@router.post("/oauth/{provider}/start")
+def mailbox_oauth_start(provider: str, body: WsBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Honest OAuth start: only available when the deployment configured client
+    credentials; otherwise it tells the UI to use IMAP/SMTP instead."""
+    _require_enabled()
+    return mail_setup.oauth_start(session, body.workspaceId, provider)
 
 
 @router.get("/messages/{uid}")
-def message(uid: str, folder: str = "INBOX") -> dict[str, Any]:
+def message(uid: str, folder: str = "INBOX", workspaceId: str = "default",
+            session: Session = Depends(get_session)) -> dict[str, Any]:
     """Fetch one real message/thread for the reading pane (read-only)."""
     _require_enabled()
-    return email_service.message_detail(get_adapter(), uid, folder=folder)
+    return email_service.message_detail(
+        mail_setup.adapter_for_workspace(session, workspaceId), uid, folder=folder
+    )
 
 
 @router.post("/ai/revise")
-def ai_revise(body: ReviseBody) -> dict[str, Any]:
+def ai_revise(body: ReviseBody, session: Session = Depends(get_session)) -> dict[str, Any]:
     """Revise the current real draft against an instruction (never sends)."""
     _require_enabled()
-    return email_service.revise_reply(get_adapter(), body.uid, body.current, body.instruction, body.tone)
+    return email_service.revise_reply(
+        mail_setup.adapter_for_workspace(session, body.workspaceId),
+        body.uid, body.current, body.instruction, body.tone,
+    )
 
 
 @router.get("/folders")
-def folders() -> dict[str, Any]:
+def folders(workspaceId: str = "default", session: Session = Depends(get_session)) -> dict[str, Any]:
     _require_enabled()
-    return {"folders": get_adapter().list_folders()}
+    return {"folders": mail_setup.adapter_for_workspace(session, workspaceId).list_folders()}
 
 
 @router.get("/messages")
 def messages(session: Session = Depends(get_session), workspaceId: str = "default", q: str | None = None) -> dict[str, Any]:
     _require_enabled()
-    items = email_service.sync_inbox(session, get_adapter(), workspaceId)
+    items = email_service.sync_inbox(session, mail_setup.adapter_for_workspace(session, workspaceId), workspaceId)
     if q:
         needle = q.lower()
         items = [i for i in items if needle in (i.get("subject", "") + " " + i.get("sender", "")).lower()]
@@ -113,7 +187,8 @@ def messages(session: Session = Depends(get_session), workspaceId: str = "defaul
 def draft_reply(uid: str, body: DraftReplyBody, session: Session = Depends(get_session)) -> dict[str, Any]:
     _require_enabled()
     return email_service.draft_reply(
-        session, get_adapter(), body.workspaceId, uid, body.tone, body.signature
+        session, mail_setup.adapter_for_workspace(session, body.workspaceId),
+        body.workspaceId, uid, body.tone, body.signature,
     )
 
 
@@ -123,7 +198,8 @@ def send(body: SendBody, session: Session = Depends(get_session)) -> dict[str, A
     _require_enabled()
     try:
         return email_service.send_draft(
-            session, get_adapter(), body.workspaceId, body.draftUid,
+            session, mail_setup.adapter_for_workspace(session, body.workspaceId),
+            body.workspaceId, body.draftUid,
             body.to, body.subject, body.text, approved=body.approval.confirmed_by_user,
         )
     except EmailApprovalRequired as exc:

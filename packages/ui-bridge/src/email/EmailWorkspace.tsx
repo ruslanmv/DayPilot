@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isDemoMode } from '../env'
 import { emailApi, folderType, type EmailAccount, type EmailDetail, type EmailStatus, type EmailSummary, type OnboardingProvider } from './emailClient'
+import { MailSetupWizard } from './MailSetupWizard'
 import { sanitizeEmailHtml, textToSafeHtml } from './sanitizeEmailHtml'
 import { EMAIL_FOLDERS, EMAIL_ITEMS, type MailMessage } from './emailMockData'
 
@@ -436,23 +437,7 @@ function EmailOnboarding({ providers, onRetry }: { providers: OnboardingProvider
   return (
     <div className="dp-mail dp-mail--state">
       <div className="dp-onbmail">
-        <h2 className="dp-onbmail__title">Connect your email</h2>
-        <p className="dp-onbmail__sub">Read, organize, and reply to email from DayPilot.</p>
-        <div className="dp-onbmail__providers">
-          {providers.map((p) => (
-            <button key={p.id} className={'dp-onbmail__btn' + (p.auth === 'oauth' ? ' dp-onbmail__btn--primary' : '')} type="button" onClick={onRetry}>
-              {p.id === 'microsoft' ? '◱ ' : p.id === 'google' ? '✉ ' : '⚙ '}{p.auth === 'oauth' ? `Connect ${p.label}` : p.label}
-            </button>
-          ))}
-        </div>
-        <div className="dp-onbmail__note">
-          <p><strong>What DayPilot can do</strong> after you connect: read your mail and draft replies. It never sends without your approval.</p>
-          <ul>
-            <li>Sign-in uses your provider’s secure OAuth — you never paste your Gmail or Microsoft password into DayPilot.</li>
-            <li>Credentials are stored encrypted server-side and are never shown in the app.</li>
-            <li>You can disconnect the account anytime in Settings → Mail, which removes DayPilot’s access.</li>
-          </ul>
-        </div>
+        <MailSetupWizard providers={providers} onConnected={onRetry} />
       </div>
     </div>
   )
