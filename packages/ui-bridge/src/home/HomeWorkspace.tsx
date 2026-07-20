@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { askAssistant, type AssistantAction } from '../assistant'
+import { useAssistantAvailability } from '../assistantAvailability'
 import {
   appendMessage,
   clearSession,
@@ -50,6 +51,7 @@ export function HomeWorkspace({ onStartFocus, onNavigate, onOpenPalette, onOpenP
   const [turns, setTurns] = useState<HomeTurn[]>(AI_SEED)
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
+  const { state: availability, retry: retryAvailability } = useAssistantAvailability()
   // Persistent conversation history (ChatGPT/Claude-style), off in demo mode.
   const persistent = !isDemoMode()
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -134,6 +136,8 @@ export function HomeWorkspace({ onStartFocus, onNavigate, onOpenPalette, onOpenP
   }
 
   function send(text: string) {
+    // Never let a message be sent to an unreachable backend (avoids the 404).
+    if (availability === 'down' || availability === 'checking') return
     const q = text.trim()
     if (!q) return
     setTurns((t) => [...t, { role: 'user', body: q, time: nowTime() }])
@@ -329,28 +333,48 @@ export function HomeWorkspace({ onStartFocus, onNavigate, onOpenPalette, onOpenP
             {thinking && <div className="dp-home-ai__turn dp-home-ai__turn--assistant"><div className="dp-home-ai__bubble dp-home-ai__bubble--loading">Thinking…</div></div>}
           </div>
 
-          <div className="dp-home-ai__suggest">
-            {HOME_SUGGESTIONS.map((s) => (
-              <button key={s.label} className="dp-home-ai__chip" onClick={() => send(s.label)}>
-                <span aria-hidden="true">{s.icon}</span> {s.label}
-              </button>
-            ))}
-          </div>
+          {availability === 'down' ? (
+            <div className="dp-ai-unavailable" role="status">
+              <strong>DayPilot service is unavailable</strong>
+              <p>Start or reconnect the DayPilot API to use the assistant.</p>
+              <code className="dp-code">make migrate &amp;&amp; make run</code>
+              <div className="dp-ai-unavailable__actions">
+                <button className="dp-home-ai__chip" onClick={retryAvailability}>↻ Retry</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {availability === 'limited' && (
+                <div className="dp-ai-limited" role="status">
+                  <span className="dp-ai-limited__badge">Limited mode</span>
+                  <span>No AI provider connected — answers use the built-in planner without an AI narrative. Connect one in Settings → AI providers.</span>
+                </div>
+              )}
+              <div className="dp-home-ai__suggest">
+                {HOME_SUGGESTIONS.map((s) => (
+                  <button key={s.label} className="dp-home-ai__chip" onClick={() => send(s.label)} disabled={availability === 'checking'}>
+                    <span aria-hidden="true">{s.icon}</span> {s.label}
+                  </button>
+                ))}
+              </div>
 
-          <form className="dp-home-ai__input" onSubmit={(e) => { e.preventDefault(); send(input) }}>
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
-              placeholder="Ask anything or give an instruction…"
-              aria-label="Ask anything or give an instruction"
-            />
-            <button className="dp-home-ai__send" type="submit" aria-label="Send" disabled={!input.trim()}>➤</button>
-          </form>
-          <div className="dp-home-ai__foot">
-            <span>AI responses may be incorrect.</span>
-            <span className="dp-home-ai__fb"><button className="dp-icon-button" aria-label="Good">👍</button><button className="dp-icon-button" aria-label="Bad">👎</button></span>
-          </div>
+              <form className="dp-home-ai__input" onSubmit={(e) => { e.preventDefault(); send(input) }}>
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
+                  placeholder={availability === 'checking' ? 'Connecting to DayPilot…' : 'Ask anything or give an instruction…'}
+                  aria-label="Ask anything or give an instruction"
+                  disabled={availability === 'checking'}
+                />
+                <button className="dp-home-ai__send" type="submit" aria-label="Send" disabled={!input.trim() || availability === 'checking'}>➤</button>
+              </form>
+              <div className="dp-home-ai__foot">
+                <span>AI responses may be incorrect.</span>
+                <span className="dp-home-ai__fb"><button className="dp-icon-button" aria-label="Good">👍</button><button className="dp-icon-button" aria-label="Bad">👎</button></span>
+              </div>
+            </>
+          )}
         </aside>
       )}
     </div>

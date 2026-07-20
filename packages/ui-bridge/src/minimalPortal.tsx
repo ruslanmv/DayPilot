@@ -3,8 +3,9 @@ import type { DayPilotAgent, DayPilotDocument, DayPilotDocumentSource, DayPilotM
 import { MinutePlanCalendar } from './calendar/MinutePlanCalendar'
 import { isDemoMode, seedAgents, seedDocumentSources, seedDocuments, seedMessages, seedProjects, seedTasks } from './demoData'
 import { askAssistant } from './assistant'
+import { useAssistantAvailability } from './assistantAvailability'
 import { initTheme } from './theme'
-import { SettingsMenu } from './shell/SettingsMenu'
+import { AccountMenu } from './shell/AccountMenu'
 import { SettingsPanel } from './shell/SettingsPanel'
 import { CommandPalette, type PaletteAction } from './shell/CommandPalette'
 import { FocusMode } from './shell/FocusMode'
@@ -63,6 +64,8 @@ type SpaceBridgeShellProps = {
    *  provider). Provided by the auth gate; when absent, Sign out opens the
    *  profile settings (local-first default). */
   onSignOut?: () => void
+  /** Signed-in identity from the auth gate; local-first fallbacks otherwise. */
+  user?: { displayName?: string | null; email?: string | null; role?: string | null } | null
 }
 
 const commandSummary = {
@@ -556,7 +559,7 @@ function DetailDrawer({ selected, documents, onClose }: { selected?: DrawerItem;
   )
 }
 
-export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSignOut }: SpaceBridgeShellProps) {
+export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSignOut, user }: SpaceBridgeShellProps) {
   const isMobile = useIsMobile()
   // Apply the persisted theme (dark by default) so the shell is consistent even
   // when the host app didn't call initTheme() itself.
@@ -689,12 +692,13 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
           ))}
         </nav>
         <div className="dp-rail-spacer" />
-        <nav className="dp-nav dp-nav--secondary" aria-label="Settings">
-          <NavButton active={false} icon="settings" onClick={() => setSettingsSection('profile')}>Settings</NavButton>
-        </nav>
-        <SettingsMenu
-          workspaceName="Product Lead"
-          onOpenSection={(section) => setSettingsSection(section)}
+        <AccountMenu
+          user={{
+            name: user?.displayName || 'Ruslan M.',
+            email: user?.email || 'ruslan@daypilot.local',
+            role: user?.role || 'Product Lead',
+          }}
+          onOpenSettings={() => setSettingsSection('profile')}
           onSignOut={() => (onSignOut ? onSignOut() : setSettingsSection('profile'))}
         />
       </aside>
@@ -1015,6 +1019,7 @@ function MobileAI({ seed, onClose, onNavigate }: {
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
   const [atBottom, setAtBottom] = useState(true)
+  const { state: availability, retry: retryAvailability } = useAssistantAvailability()
   const logRef = useRef<HTMLDivElement>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
   const seededRef = useRef(false)
@@ -1033,6 +1038,7 @@ function MobileAI({ seed, onClose, onNavigate }: {
   const send = React.useCallback((text: string) => {
     const q = text.trim()
     if (!q) return
+    if (availability === 'down' || availability === 'checking') return
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     const rtime = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     setTurns((t) => [...t, { role: 'user', body: q, time }])
@@ -1054,7 +1060,7 @@ function MobileAI({ seed, onClose, onNavigate }: {
       })
       .catch(() => setTurns((t) => [...t, { role: 'assistant', body: "I couldn't reach the backend just now. Please try again.", time: rtime() }]))
       .finally(() => setThinking(false))
-  }, [onNavigate])
+  }, [onNavigate, availability])
 
   // Seed the composer from a tapped "recent conversation" suggestion.
   useEffect(() => {
@@ -1115,28 +1121,48 @@ function MobileAI({ seed, onClose, onNavigate }: {
       )}
 
       <div className="dp-m__aifoot-wrap">
-        <div className="dp-m__chips">
-          {HOME_SUGGESTIONS.map((s) => (
-            <button key={s.label} className="dp-m__chip" onClick={() => send(s.label)}>
-              <span aria-hidden="true">{s.icon}</span> {s.label}
-            </button>
-          ))}
-        </div>
-        <form className="dp-m__composer" onSubmit={(e) => { e.preventDefault(); send(input) }}>
-          <button type="button" className="dp-m__attach" aria-label="Attach">+</button>
-          <textarea
-            ref={taRef}
-            className="dp-m__ta"
-            value={input}
-            rows={1}
-            onChange={(e) => { setInput(e.target.value); grow() }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
-            placeholder="Ask anything or give an instruction…"
-            aria-label="Ask anything or give an instruction"
-          />
-          <button type="submit" className="dp-m__sendbtn" aria-label="Send" disabled={!input.trim()}>➤</button>
-        </form>
-        <div className="dp-m__aidisc">AI responses may be incorrect.</div>
+        {availability === 'down' ? (
+          <div className="dp-ai-unavailable" role="status">
+            <strong>DayPilot service is unavailable</strong>
+            <p>Start or reconnect the DayPilot API to use the assistant.</p>
+            <code className="dp-code">make migrate &amp;&amp; make run</code>
+            <div className="dp-ai-unavailable__actions">
+              <button className="dp-m__chip" onClick={retryAvailability}>↻ Retry</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {availability === 'limited' && (
+              <div className="dp-ai-limited" role="status">
+                <span className="dp-ai-limited__badge">Limited mode</span>
+                <span>No AI provider connected — connect one in Settings → AI providers.</span>
+              </div>
+            )}
+            <div className="dp-m__chips">
+              {HOME_SUGGESTIONS.map((s) => (
+                <button key={s.label} className="dp-m__chip" onClick={() => send(s.label)} disabled={availability === 'checking'}>
+                  <span aria-hidden="true">{s.icon}</span> {s.label}
+                </button>
+              ))}
+            </div>
+            <form className="dp-m__composer" onSubmit={(e) => { e.preventDefault(); send(input) }}>
+              <button type="button" className="dp-m__attach" aria-label="Attach">+</button>
+              <textarea
+                ref={taRef}
+                className="dp-m__ta"
+                value={input}
+                rows={1}
+                onChange={(e) => { setInput(e.target.value); grow() }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) } }}
+                placeholder={availability === 'checking' ? 'Connecting to DayPilot…' : 'Ask anything or give an instruction…'}
+                aria-label="Ask anything or give an instruction"
+                disabled={availability === 'checking'}
+              />
+              <button type="submit" className="dp-m__sendbtn" aria-label="Send" disabled={!input.trim() || availability === 'checking'}>➤</button>
+            </form>
+            <div className="dp-m__aidisc">AI responses may be incorrect.</div>
+          </>
+        )}
       </div>
     </div>
   )

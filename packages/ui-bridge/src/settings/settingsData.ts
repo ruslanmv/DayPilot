@@ -15,26 +15,9 @@ export type SettingsSectionId =
   | 'permissions'
   | 'shortcuts'
 
-export type SettingsMenuItem = {
-  id: SettingsSectionId | 'signout'
-  label: string
-  icon: string
-  hint?: string
-  danger?: boolean
-}
-
-/** ChatGPT-style drop-up menu, top to bottom. Sign out is separated + danger. */
-export const SETTINGS_MENU: SettingsMenuItem[] = [
-  { id: 'profile', label: 'Profile & workspace', icon: '◐', hint: 'Identity, workspace, sign-in' },
-  { id: 'integrations', label: 'Integrations', icon: '⚯', hint: 'GitPilot, Matrix Designer, Email, Box, HomePilot' },
-  { id: 'providers', label: 'AI providers', icon: '⚡', hint: 'Ollabridge pairing, routing & model health' },
-  { id: 'mail', label: 'Mail settings', icon: '✉', hint: 'IMAP / SMTP mailbox & send policy' },
-  { id: 'sources', label: 'Knowledge sources', icon: '▤', hint: 'Folders & Box for RAG over projects' },
-  { id: 'appearance', label: 'Appearance', icon: '◑', hint: 'HomePilot Family theme & density' },
-  { id: 'permissions', label: 'Permissions & approvals', icon: '✋', hint: 'Approval policy & risk gates' },
-  { id: 'shortcuts', label: 'Keyboard shortcuts', icon: '⌘', hint: 'Command palette & navigation' },
-  { id: 'signout', label: 'Sign out', icon: '⏻', danger: true },
-]
+// NOTE: The account dropdown is intentionally minimal (profile, Settings, Sign
+// out — see shell/AccountMenu.tsx). All sections below are reachable only via
+// the full Settings modal's own navigation, never duplicated in a menu.
 
 export type IntegrationRow = {
   name: string

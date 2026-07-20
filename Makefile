@@ -82,15 +82,23 @@ install-js: ## Install workspace JavaScript dependencies with pnpm.
 	$(PNPM) install
 
 run: ## Run the full app locally: API gateway + web UI (Ctrl+C stops both).
-	@echo ""
-	@echo "  Starting DayPilot — API gateway + web UI"
-	@echo "  Web UI:      http://localhost:$(WEB_PORT)"
-	@echo "  API gateway: http://localhost:$(API_PORT)  (a free port is picked if taken)"
-	@echo "  Press Ctrl+C to stop both."
-	@echo ""
-	@trap 'kill 0' INT TERM EXIT; \
-	$(MAKE) --no-print-directory run-api & \
-	$(MAKE) --no-print-directory serve & \
+	@port=$$($(UV) run python scripts/find_free_port.py $(API_PORT) $(API_HOST)); \
+	if [ "$$port" != "$(API_PORT)" ]; then \
+	  echo "Port $(API_PORT) is busy; using free port $$port for the API gateway."; \
+	fi; \
+	echo ""; \
+	echo "  Starting DayPilot — API gateway + web UI"; \
+	echo "  Web UI:      http://localhost:$(WEB_PORT)"; \
+	echo "  API gateway: http://localhost:$$port"; \
+	echo "  Web proxy /api → http://localhost:$$port"; \
+	echo "  Press Ctrl+C to stop both."; \
+	echo ""; \
+	trap 'kill 0' INT TERM EXIT; \
+	PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
+	  $(UV) run uvicorn app.main:app --app-dir services/api-gateway \
+	  --host $(API_HOST) --port $$port --reload & \
+	DAYPILOT_API_TARGET="http://localhost:$$port" \
+	  $(PNPM) --filter @daypilot/operator-web dev -- --host $(WEB_HOST) --port $(WEB_PORT) & \
 	wait
 
 run-api: ## Run the FastAPI API gateway with hot reload on an available port.

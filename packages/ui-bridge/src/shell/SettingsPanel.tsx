@@ -3,6 +3,7 @@ import { STATE_LANGUAGE } from '@daypilot/homepilot-theme'
 import { IntegrationsPanel } from '../integrations/IntegrationsPanel'
 import { AiProvidersPanel } from '../settings/AiProvidersPanel'
 import { MailSettingsPanel } from '../settings/MailSettingsPanel'
+import { resetSetup } from '../onboarding/setupState'
 import { getTheme, setTheme, type ThemeMode } from '../theme'
 import {
   KNOWLEDGE_SOURCES,
@@ -32,7 +33,8 @@ const SECTION_TITLES: Record<SettingsSectionId, string> = {
   shortcuts: 'Keyboard shortcuts',
 }
 
-// Order shown in the in-panel navigation rail (mirrors the drop-up menu).
+// Order shown in the in-panel navigation rail — the ONLY place these sections
+// are listed; the account dropdown never duplicates them.
 const SECTION_ORDER: SettingsSectionId[] = [
   'profile', 'integrations', 'providers', 'mail', 'sources', 'appearance', 'permissions', 'shortcuts',
 ]
@@ -101,7 +103,7 @@ function AppearanceSection() {
   )
 }
 
-function SectionBody({ section }: { section: SettingsSectionId }) {
+function SectionBody({ section, onClose }: { section: SettingsSectionId; onClose: () => void }) {
   if (section === 'integrations') {
     return <IntegrationsPanel />
   }
@@ -197,14 +199,21 @@ function SectionBody({ section }: { section: SettingsSectionId }) {
         <span>AI provider</span>
         <span className="dp-tag dp-tag--healthy">{OLLABRIDGE_PAIRING.modes.find((m) => m.id === OLLABRIDGE_PAIRING.activeMode)?.label}</span>
       </div>
+      <p className="dp-muted">Setup</p>
+      <div className="dp-settings-row">
+        <p>Re-run the first-run setup wizard to reconnect your AI provider, mailbox, and knowledge sources.</p>
+        <div className="dp-settings-actions">
+          <button className="dp-ghost-button" type="button" onClick={() => { resetSetup(); onClose() }}>Restart setup</button>
+        </div>
+      </div>
     </div>
   )
 }
 
 /**
- * Modal settings surface. A left navigation rail switches between every section
- * (so phones — which have no drop-up menu — can still reach mail, providers,
- * and knowledge sources). Escape closes; focus moves to the dialog on open.
+ * Modal settings surface — the single home for every advanced section. A left
+ * navigation rail (chip row on phones) switches between sections; the account
+ * dropdown only links here. Escape closes; focus moves to the dialog on open.
  */
 export function SettingsPanel({ section, onClose }: SettingsPanelProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -252,7 +261,7 @@ export function SettingsPanel({ section, onClose }: SettingsPanelProps) {
           </nav>
           <div className="dp-settings-panel__body">
             <h4 className="dp-settings-panel__section-title">{SECTION_TITLES[active]}</h4>
-            <SectionBody section={active} />
+            <SectionBody section={active} onClose={onClose} />
           </div>
         </div>
       </div>

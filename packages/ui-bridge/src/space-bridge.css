@@ -1215,8 +1215,10 @@
 
 .dp-rail-spacer { flex: 1 1 auto; }
 
-/* --- Bottom-left settings trigger + drop-up menu (ChatGPT pattern) --- */
-.dp-settings-menu { position: relative; margin-top: auto; }
+/* --- Bottom-left account card + compact profile popover (ChatGPT pattern).
+   The popover holds ONLY profile identity, Settings, and Sign out — it is not
+   a second settings navigation. --- */
+.dp-account { position: relative; margin-top: auto; }
 
 .dp-settings-trigger {
   display: flex;
@@ -1254,46 +1256,51 @@
 .dp-settings-trigger__workspace { font-size: var(--hp-text-2xs); color: var(--hp-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dp-settings-trigger__chevron { color: var(--hp-text-muted); font-size: var(--hp-text-sm); }
 
-.dp-settings-dropup {
+.dp-account-popover {
   position: absolute;
-  bottom: calc(100% + 0.5rem);
   left: 0;
-  right: 0;
-  margin: 0;
-  padding: var(--hp-space-1);
-  list-style: none;
-  background: var(--hp-surface-glass);
-  backdrop-filter: blur(var(--hp-blur-md));
+  bottom: calc(100% + 8px);
+  width: 260px;
+  padding: 6px;
+  background: var(--hp-surface-elevated);
   border: 1px solid var(--hp-border-strong);
-  border-radius: var(--hp-radius-md);
+  border-radius: 12px;
   box-shadow: var(--hp-shadow-lg);
-  z-index: 60;
+  z-index: 100;
   animation: dpFadeIn var(--hp-motion-base) var(--hp-ease-entrance);
 }
-
-.dp-settings-item {
+.dp-account-popover__profile {
   display: flex;
   align-items: center;
-  gap: var(--hp-space-3);
+  gap: 10px;
+  padding: 8px 10px;
+}
+.dp-account-popover__who { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.dp-account-popover__who strong { font-size: var(--hp-text-sm); font-weight: var(--hp-weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dp-account-popover__who span { font-size: var(--hp-text-2xs); color: var(--hp-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dp-account-popover__divider { height: 1px; margin: 4px 2px; background: var(--hp-border); }
+.dp-account-popover__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  padding: var(--hp-space-2) var(--hp-space-3);
+  min-height: 44px;
+  padding: 0 10px;
   background: transparent;
   border: 0;
-  border-radius: var(--hp-radius-sm);
+  border-radius: 8px;
   color: var(--hp-text);
+  font: inherit;
+  font-size: var(--hp-text-sm);
   cursor: pointer;
   text-align: left;
 }
-.dp-settings-item:hover,
-.dp-settings-item:focus-visible { background: var(--hp-surface-elevated); outline: none; }
-.dp-settings-item:focus-visible { box-shadow: inset 0 0 0 1px var(--hp-focus-ring); }
-.dp-settings-item__icon { width: 1.2rem; text-align: center; color: var(--hp-text-muted); }
-.dp-settings-item__body { display: flex; flex-direction: column; min-width: 0; }
-.dp-settings-item__label { font-size: var(--hp-text-sm); }
-.dp-settings-item__hint { font-size: var(--hp-text-2xs); color: var(--hp-text-muted); }
-.dp-settings-item--sep { margin-top: var(--hp-space-1); border-top: 1px solid var(--hp-border); border-radius: 0 0 var(--hp-radius-sm) var(--hp-radius-sm); }
-.dp-settings-item--danger .dp-settings-item__label,
-.dp-settings-item--danger .dp-settings-item__icon { color: var(--hp-accent-red); }
+.dp-account-popover__item svg { width: 17px; height: 17px; flex: 0 0 auto; color: var(--hp-text-muted); }
+.dp-account-popover__item:hover,
+.dp-account-popover__item:focus-visible { background: var(--hp-surface); outline: none; }
+.dp-account-popover__item:focus-visible { box-shadow: inset 0 0 0 1px var(--hp-focus-ring); }
+.dp-account-popover__item--signout,
+.dp-account-popover__item--signout svg { color: var(--hp-accent-red); }
 
 /* --- Modal backdrop shared by settings panel and palette --- */
 .dp-modal-backdrop {
@@ -1451,13 +1458,13 @@
 @keyframes dpFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .dp-settings-dropup, .dp-modal-backdrop, .dp-palette { animation: none; }
+  .dp-account-popover, .dp-modal-backdrop, .dp-palette { animation: none; }
 }
 
 /* Compact (tablet/phone): rail is a top bar, so the settings menu opens
    downward instead of up, and the trigger collapses to the avatar. */
-.dp-shell--compact .dp-settings-menu { margin-top: 0; }
-.dp-shell--compact .dp-settings-dropup { bottom: auto; top: calc(100% + 0.5rem); left: auto; right: 0; min-width: 15rem; }
+.dp-shell--compact .dp-account { margin-top: 0; }
+.dp-shell--compact .dp-account-popover { bottom: auto; top: calc(100% + 8px); left: auto; right: 0; }
 .dp-shell--compact .dp-settings-trigger__text { display: none; }
 
 /* --- Focus Mode overlay (batch B4) --- */
@@ -1700,7 +1707,6 @@
 .dp-mobile__tab.is-active { color: var(--hp-text); box-shadow: inset 0 2px 0 var(--hp-accent-blue); }
 
 /* --- Home workspace: calm three-region layout (nav in shell) --------------- */
-.dp-nav--secondary { margin-bottom: 8px; }
 .dp-home { flex: 1 1 auto; height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 400px); background: var(--background); color: var(--text-primary); transition: grid-template-columns 220ms ease; }
 .dp-home--ai-collapsed { grid-template-columns: minmax(0, 1fr); }
 .dp-home__main { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border); }
@@ -2553,3 +2559,11 @@
 :root[data-theme="light"] .dp-auth__adv-toggle:hover { background: rgba(15,23,42,.04); color: #1e293b; }
 :root[data-theme="light"] .dp-auth__note { color: #64748b; }
 :root[data-theme="light"] .dp-auth__sso { color: #33415c; }
+
+/* Assistant availability gating (health check before chat is enabled). */
+.dp-ai-unavailable { margin: 8px 12px 12px; padding: 14px; border: 1px solid var(--dp-border-strong, rgba(255,255,255,0.14)); border-radius: 12px; background: var(--dp-surface, #111625); display: flex; flex-direction: column; gap: 8px; }
+.dp-ai-unavailable strong { font-size: 0.92rem; color: var(--dp-text); }
+.dp-ai-unavailable p { margin: 0; color: var(--dp-text-muted); font-size: 0.82rem; line-height: 1.5; }
+.dp-ai-unavailable__actions { display: flex; gap: 8px; margin-top: 2px; }
+.dp-ai-limited { display: flex; align-items: flex-start; gap: 8px; margin: 6px 12px 0; padding: 8px 10px; border: 1px solid rgba(230,162,60,0.28); border-radius: 10px; background: rgba(230,162,60,0.08); color: var(--dp-text-dim); font-size: 0.78rem; line-height: 1.45; }
+.dp-ai-limited__badge { flex: 0 0 auto; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--dp-orange, #e6a23c); border: 1px solid rgba(230,162,60,0.4); border-radius: 999px; padding: 1px 8px; }
