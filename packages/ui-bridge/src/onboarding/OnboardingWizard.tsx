@@ -1,10 +1,16 @@
-import React, { useState } from 'react'
-import { api } from '../apiClient'
+import React, { useEffect, useState } from 'react'
 import { OLLABRIDGE_PAIRING } from '../settings/settingsData'
+import { providersApi, localErrorText } from '../providersClient'
+import {
+  completeSetup,
+  dismissSetup,
+  isAiReady,
+  isSetupComplete,
+  onSetupReset,
+  patchSetup,
+} from './setupState'
 
-const STORAGE_KEY = 'daypilot.onboarded'
 const PROFILE_KEY = 'daypilot.profile'
-const AI_READY_KEY = 'daypilot.ai_ready'
 
 export type OnboardingProfile = {
   name: string
@@ -14,71 +20,78 @@ export type OnboardingProfile = {
   source: string
   aiProvider: 'local' | 'cloud'
   aiBaseUrl: string
+  aiApiKey: string
+  cloudEmail: string
+  cloudPassword: string
   aiReady: boolean
 }
 
 const EMPTY: OnboardingProfile = {
   name: '', email: '', mailbox: '', sourceKind: 'folder', source: '',
-  aiProvider: 'local', aiBaseUrl: OLLABRIDGE_PAIRING.modes[0].endpoint, aiReady: false,
+  aiProvider: 'local', aiBaseUrl: OLLABRIDGE_PAIRING.modes[0].endpoint, aiApiKey: '',
+  cloudEmail: '', cloudPassword: '', aiReady: false,
 }
 
-function alreadyOnboarded(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
+/** Back-compat: setup completion is now an explicit state (see setupState). */
 export function hasOnboarded(): boolean {
-  return alreadyOnboarded()
+  return isSetupComplete()
 }
-
-/** Whether an AI provider was verified during onboarding. AI features should
- *  present themselves as "ready" only when this is true; otherwise the app runs
- *  in a limited (no-AI) mode until a provider is connected in Settings. */
-export function isAiReady(): boolean {
-  try {
-    return localStorage.getItem(AI_READY_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
+export { isAiReady }
 
 type TestState = 'idle' | 'testing' | 'ok' | 'fail'
 
 /**
  * A minimalist first-run wizard, in the spirit of ChatGPT/Claude onboarding.
  * The first step is **AI provider setup** because DayPilot's value is its AI —
- * we never claim AI features are ready until a provider is connected. Ollabridge
- * runs locally by default (no cloud login); Ollabridge Cloud is optional. A
- * "Test connection" button verifies the provider against the gateway before the
- * user can mark AI as ready. The provider step can be deferred into a clearly
- * labelled limited mode, but not silently skipped. Everything else lives in
- * Settings. Renders nothing once completed.
+ * we never claim AI features are ready until a provider is really connected via
+ * the backend (`/v1/providers/local/connect` or `/cloud/login`), not a generic
+ * health probe. Local Ollabridge needs no login; Ollabridge Cloud takes an
+ * email + password. The provider step can be deferred into a clearly labelled
+ * limited mode, but skipping never marks setup complete — only the final
+ * "Enter DayPilot" does. Renders nothing once setup is completed.
  */
 export function OnboardingWizard({ onFinish }: { onFinish?: (profile: OnboardingProfile | null) => void }) {
-  const [open, setOpen] = useState(() => !alreadyOnboarded())
+  const [open, setOpen] = useState(() => !isSetupComplete())
   const [step, setStep] = useState(0)
   const [p, setP] = useState<OnboardingProfile>(EMPTY)
   const [test, setTest] = useState<TestState>('idle')
   const [testMsg, setTestMsg] = useState('')
+
+  // Reopen when setup is reset from Settings → Profile & workspace.
+  useEffect(() => onSetupReset(() => { setStep(0); setP(EMPTY); setTest('idle'); setTestMsg(''); setOpen(true) }), [])
 
   if (!open) return null
 
   const steps = ['AI provider', 'You', 'Mailbox', 'Knowledge']
   const last = step === steps.length - 1
 
-  function close(profile: OnboardingProfile | null) {
+  function persistProfile(profile: OnboardingProfile) {
     try {
-      localStorage.setItem(STORAGE_KEY, 'true')
-      localStorage.setItem(AI_READY_KEY, profile?.aiReady ? 'true' : 'false')
-      if (profile) localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...profile, aiBaseUrl: profile.aiBaseUrl }))
-    } catch {
-      /* ignore storage failures */
-    }
+      localStorage.setItem(PROFILE_KEY, JSON.stringify({
+        name: profile.name, email: profile.email, mailbox: profile.mailbox,
+        sourceKind: profile.sourceKind, source: profile.source,
+        aiProvider: profile.aiProvider, aiBaseUrl: profile.aiBaseUrl,
+      }))
+    } catch { /* ignore */ }
+  }
+
+  /** "Skip for now" — records in-progress + dismissed, never completed. */
+  function skip() {
+    dismissSetup({ provider: p.aiReady })
+    persistProfile(p)
     setOpen(false)
-    onFinish?.(profile)
+    onFinish?.(p)
+  }
+
+  /** The final, explicit finish — the only action that completes setup. */
+  function finish() {
+    completeSetup(
+      { provider: p.aiReady, profile: Boolean(p.name || p.email), mailbox: Boolean(p.mailbox), knowledge: Boolean(p.source) },
+      p.aiReady,
+    )
+    persistProfile(p)
+    setOpen(false)
+    onFinish?.(p)
   }
 
   const set = (patch: Partial<OnboardingProfile>) => setP((prev) => ({ ...prev, ...patch }))
@@ -90,18 +103,31 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
     setTestMsg('')
   }
 
+  /** Really connect the provider via the backend — not a generic health probe. */
   async function testConnection() {
     setTest('testing')
-    setTestMsg('Contacting the AI provider…')
-    const res = await api.get<{ status?: string; latencyMs?: number; models?: string[] }>('/v1/providers/health')
-    if (res.ok && (res.data.status === 'healthy' || res.data.status === 'ok' || res.data.status === 'degraded')) {
-      setTest('ok')
-      setTestMsg(`Connected — provider ${res.data.status}${res.data.latencyMs ? ` (~${res.data.latencyMs}ms)` : ''}.`)
-      set({ aiReady: true })
+    if (p.aiProvider === 'cloud') {
+      setTestMsg('Signing in to Ollabridge Cloud…')
+      const res = await providersApi.cloudLogin(p.cloudEmail.trim(), p.cloudPassword)
+      if (res.ok && res.data.code === 'connected') {
+        await providersApi.setActive('ollabridge_cloud')
+        set({ aiReady: true }); patchSetup({ aiReady: true, completedSteps: { ...defaultSteps(), provider: true } })
+        setTest('ok'); setTestMsg('Ollabridge Cloud is connected and active.')
+      } else {
+        set({ aiReady: false })
+        setTest('fail'); setTestMsg(localErrorText(res.ok ? res.data.code : res.error))
+      }
+      return
+    }
+    setTestMsg('Connecting to Ollabridge…')
+    const res = await providersApi.localConnect(p.aiBaseUrl.trim(), p.aiApiKey.trim() || undefined)
+    if (res.ok && res.data.code === 'connected') {
+      await providersApi.setActive('local')
+      set({ aiReady: true }); patchSetup({ aiReady: true, completedSteps: { ...defaultSteps(), provider: true } })
+      setTest('ok'); setTestMsg('Local Ollabridge is connected and active.')
     } else {
-      setTest('fail')
-      setTestMsg(res.ok ? `Provider reachable but not ready (${res.data.status ?? 'unknown'}).` : `Couldn't reach the provider (${res.error}).`)
       set({ aiReady: false })
+      setTest('fail'); setTestMsg(localErrorText(res.ok ? res.data.code : res.error))
     }
   }
 
@@ -116,7 +142,7 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
             </svg>
             <span className="dp-brand__word">DayPilot</span>
           </div>
-          {step > 0 && <button className="dp-onb__skip" onClick={() => close(p)}>Skip for now</button>}
+          {step > 0 && <button className="dp-onb__skip" onClick={skip}>Skip for now</button>}
         </header>
 
         <div className="dp-onb__steps" aria-hidden="true">
@@ -133,16 +159,34 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
               <button className={'dp-onb__segbtn' + (p.aiProvider === 'local' ? ' is-active' : '')} onClick={() => pickMode('local')}>💻 Ollabridge (local)</button>
               <button className={'dp-onb__segbtn' + (p.aiProvider === 'cloud' ? ' is-active' : '')} onClick={() => pickMode('cloud')}>☁ Ollabridge Cloud</button>
             </div>
-            <label className="dp-onb__field">
-              <span>Provider URL</span>
-              <input value={p.aiBaseUrl} onChange={(e) => { set({ aiBaseUrl: e.target.value, aiReady: false }); setTest('idle') }} placeholder="http://localhost:11435/v1" />
-            </label>
-            {p.aiProvider === 'cloud' && (
-              <p className="dp-onb__hint">Ollabridge Cloud is optional. Add your API key or device code in Settings → AI providers; the local gateway needs no login.</p>
+            {p.aiProvider === 'local' ? (
+              <>
+                <label className="dp-onb__field">
+                  <span>Provider URL</span>
+                  <input value={p.aiBaseUrl} onChange={(e) => { set({ aiBaseUrl: e.target.value, aiReady: false }); setTest('idle') }} placeholder="http://localhost:11435/v1" />
+                </label>
+                <label className="dp-onb__field">
+                  <span>API key (optional)</span>
+                  <input type="password" value={p.aiApiKey} onChange={(e) => { set({ aiApiKey: e.target.value, aiReady: false }); setTest('idle') }} placeholder="Leave blank for a local gateway" />
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="dp-onb__field">
+                  <span>Cloud account email</span>
+                  <input type="email" value={p.cloudEmail} onChange={(e) => { set({ cloudEmail: e.target.value, aiReady: false }); setTest('idle') }} placeholder="you@company.com" />
+                </label>
+                <label className="dp-onb__field">
+                  <span>Password</span>
+                  <input type="password" value={p.cloudPassword} onChange={(e) => { set({ cloudPassword: e.target.value, aiReady: false }); setTest('idle') }} placeholder="Your Ollabridge Cloud password" />
+                </label>
+                <p className="dp-onb__hint">Sign-in happens on the DayPilot server; your password is never stored. Cloud inference is used only when you make Cloud the active provider.</p>
+              </>
             )}
             <div className="dp-onb__testrow">
-              <button className="dp-onb__test" onClick={testConnection} disabled={test === 'testing'}>
-                {test === 'testing' ? 'Testing…' : 'Test connection'}
+              <button className="dp-onb__test" onClick={testConnection}
+                disabled={test === 'testing' || (p.aiProvider === 'cloud' ? !p.cloudEmail || !p.cloudPassword : !p.aiBaseUrl)}>
+                {test === 'testing' ? 'Connecting…' : 'Test connection'}
               </button>
               {test !== 'idle' && (
                 <span className={'dp-onb__teststatus dp-onb__teststatus--' + test} role="status">
@@ -151,7 +195,7 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
               )}
             </div>
             {test !== 'ok' && (
-              <p className="dp-onb__hint">Until a provider is verified, DayPilot runs in <strong>limited mode</strong> — planning and chat that need AI stay disabled.</p>
+              <p className="dp-onb__hint">Until a provider is verified, DayPilot runs in <strong>limited mode</strong> — planning and chat still work with the built-in planner, without an AI narrative.</p>
             )}
           </div>
         )}
@@ -207,7 +251,7 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
               <button className="dp-onb__next" onClick={() => setStep(1)} disabled={!p.aiReady}>Continue</button>
             </div>
           ) : last ? (
-            <button className="dp-onb__next" onClick={() => close(p)}>Finish setup</button>
+            <button className="dp-onb__next" onClick={finish}>Enter DayPilot</button>
           ) : (
             <button className="dp-onb__next" onClick={() => setStep(step + 1)}>Continue</button>
           )}
@@ -215,6 +259,10 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
       </div>
     </div>
   )
+}
+
+function defaultSteps() {
+  return { provider: false, profile: false, mailbox: false, knowledge: false }
 }
 
 function prev(current: string, fallback: string): string {

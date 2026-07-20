@@ -41,7 +41,11 @@ def test_sidebar_nav_and_settings_menu_contract():
     ui = ROOT / 'packages' / 'ui-bridge' / 'src'
     portal = (ui / 'minimalPortal.tsx').read_text(encoding='utf-8')
     # First-class views only; the old text stub must be gone. Command is now Home.
-    assert 'SettingsMenu' in portal
+    assert 'AccountMenu' in portal
+    # No standalone Settings item in the sidebar — Settings is reachable only
+    # through the account dropdown (and the command palette / mobile drawer).
+    assert 'dp-nav--secondary' not in portal
+    assert '>Settings</NavButton>' not in portal
     assert 'CommandPalette' in portal
     assert 'HomeWorkspace' in portal
     assert 'More: Inbox' not in portal
@@ -119,17 +123,27 @@ def test_sidebar_nav_and_settings_menu_contract():
     assert 'Recent AI conversations' in portal  # drawer combines nav + AI history
     assert 'Jump to latest' in portal or 'Latest' in portal  # chat scroll affordance
 
-    menu = (ui / 'shell' / 'SettingsMenu.tsx').read_text(encoding='utf-8')
-    # ChatGPT-style drop-up with menu semantics and keyboard support.
+    menu = (ui / 'shell' / 'AccountMenu.tsx').read_text(encoding='utf-8')
+    # Compact ChatGPT/Claude-style profile popover with menu semantics and
+    # keyboard support: only profile identity, Settings, and Sign out.
     assert 'role="menu"' in menu
     assert 'aria-haspopup="menu"' in menu
     assert 'Escape' in menu and 'ArrowDown' in menu
+    assert menu.count('role="menuitem"') == 2
+    assert 'Sign out' in menu and 'Settings' in menu
+    # It must NOT duplicate the Settings modal's navigation.
+    for forbidden in ('Appearance', 'Keyboard shortcuts', 'Integrations', 'AI providers',
+                      'Mail settings', 'Knowledge sources', 'Permissions'):
+        assert forbidden not in menu
 
-    settings = (ui / 'settings' / 'settingsData.ts').read_text(encoding='utf-8')
+    # Every advanced section lives (only) in the full Settings modal's rail.
+    panel = (ui / 'shell' / 'SettingsPanel.tsx').read_text(encoding='utf-8')
     for label in ('Profile & workspace', 'Integrations', 'AI providers', 'Mail settings',
                   'Knowledge sources', 'Appearance', 'Permissions & approvals',
-                  'Keyboard shortcuts', 'Sign out'):
-        assert label in settings
+                  'Keyboard shortcuts'):
+        assert label in panel
+
+    settings = (ui / 'settings' / 'settingsData.ts').read_text(encoding='utf-8')
 
     # Ollabridge pairing, IMAP/SMTP mail, and folder/Box RAG sources are all
     # configurable in Settings and bind to real backend config.
@@ -192,10 +206,19 @@ def test_sidebar_nav_and_settings_menu_contract():
     # source) and a small project-creation wizard exist and are wired in.
     onb = (ui / 'onboarding' / 'OnboardingWizard.tsx').read_text(encoding='utf-8')
     assert 'Connect your mailbox' in onb and 'Add a knowledge source' in onb
-    assert 'Skip for now' in onb and 'daypilot.onboarded' in onb
-    # First-run onboarding requires AI-provider setup before AI is "ready".
+    assert 'Skip for now' in onb
+    # First-run onboarding requires AI-provider setup before AI is "ready", and
+    # really connects the provider (backend localConnect/cloudLogin), not a
+    # generic health probe.
     assert 'Connect your AI' in onb and 'Test connection' in onb
-    assert 'limited mode' in onb and 'daypilot.ai_ready' in onb
+    assert 'providersApi.localConnect' in onb and 'setActive' in onb
+    assert '/v1/providers/health' not in onb  # no fake "ready" from a health probe
+    # Setup completion is an explicit state machine, not a broad boolean, so
+    # "Skip for now" can never permanently hide the wizard.
+    setup = (ui / 'onboarding' / 'setupState.ts').read_text(encoding='utf-8')
+    assert 'not_started' in setup and 'in_progress' in setup and 'completed' in setup
+    assert 'dismissSetup' in setup and 'completeSetup' in setup and 'resetSetup' in setup
+    assert 'daypilot.onboarded' in setup  # legacy flag migrated, not written on skip
 
     # Clean-data default: demo/sample content is opt-in behind a flag with a
     # visible badge; the shell no longer imports demo data directly.

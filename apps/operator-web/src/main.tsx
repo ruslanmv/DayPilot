@@ -15,7 +15,7 @@ const emailEnabled = import.meta.env.VITE_DAYPILOT_EMAIL_ENABLED !== 'false'
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AppGate>
-      {(_user, onSignOut) => <SpaceBridgeShell emailEnabled={emailEnabled} onSignOut={onSignOut} />}
+      {(user, onSignOut) => <SpaceBridgeShell emailEnabled={emailEnabled} onSignOut={onSignOut} user={user} />}
     </AppGate>
   </React.StrictMode>,
 )
