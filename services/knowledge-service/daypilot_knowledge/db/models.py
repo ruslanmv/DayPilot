@@ -54,6 +54,12 @@ class User(TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(50), default="operator")
+    # Local-account auth (batch: identity & login). Nullable so external-only
+    # identities need no local password. The hash is a self-describing scrypt
+    # string; the plaintext password is never stored.
+    password_hash: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active | disabled
+    mfa_state: Mapped[str] = mapped_column(String(20), default="none")  # none | totp | passkey
 
     calendars: Mapped[list[CalendarAccount]] = relationship(back_populates="user")
     inboxes: Mapped[list[InboxAccount]] = relationship(back_populates="user")
@@ -407,6 +413,188 @@ class ChatMessage(Base):
     session: Mapped[ChatSession] = relationship(back_populates="messages")
 
     __table_args__ = (Index("ix_chat_messages_session_seq", "session_id", "seq"),)
+
+
+class MailboxConnection(TimestampMixin, Base):
+    """A workspace's real mailbox connection (Gmail/Microsoft OAuth or generic
+    IMAP/SMTP). The backend owns mail connection state; the UI never infers a
+    mailbox from local state. Passwords/OAuth tokens live in the credential
+    store by `secret_reference` and are never stored here, returned, or logged."""
+
+    __tablename__ = "mailbox_connections"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    provider: Mapped[str] = mapped_column(String(30))  # gmail | microsoft | imap | mailu
+    email_address: Mapped[str] = mapped_column(String(320), default="")
+    display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    imap_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    imap_port: Mapped[int] = mapped_column(Integer, default=993)
+    imap_security: Mapped[str] = mapped_column(String(10), default="ssl")  # ssl | starttls
+    smtp_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    smtp_port: Mapped[int] = mapped_column(Integer, default=587)
+    smtp_security: Mapped[str] = mapped_column(String(10), default="starttls")
+    status: Mapped[str] = mapped_column(String(20), default="unconfigured")
+    secret_reference: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    oauth_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    __table_args__ = (Index("ix_mailbox_ws", "workspace_id", unique=True),)
+
+
+class AssistantRun(TimestampMixin, Base):
+    """One assistant turn, orchestrated server-side (Batch 4).
+
+    The backend owns intent routing and capability dispatch — the browser sends
+    a message and renders the result. Every run records the classified intent,
+    the tools invoked with their risk class, the deterministic reply/action, and
+    whether the run was in limited mode (no AI provider connected). Runs are the
+    audit trail for what the assistant did on the user's behalf; it never sends
+    email or calls a provider directly, and every write stays approval-gated."""
+
+    __tablename__ = "assistant_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    session_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    message: Mapped[str] = mapped_column(Text, default="")
+    intent: Mapped[str] = mapped_column(String(40), default="unknown")
+    state: Mapped[str] = mapped_column(String(20), default="running")  # running|succeeded|failed|cancelled
+    reply: Mapped[str] = mapped_column(Text, default="")
+    action_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    tools_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    limited: Mapped[bool] = mapped_column(Boolean, default=False)
+    provider: Mapped[str] = mapped_column(String(40), default="deterministic")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (Index("ix_assistant_runs_ws_created", "workspace_id", "created_at"),)
+
+
+class AssistantRunEvent(Base):
+    """An ordered event emitted during an assistant run (intent classified, tool
+    invoked, completed). `seq` orders events within the run."""
+
+    __tablename__ = "assistant_run_events"
+
+    seq: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True
+    )
+    run_id: Mapped[str] = mapped_column(String(36), index=True)
+    type: Mapped[str] = mapped_column(String(40))
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+    __table_args__ = (Index("ix_assistant_run_events_run_seq", "run_id", "seq"),)
+
+
+class ProviderConnection(TimestampMixin, Base):
+    """A workspace's AI-provider connection (local Ollabridge or Ollabridge
+    Cloud). The backend owns provider state — the browser never determines it.
+    Only safe metadata lives here; keys/tokens are held by the credential store,
+    referenced by `secret_reference`, and never returned or logged."""
+
+    __tablename__ = "provider_connections"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    kind: Mapped[str] = mapped_column(String(30))  # local | ollabridge_cloud
+    base_url: Mapped[str] = mapped_column(String(500), default="")
+    state: Mapped[str] = mapped_column(String(20), default="unconfigured")
+    active: Mapped[bool] = mapped_column(Boolean, default=False)
+    account_subject: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    account_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    account_display_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    default_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    models_count: Mapped[int] = mapped_column(Integer, default=0)
+    secret_reference: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_error_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    __table_args__ = (Index("ix_provider_ws_kind", "workspace_id", "kind", unique=True),)
+
+
+class Workspace(TimestampMixin, Base):
+    """A tenant boundary. Every data row is workspace-scoped; membership decides
+    who may act in it. The default single-user install has one workspace."""
+
+    __tablename__ = "workspaces"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    name: Mapped[str] = mapped_column(String(200), default="My workspace")
+    mode: Mapped[str] = mapped_column(String(20), default="local")  # local | team
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class WorkspaceMembership(Base):
+    """Grants a user a role within a workspace. Authorization is derived from
+    this — arbitrary browser-supplied workspace ids are never trusted."""
+
+    __tablename__ = "workspace_memberships"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    role: Mapped[str] = mapped_column(String(20), default="owner")  # owner | operator | reviewer | read_only
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
+
+    __table_args__ = (Index("ix_membership_user_ws", "user_id", "workspace_id", unique=True),)
+
+
+class AuthSession(Base):
+    """A server-side session. Only the SHA-256 of the opaque session token is
+    stored (`id_hash`); the token itself lives in an HttpOnly cookie and is
+    never persisted or logged. Revocable and expiring."""
+
+    __tablename__ = "auth_sessions"
+
+    id_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36))
+    csrf_token: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ExternalIdentity(Base):
+    """A federated identity (e.g. Ollabridge Cloud, enterprise OIDC) linked to a
+    local user. Secrets live in the secret store by reference, never here."""
+
+    __tablename__ = "external_identities"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    issuer: Mapped[str] = mapped_column(String(120))
+    subject: Mapped[str] = mapped_column(String(200))
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    secret_reference: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
+
+    __table_args__ = (Index("ix_extid_issuer_subject", "issuer", "subject", unique=True),)
+
+
+class AuthEvent(Base):
+    """Append-only auth audit trail (login success/failure, logout, bootstrap).
+    Drives rate limiting/backoff. No passwords or tokens are recorded."""
+
+    __tablename__ = "auth_events"
+
+    seq: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True
+    )
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
+    event: Mapped[str] = mapped_column(String(40))
+    outcome: Mapped[str] = mapped_column(String(20))  # success | failure | locked
+    meta_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
+
+    __table_args__ = (Index("ix_authevent_email_created", "email", "created_at"),)
 
 
 class Job(TimestampMixin, Base):

@@ -23,14 +23,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
         ...(init?.headers || {}),
       },
     })
-    if (!res.ok) {
-      return { ok: false, error: `HTTP ${res.status}`, status: res.status }
-    }
+    const contentType = res.headers.get('content-type') || ''
+    const isJson = contentType.includes('application/json')
     const text = await res.text()
-    const data = text ? (JSON.parse(text) as T) : (undefined as unknown as T)
-    return { ok: true, data }
+
+    // A misrouted request (e.g. the dev server answering instead of the API)
+    // returns HTML — surface a structured error, never a raw JSON parse crash
+    // and never the returned HTML itself.
+    if (!isJson && /^\s*</.test(text)) {
+      return { ok: false, error: 'gateway_html_response', status: res.status }
+    }
+    if (!res.ok) {
+      // Prefer FastAPI's `detail` field when present.
+      let detail = `HTTP ${res.status}`
+      if (isJson && text) {
+        try {
+          const body = JSON.parse(text) as { detail?: unknown }
+          if (typeof body.detail === 'string') detail = body.detail
+        } catch { /* keep the status text */ }
+      }
+      return { ok: false, error: detail, status: res.status }
+    }
+    if (!text) return { ok: true, data: undefined as unknown as T }
+    try {
+      return { ok: true, data: JSON.parse(text) as T }
+    } catch {
+      return { ok: false, error: 'invalid_json', status: res.status }
+    }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : 'network error' }
+    return { ok: false, error: err instanceof Error ? err.message : 'network_error' }
   }
 }
 

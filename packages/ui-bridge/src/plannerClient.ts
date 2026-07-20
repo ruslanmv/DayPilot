@@ -76,6 +76,59 @@ export async function generatePlan(date = isoToday(), instruction?: string): Pro
   return res.ok ? res.data : null
 }
 
+export type PlanProposal = {
+  id: string
+  title: string
+  tier: 'medium' | 'major'
+  reasons: string[]
+  signature: string
+  instruction: string
+}
+
+export type PlanSyncResult = {
+  planDate: string
+  hasPlan: boolean
+  tier: 'none' | 'minor' | 'medium' | 'major'
+  statusUpdates: string[]
+  proposal: PlanProposal | null
+}
+
+export type DailyReviewResult = PlanSyncResult & {
+  regenerated: boolean
+  blocks: number
+  done: number
+  missed: number
+}
+
+/** One smart-sync pass: minor status updates are applied server-side; new work
+ *  comes back as a proposal the user can apply or discard. */
+export async function syncPlan(date = isoToday()): Promise<PlanSyncResult | null> {
+  const res = await api.post<PlanSyncResult>(`/v1/planner/plans/${date}/sync`, { workspaceId: workspaceId() })
+  return res.ok ? res.data : null
+}
+
+/** Start-of-day review: reconciles statuses and auto-builds the plan when
+ *  sources are ready, so each day opens optimized without manual setup. */
+export async function dailyReview(date = isoToday()): Promise<DailyReviewResult | null> {
+  const res = await api.post<DailyReviewResult>(`/v1/planner/plans/${date}/daily-review`, { workspaceId: workspaceId() })
+  return res.ok ? res.data : null
+}
+
+export async function applyProposal(p: PlanProposal, date = isoToday()): Promise<PlannerPlan | null> {
+  const res = await api.post<PlannerPlan>(`/v1/planner/plans/${date}/proposal/apply`, {
+    workspaceId: workspaceId(), proposalId: p.id, instruction: p.instruction,
+  })
+  return res.ok ? res.data : null
+}
+
+/** "I'm already on it": keep the plan untouched and silence this suggestion. */
+export async function discardProposal(p: PlanProposal, date = isoToday()): Promise<boolean> {
+  const res = await api.post(`/v1/planner/plans/${date}/proposal/discard`, {
+    workspaceId: workspaceId(), proposalId: p.id, signature: p.signature, reason: 'user_already_working',
+  })
+  return res.ok
+}
+
 export async function chatPlan(message: string, date = isoToday()): Promise<PlannerChatResult | null> {
   const res = await api.post<PlannerChatResult>(`/v1/planner/plans/${date}/chat`, {
     workspaceId: workspaceId(), message,

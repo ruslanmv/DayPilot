@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { STATE_LANGUAGE } from '@daypilot/homepilot-theme'
 import { IntegrationsPanel } from '../integrations/IntegrationsPanel'
 import { AiProvidersPanel } from '../settings/AiProvidersPanel'
+import { MailSettingsPanel } from '../settings/MailSettingsPanel'
 import { getTheme, setTheme, type ThemeMode } from '../theme'
 import {
   KNOWLEDGE_SOURCES,
@@ -108,22 +109,7 @@ function SectionBody({ section }: { section: SettingsSectionId }) {
     return <AiProvidersPanel />
   }
   if (section === 'mail') {
-    return (
-      <div className="dp-settings-list">
-        <div className="dp-settings-row">
-          <div className="dp-settings-row__head">
-            <StateDot tone="connected" />
-            <strong>{MAIL_SETTINGS.provider}</strong>
-            <ConnBadge status={MAIL_SETTINGS.status} />
-          </div>
-          <p>{MAIL_SETTINGS.detail}</p>
-          <FieldRows fields={MAIL_SETTINGS.fields} />
-          <div className="dp-settings-actions">
-            <button className="dp-ghost-button" type="button">Test connection</button>
-          </div>
-        </div>
-      </div>
-    )
+    return <MailSettingsPanel />
   }
   if (section === 'sources') {
     return (

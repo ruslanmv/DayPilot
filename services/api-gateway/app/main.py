@@ -13,6 +13,8 @@ except Exception:  # pragma: no cover - import path differs during early scaffol
 from .routers import (
     agents,
     approvals,
+    assistant,
+    auth_identity,
     calendar,
     catalog,
     chat,
@@ -59,6 +61,8 @@ for _router in (
     catalog.router,
     planner.router,
     chat.router,
+    auth_identity.router,
+    assistant.router,
 ):
     app.include_router(_router)
 
