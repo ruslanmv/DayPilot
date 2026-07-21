@@ -30,6 +30,19 @@ def test_vite_proxy_reads_api_target_env() -> None:
     assert "DAYPILOT_API_TARGET" in vite and "'/api'" in vite
 
 
+def test_make_run_applies_migrations_before_starting() -> None:
+    mk = (REPO / "Makefile").read_text(encoding="utf-8")
+    run_block = mk.split("run:", 1)[1].split("\nrun-api:", 1)[0]
+    assert "alembic upgrade head" in run_block  # no more "no such table" on first run
+
+
+def test_make_has_setup_and_start_targets() -> None:
+    mk = (REPO / "Makefile").read_text(encoding="utf-8")
+    assert "\nsetup:" in mk and "install migrate" in mk  # one-command setup
+    start_block = mk.split("\nstart:", 1)[1].split("\n\n", 1)[0]
+    assert "operator-web build" in start_block and "uvicorn app.main:app" in start_block
+
+
 def test_assistant_composer_is_health_gated() -> None:
     avail = (UI / "assistantAvailability.ts").read_text(encoding="utf-8")
     assert "'/health'" in avail and "/v1/providers/status" in avail

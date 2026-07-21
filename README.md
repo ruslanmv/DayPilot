@@ -330,29 +330,50 @@ DayPilot uses a [uv](https://github.com/astral-sh/uv)-managed Python environment
 ```bash
 git clone https://github.com/ruslanmv/DayPilot.git
 cd DayPilot
-cp .env.example .env
 
-make install        # uv sync --group dev + pnpm install
-make test           # Python tests + workspace tests
+make setup          # install everything + create the database (one command)
+make run            # start DayPilot → open http://localhost:5173
 ```
 
-### Run locally
+That's it. `make setup` installs the Python (uv) and JavaScript (pnpm)
+dependencies and creates the local SQLite database; `make run` starts the API
+gateway and web UI together and prints the URLs. On first launch a **setup
+wizard** walks you through connecting your AI provider (Ollabridge local by
+default), and optionally your mailbox and a knowledge source. Copying
+`.env.example` to `.env` is optional — sensible defaults are built in.
+
+The database schema is applied **automatically** on startup, so a fresh clone
+never fails with a "no such table" error. The gateway also picks a free port if
+the requested one is taken and hands it to the web proxy, so there is no port
+mismatch to configure.
+
+### Run locally (development)
 
 ```bash
-make run            # full app: API gateway (:8080) + web UI (:5173), Ctrl+C stops both
+make run            # full app: API gateway + web UI (:5173), Ctrl+C stops both
 make serve          # frontend / dev web UI only  (make run-web is a compatible alias)
 make run-api        # API gateway only (auto-selects a free port if 8080 is busy)
 make run-mobile     # mobile PWA
 make run PORT=9000  # start the API on a different port
 ```
 
-`make run` starts the backend **and** the web UI together. The gateway picks a
-free port automatically if the requested one is taken, and prints the URLs.
+### Production (single process, one port)
+
+```bash
+make start          # build the web UI + serve everything from the gateway
+make start PORT=8080
+```
+
+`make start` builds the SPA and serves it **and** the API from one Uvicorn
+process on a single port — no second server or reverse proxy required. The
+browser's same-origin `/api/*` calls are routed to the API automatically. Set
+`DAYPILOT_AUTO_MIGRATE=0` if your deployment applies migrations as a separate,
+gated release step.
 
 Health check:
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8080/health     # {"ok": true, "service": "daypilot-api-gateway", ...}
 ```
 
 ### Clean data vs. demo mode
