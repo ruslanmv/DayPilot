@@ -34,11 +34,23 @@ from .routers import (
     tasks,
 )
 
+from contextlib import asynccontextmanager
+
+from .db_bootstrap import ensure_schema
 from .observability import install_observability
 
 REQUESTS = Counter("daypilot_api_gateway_requests_total", "Gateway requests", ["route"])
 
-app = FastAPI(title="DayPilot API Gateway", version="0.3.0")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # Auto-apply migrations on startup so a fresh install never hits
+    # 'no such table'. Opt out with DAYPILOT_AUTO_MIGRATE=0.
+    ensure_schema()
+    yield
+
+
+app = FastAPI(title="DayPilot API Gateway", version="0.3.0", lifespan=_lifespan)
 install_observability(app)
 
 for _router in (
@@ -125,3 +137,11 @@ def list_personas() -> dict:
 @app.get("/metrics")
 def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# Single-origin production serving: strip `/api` and serve the built SPA when a
+# web build is present. Added last so every API route is registered first and
+# always wins over the static mount. No-op for the dev flow and tests.
+from .webserve import mount_web  # noqa: E402
+
+mount_web(app)

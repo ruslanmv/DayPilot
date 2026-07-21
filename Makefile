@@ -25,6 +25,7 @@ define HELP_TEXT
 DayPilot Enterprise commands
 
   Setup
+    setup                First-time setup: install deps + create the database
     install              Install Python + JavaScript dependencies
     install-python       Sync the UV-managed Python environment (dev tools)
     install-python-all   Sync Python with all optional extras (RAG, models, obs)
@@ -32,6 +33,7 @@ DayPilot Enterprise commands
 
   Run
     run                  Run the full app locally (API gateway + web UI)
+    start                Production: build the web UI + serve all from one port
     run-api              Run the FastAPI API gateway (hot reload, auto free port)
     serve                Serve the frontend / dev web UI
     run-web              Alias for `serve` (backwards compatible)
@@ -58,9 +60,9 @@ DayPilot Enterprise commands
     clean                Remove local caches and virtual environments
 
 Examples:
-  make install
-  make run                  # backend + frontend together
-  make serve                # frontend only
+  make setup                # one-command first-time setup
+  make run                  # backend + frontend together (dev)
+  make start                # production: one process, one port
   make run PORT=9000        # start the API on a different port
   make test
 
@@ -69,6 +71,12 @@ export HELP_TEXT
 
 help: ## Show available make targets.
 	@printf '%s\n' "$$HELP_TEXT"
+
+setup: install migrate ## One-command first-time setup: install deps + create the database.
+	@echo ""
+	@echo "  ✓ DayPilot is set up. Start it with:  make run"
+	@echo "    Then open http://localhost:$(WEB_PORT) and follow the setup wizard."
+	@echo ""
 
 install: install-python install-js ## Install Python and JavaScript dependencies for local development.
 
@@ -82,7 +90,9 @@ install-js: ## Install workspace JavaScript dependencies with pnpm.
 	$(PNPM) install
 
 run: ## Run the full app locally: API gateway + web UI (Ctrl+C stops both).
-	@port=$$($(UV) run python scripts/find_free_port.py $(API_PORT) $(API_HOST)); \
+	@echo "Applying database migrations…"; \
+	$(UV) run alembic upgrade head || echo "  (migrations will also auto-apply on API startup)"; \
+	port=$$($(UV) run python scripts/find_free_port.py $(API_PORT) $(API_HOST)); \
 	if [ "$$port" != "$(API_PORT)" ]; then \
 	  echo "Port $(API_PORT) is busy; using free port $$port for the API gateway."; \
 	fi; \
@@ -102,7 +112,8 @@ run: ## Run the full app locally: API gateway + web UI (Ctrl+C stops both).
 	wait
 
 run-api: ## Run the FastAPI API gateway with hot reload on an available port.
-	@port=$$($(UV) run python scripts/find_free_port.py $(API_PORT) $(API_HOST)); \
+	@$(UV) run alembic upgrade head || echo "  (migrations will also auto-apply on API startup)"; \
+	port=$$($(UV) run python scripts/find_free_port.py $(API_PORT) $(API_HOST)); \
 	if [ "$$port" != "$(API_PORT)" ]; then \
 	  echo "Port $(API_PORT) is busy; using free port $$port for the API gateway."; \
 	fi; \
@@ -113,6 +124,19 @@ run-api: ## Run the FastAPI API gateway with hot reload on an available port.
 
 serve: ## Serve the frontend / dev web UI.
 	$(PNPM) --filter @daypilot/operator-web dev -- --host $(WEB_HOST) --port $(WEB_PORT)
+
+start: ## Production: build the web UI and serve everything from one process/port.
+	@echo "Building the web UI…"; \
+	$(PNPM) --filter @daypilot/operator-web build; \
+	echo "Applying database migrations…"; \
+	$(UV) run alembic upgrade head || echo "  (migrations will also auto-apply on startup)"; \
+	echo ""; \
+	echo "  DayPilot (single origin): http://localhost:$(PORT)"; \
+	echo "  Press Ctrl+C to stop."; \
+	echo ""; \
+	PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
+	  $(UV) run uvicorn app.main:app --app-dir services/api-gateway \
+	  --host $(API_HOST) --port $(PORT)
 
 run-web: serve ## Alias for `serve` (backwards compatible).
 
