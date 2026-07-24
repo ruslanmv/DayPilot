@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { OLLABRIDGE_PAIRING } from '../settings/settingsData'
-import { providersApi, localErrorText } from '../providersClient'
+import {
+  providersApi,
+  localErrorText,
+  cloudErrorText,
+  CLOUD_WEB_LOGIN_URL,
+  CLOUD_WEB_REGISTER_URL,
+} from '../providersClient'
 import {
   completeSetup,
   dismissSetup,
@@ -63,6 +69,19 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
   const [p, setP] = useState<OnboardingProfile>(EMPTY)
   const [test, setTest] = useState<TestState>('idle')
   const [testMsg, setTestMsg] = useState('')
+  // Web-app deep links for OllaBridge Cloud (Google/SSO, reset, create account).
+  // Resolved from the backend (which knows the real deployment) with a default.
+  const [cloudLoginUrl, setCloudLoginUrl] = useState(CLOUD_WEB_LOGIN_URL)
+  const [cloudRegisterUrl, setCloudRegisterUrl] = useState(CLOUD_WEB_REGISTER_URL)
+
+  useEffect(() => {
+    providersApi.status().then((r) => {
+      if (r.ok) {
+        if (r.data.cloudLoginUrl) setCloudLoginUrl(r.data.cloudLoginUrl)
+        if (r.data.cloudRegisterUrl) setCloudRegisterUrl(r.data.cloudRegisterUrl)
+      }
+    })
+  }, [])
 
   // Reopen when setup is reset from Settings → Profile & workspace.
   useEffect(() => onSetupReset(() => { setStep(0); setP(EMPTY); setTest('idle'); setTestMsg(''); setOpen(true) }), [])
@@ -122,7 +141,7 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
         setTest('ok'); setTestMsg('Ollabridge Cloud is connected and active.')
       } else {
         set({ aiReady: false })
-        setTest('fail'); setTestMsg(localErrorText(res.ok ? res.data.code : res.error))
+        setTest('fail'); setTestMsg(cloudErrorText(res.ok ? res.data.code : res.error))
       }
       return
     }
@@ -187,7 +206,11 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
                   <span>Password</span>
                   <input type="password" value={p.cloudPassword} onChange={(e) => { set({ cloudPassword: e.target.value, aiReady: false }); setTest('idle') }} placeholder="Your Ollabridge Cloud password" />
                 </label>
-                <p className="dp-onb__hint">Sign-in happens on the DayPilot server; your password is never stored. Cloud inference is used only when you make Cloud the active provider.</p>
+                <div className="dp-onb__weblogin">
+                  <a className="dp-onb__weblink" href={cloudLoginUrl} target="_blank" rel="noopener noreferrer">Log in on the web (Google / SSO)</a>
+                  <a className="dp-onb__weblink dp-onb__weblink--muted" href={cloudRegisterUrl} target="_blank" rel="noopener noreferrer">Create an account</a>
+                </div>
+                <p className="dp-onb__hint">Sign-in happens on the DayPilot server; your password is never stored. Using Google or SSO? Open the OllaBridge Cloud login page, then sign in here. Cloud inference is used only when you make Cloud the active provider.</p>
               </>
             )}
             <div className="dp-onb__testrow">

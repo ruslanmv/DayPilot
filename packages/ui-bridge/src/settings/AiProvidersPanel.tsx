@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  CLOUD_WEB_LOGIN_URL,
+  CLOUD_WEB_REGISTER_URL,
+  cloudErrorText,
   localErrorText,
   providersApi,
   type ProviderConnection,
@@ -43,7 +46,13 @@ export function AiProvidersPanel() {
     <div className="dp-settings-list dp-aip">
       <p className="dp-aip__lead">Choose where DayPilot runs its AI. Ollabridge runs locally by default; sign in to Ollabridge Cloud to reach your models from anywhere. Provider state is verified by the backend.</p>
 
-      <CloudCard conn={conn('ollabridge_cloud')} onChanged={refresh} say={say} />
+      <CloudCard
+        conn={conn('ollabridge_cloud')}
+        loginUrl={status?.cloudLoginUrl || CLOUD_WEB_LOGIN_URL}
+        registerUrl={status?.cloudRegisterUrl || CLOUD_WEB_REGISTER_URL}
+        onChanged={refresh}
+        say={say}
+      />
       <LocalCard conn={conn('local')} onChanged={refresh} say={say} />
 
       <p className="dp-muted"><button className="dp-linkbtn" type="button">Learn about privacy</button> · Only one provider is active at a time. Signing in never activates cloud inference on its own.</p>
@@ -67,7 +76,7 @@ export function AiProvidersPanel() {
 
 // ---- cloud card -------------------------------------------------------------
 
-function CloudCard({ conn, onChanged, say }: { conn?: ProviderConnection; onChanged: () => void; say: (m: string) => void }) {
+function CloudCard({ conn, loginUrl, registerUrl, onChanged, say }: { conn?: ProviderConnection; loginUrl: string; registerUrl: string; onChanged: () => void; say: (m: string) => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -110,7 +119,11 @@ function CloudCard({ conn, onChanged, say }: { conn?: ProviderConnection; onChan
             <button className="dp-provcard__signin" type="submit" disabled={busy || !email || !password}>{busy ? 'Signing in…' : 'Sign in with email'}</button>
           </form>
           {error && <p className="dp-provcard__errbody" role="alert">{error}</p>}
-          <p className="dp-provcard__hint">Sign-in happens on the DayPilot server; your password is never stored. API-key connection is available under Advanced setup. Google/SSO arrives when Ollabridge Cloud exposes a relying-party flow.</p>
+          <div className="dp-provcard__weblogin">
+            <a className="dp-ghost-button" href={loginUrl} target="_blank" rel="noopener noreferrer">Log in on the web (Google / SSO)</a>
+            <a className="dp-linkbtn" href={registerUrl} target="_blank" rel="noopener noreferrer">Create an account</a>
+          </div>
+          <p className="dp-provcard__hint">Sign-in happens on the DayPilot server; your password is never stored. Prefer Google, single sign-on, or a password reset? Open the OllaBridge Cloud login page, then come back and sign in here.</p>
         </>
       )}
 
@@ -123,7 +136,7 @@ function CloudCard({ conn, onChanged, say }: { conn?: ProviderConnection; onChan
             ? <button className="dp-provcard__use" onClick={() => setConfirm('use')}>Use Ollabridge Cloud</button>
             : <p className="dp-provcard__acctmeta">Active provider.</p>}
           <div className="dp-provcard__acctactions">
-            <button className="dp-linkbtn" type="button">Manage account</button>
+            <a className="dp-linkbtn" href={loginUrl} target="_blank" rel="noopener noreferrer">Manage account</a>
             <button className="dp-linkbtn dp-linkbtn--danger" type="button" onClick={() => setConfirm('signout')}>Sign out</button>
           </div>
         </div>
@@ -212,16 +225,6 @@ function LocalCard({ conn, onChanged, say }: { conn?: ProviderConnection; onChan
       {msg && <p className="dp-provcard__test">{msg}</p>}
     </section>
   )
-}
-
-function cloudErrorText(code: string): string {
-  switch (code) {
-    case 'unauthorized': return 'That email or password was rejected by Ollabridge Cloud.'
-    case 'connection_refused': return 'Couldn’t reach Ollabridge Cloud.'
-    case 'timeout': return 'Ollabridge Cloud didn’t respond in time.'
-    case 'invalid_response': return 'Ollabridge Cloud returned an unexpected response.'
-    default: return 'Sign-in failed. Please try again.'
-  }
 }
 
 function ConfirmDialog({ title, body, confirmLabel, danger, onCancel, onConfirm }: {

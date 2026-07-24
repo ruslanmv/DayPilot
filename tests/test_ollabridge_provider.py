@@ -114,6 +114,43 @@ def test_cloud_device_pairing_handshake():
     assert approved["api_key"] == "ob_live_paired"
 
 
+def test_normalize_gateway_root_strips_openai_suffixes():
+    from daypilot_models.ollabridge_client import normalize_gateway_root
+
+    assert normalize_gateway_root("http://localhost:11435/v1") == "http://localhost:11435"
+    assert normalize_gateway_root("http://localhost:11435/v1/") == "http://localhost:11435"
+    assert normalize_gateway_root("https://x.hf.space/ollama/v1") == "https://x.hf.space"
+    assert normalize_gateway_root("http://localhost:11435") == "http://localhost:11435"
+
+
+def test_no_double_v1_when_base_already_includes_v1():
+    """Regression: the stored base is the OpenAI base (…/v1). The connector must
+    still probe /v1/models — not /v1/v1/models — which was the 404 that made a
+    running local gateway look offline."""
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["path"] = request.url.path
+        captured["xapikey"] = request.headers.get("x-api-key")
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "llama3"}]})
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"ok": True})
+        return httpx.Response(404)
+
+    conn = OllabridgeConnector(
+        base_url="http://localhost:11435/v1",  # OpenAI base, as DayPilot stores it
+        api_key="sk-ollabridge-abc",
+        transport=httpx.MockTransport(handler),
+    )
+    assert conn.base_url == "http://localhost:11435"  # normalized to the root
+    assert conn.list_models() == ["llama3"]
+    assert captured["path"] == "/v1/models"  # NOT /v1/v1/models
+    # Local mode also presents the key as X-API-Key per the Ollabridge contract.
+    assert captured["xapikey"] == "sk-ollabridge-abc"
+    assert conn.health() is True  # /health lives at the root
+
+
 def test_list_models_and_ping():
     connector = OllabridgeConnector(base_url="http://ollabridge.test", transport=_chat_transport())
     assert connector.list_models() == ["llama3.1", "mixtral"]

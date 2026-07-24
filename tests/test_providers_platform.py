@@ -90,6 +90,36 @@ def test_set_active_requires_connected_provider(monkeypatch):
     assert ok.status_code == 200 and ok.json()["active"] == "local"
 
 
+def test_local_probe_normalizes_stored_v1_base(monkeypatch):
+    """The stored base is http://localhost:11435/v1; the probe must build a
+    connector whose root has /v1 stripped, so /v1/models resolves (no 404 →
+    "not running" false negative)."""
+    seen: dict = {}
+
+    def fake_ping(self):
+        seen["base"] = self.base_url
+        return (True, 5.0, ["llama3"])
+
+    monkeypatch.setattr(pp.OllabridgeConnector, "ping", fake_ping)
+    with session_scope(ENGINE) as s:
+        out = pp.local_test(s, _ws(), "http://localhost:11435/v1", None)
+    assert out["code"] == "connected"
+    assert seen["base"] == "http://localhost:11435"  # /v1 stripped → no doubling
+
+
+def test_cloud_auth_root_and_web_links_never_double_v1():
+    assert not pp._cloud_auth_root().endswith("/v1")
+    login = pp.cloud_web_login_url()
+    assert login.endswith("/login") and "/v1/v1" not in login
+    assert pp.cloud_web_register_url().endswith("/register")
+
+
+def test_status_exposes_cloud_web_login():
+    body = client.get(f"/v1/providers/status?workspaceId={_ws()}").json()
+    assert body["cloudLoginUrl"].endswith("/login")
+    assert body["cloudRegisterUrl"].endswith("/register")
+
+
 def test_public_view_never_leaks_secrets(monkeypatch):
     ws = _ws()
     monkeypatch.setattr(pp.OllabridgeConnector, "ping", lambda self: (True, 5.0, ["llama3.1"]))
