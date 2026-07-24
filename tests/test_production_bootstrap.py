@@ -37,6 +37,27 @@ def test_ensure_schema_can_be_disabled(monkeypatch) -> None:
     assert ensure_schema() == "skipped"
 
 
+def test_ensure_schema_does_not_disable_existing_loggers(monkeypatch) -> None:
+    """Regression: the in-process migration must NOT run alembic's fileConfig,
+    which disables already-configured (uvicorn) loggers and broke `make start`
+    on some systems. Building the Alembic Config without an ini file avoids it,
+    so a logger created before ensure_schema stays enabled afterward."""
+    import logging
+    import tempfile
+    import uuid
+    from pathlib import Path
+
+    probe = logging.getLogger("daypilot.test.logger-probe")
+    probe.disabled = False
+    tmp = Path(tempfile.mkdtemp(prefix="dp-log-")) / f"{uuid.uuid4().hex}.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp}")
+    monkeypatch.setenv("DAYPILOT_AUTO_MIGRATE", "1")
+
+    ensure_schema()
+
+    assert probe.disabled is False  # fileConfig(disable_existing_loggers) never ran
+
+
 def test_api_prefix_strip_and_direct_paths_coexist() -> None:
     # A stale/misconfigured proxy is no longer required: same-origin `/api/...`
     # reaches the API, and direct `/v1/...` is untouched.

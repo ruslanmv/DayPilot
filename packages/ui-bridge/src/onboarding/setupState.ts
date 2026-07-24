@@ -29,6 +29,7 @@ const SETUP_KEY = 'daypilot.setup'
 const LEGACY_ONBOARDED = 'daypilot.onboarded'
 const LEGACY_AI_READY = 'daypilot.ai_ready'
 const RESET_EVENT = 'daypilot:setup-reset'
+const OPEN_EVENT = 'daypilot:setup-open'
 
 const EMPTY: SetupState = {
   version: 2,
@@ -136,7 +137,21 @@ export function resetSetup(): void {
   }
 }
 
+/** Reopen the wizard to resume an in-progress setup WITHOUT wiping what the
+ *  user already did (unlike resetSetup). Used by the "Finish setup" banner. */
+export function openSetupWizard(): void {
+  try {
+    window.dispatchEvent(new Event(OPEN_EVENT))
+  } catch {
+    /* ignore (non-browser) */
+  }
+}
+
 export function onSetupReset(handler: () => void): () => void {
   window.addEventListener(RESET_EVENT, handler)
-  return () => window.removeEventListener(RESET_EVENT, handler)
+  window.addEventListener(OPEN_EVENT, handler)
+  return () => {
+    window.removeEventListener(RESET_EVENT, handler)
+    window.removeEventListener(OPEN_EVENT, handler)
+  }
 }

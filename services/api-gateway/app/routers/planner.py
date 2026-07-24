@@ -63,13 +63,21 @@ def readiness(plan_date: str, workspaceId: str = "default", session: Session = D
 @router.post("/plans/{plan_date}/sync")
 def sync(plan_date: str, body: SyncBody, session: Session = Depends(get_session)) -> dict[str, Any]:
     """One smart-sync pass: minor status updates applied, new work proposed."""
-    return sync_plan(session, body.workspaceId, plan_date, now=body.now)
+    try:
+        return sync_plan(session, body.workspaceId, plan_date, now=body.now)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @router.post("/plans/{plan_date}/daily-review")
 def review_day(plan_date: str, body: SyncBody, session: Session = Depends(get_session)) -> dict[str, Any]:
-    """Start-of-day review: reconcile statuses; auto-build the plan when ready."""
-    return daily_review(session, body.workspaceId, plan_date, now=body.now)
+    """Start-of-day review: reconcile statuses; auto-build the plan when ready.
+    Regeneration inside the review is best-effort (never a 500); a state
+    conflict elsewhere surfaces as an honest 409."""
+    try:
+        return daily_review(session, body.workspaceId, plan_date, now=body.now)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @router.post("/plans/{plan_date}/proposal/apply")

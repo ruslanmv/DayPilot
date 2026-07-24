@@ -131,3 +131,24 @@ def test_daily_review_autobuilds_plan_and_reports_counts():
     assert resp.status_code == 200 and resp.json()["blocks"] > 0
     resp = client.post(f"/v1/planner/plans/{DATE}/sync", json={"workspaceId": ws, "now": "00:01"})
     assert resp.status_code == 200 and resp.json()["hasPlan"] is True
+
+
+def test_daily_review_on_wrapped_day_degrades_instead_of_500():
+    """Regression: a wrapped day made generate_plan raise ValueError inside the
+    review, turning the frontend's background poll into an HTTP 500. The review
+    must degrade (regenerated=False + honest regenerateError) and still return
+    the reconciliation counts."""
+    from daypilot_orchestrator.plan_state import PlanState
+    from daypilot_orchestrator.today_engine import build_or_get_draft
+
+    ws = _ws()
+    _seed(ws, ["Morning deep work"])
+    with session_scope(ENGINE) as s:
+        plan = build_or_get_draft(s, ws, DATE)
+        plan.state = PlanState.WRAPPED.value
+
+    resp = client.post(f"/v1/planner/plans/{DATE}/daily-review", json={"workspaceId": ws, "now": "00:01"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["regenerated"] is False
+    assert "wrapped" in (body["regenerateError"] or "")
