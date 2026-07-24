@@ -24,7 +24,18 @@ export type ProviderConnection = {
   lastLatencyMs: number | null
   lastErrorCode: string | null
 }
-export type ProviderStatus = { connections: ProviderConnection[]; active: ProviderKind | null }
+export type ProviderStatus = {
+  connections: ProviderConnection[]
+  active: ProviderKind | null
+  /** Deep link to the OllaBridge Cloud web login page (Google/SSO, reset). */
+  cloudLoginUrl?: string
+  /** Deep link to the OllaBridge Cloud "create an account" page. */
+  cloudRegisterUrl?: string
+}
+
+/** Fallback web endpoints when the backend status hasn't loaded yet. */
+export const CLOUD_WEB_LOGIN_URL = 'https://ruslanmv-ollabridge-cloud.hf.space/login'
+export const CLOUD_WEB_REGISTER_URL = 'https://ruslanmv-ollabridge-cloud.hf.space/register'
 
 const ws = () => workspaceId()
 
@@ -50,5 +61,16 @@ export function localErrorText(code: string): string {
     case 'no_models': return 'The gateway is reachable but has no usable models.'
     case 'invalid_response': return 'That address didn’t respond like Ollabridge.'
     default: return 'Couldn’t reach the local gateway.'
+  }
+}
+
+/** Human-readable text for an Ollabridge Cloud sign-in error code. */
+export function cloudErrorText(code: string): string {
+  switch (code) {
+    case 'unauthorized': return 'That email or password was rejected by Ollabridge Cloud. If you use Google sign-in, open the web login page instead.'
+    case 'connection_refused': return 'Couldn’t reach Ollabridge Cloud.'
+    case 'timeout': return 'Ollabridge Cloud didn’t respond in time.'
+    case 'invalid_response': return 'Ollabridge Cloud returned an unexpected response.'
+    default: return 'Sign-in failed. Please try again.'
   }
 }

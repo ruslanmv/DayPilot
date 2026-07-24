@@ -89,6 +89,21 @@ def test_sign_out_really_leaves_the_workspace() -> None:
     assert "DAYPILOT_REQUIRE_SESSION" in env and "DAYPILOT_COOKIE_SECURE" in env
 
 
+def test_cloud_web_login_button_is_wired() -> None:
+    """AI-setup fix: cloud sign-in offers a real web login page (Google/SSO,
+    password reset, create account), and the client carries the deep links +
+    a dedicated cloud error helper."""
+    client = (UI / "providersClient.ts").read_text(encoding="utf-8")
+    assert "cloudLoginUrl" in client and "cloudRegisterUrl" in client
+    assert "cloudErrorText" in client and "CLOUD_WEB_LOGIN_URL" in client
+    panel = (UI / "settings" / "AiProvidersPanel.tsx").read_text(encoding="utf-8")
+    assert "Log in on the web" in panel and "Create an account" in panel
+    onb = (UI / "onboarding" / "OnboardingWizard.tsx").read_text(encoding="utf-8")
+    assert "cloudLoginUrl" in onb and "Create an account" in onb
+    # The wizard reports cloud failures with cloud-specific text, not local text.
+    assert "cloudErrorText(res.ok ? res.data.code : res.error)" in onb
+
+
 def test_skipped_onboarding_is_resumable_from_home() -> None:
     """Best practice: the AI-provider step is skippable, so a resume path must
     exist — a Home banner reopens the wizard without wiping progress."""

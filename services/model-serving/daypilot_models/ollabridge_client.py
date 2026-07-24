@@ -18,6 +18,25 @@ import httpx
 DEFAULT_TIMEOUT = 60.0
 
 
+def normalize_gateway_root(url: str) -> str:
+    """Return the gateway *root* for an Ollabridge base URL.
+
+    Ollabridge's health/pairing routes live at the root (``/health``,
+    ``/device/*``) while the OpenAI-compatible surface lives under ``/v1``
+    (``/v1/models``, ``/v1/chat/completions``). Callers hand us the base URL in
+    whatever shape they have it — sometimes the bare root, sometimes the OpenAI
+    base already ending in ``/v1`` (that's what DayPilot shows the user), and the
+    cloud sometimes uses the ``/ollama/v1`` alias. We normalise every form to the
+    root so method paths append cleanly and never double up (the bug that made a
+    healthy local gateway look offline: ``…/v1`` + ``/v1/models`` → ``/v1/v1/models``).
+    """
+    u = (url or "").strip().rstrip("/")
+    for suffix in ("/ollama/v1", "/v1"):
+        if u.endswith(suffix):
+            return u[: -len(suffix)]
+    return u
+
+
 @dataclass
 class OllabridgeConnector:
     base_url: str
@@ -32,11 +51,26 @@ class OllabridgeConnector:
     # Injectable for tests; defaults to a real client per call.
     transport: httpx.BaseTransport | None = field(default=None, repr=False)
 
+    def __post_init__(self) -> None:
+        # Store the canonical gateway root so /v1/* and /health resolve without
+        # doubling, regardless of the shape the caller passed in.
+        self.base_url = normalize_gateway_root(self.base_url)
+
+    def _headers(self) -> dict[str, str]:
+        if not self.api_key:
+            return {}
+        # Ollabridge accepts the key as a Bearer token or as X-API-Key. The
+        # local gateway's local-trust mode honours either; the cloud validates
+        # the Bearer JWT. Sending both for local matches the documented contract.
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        if self.mode == "local":
+            headers["X-API-Key"] = self.api_key
+        return headers
+
     def _client(self) -> httpx.Client:
-        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         return httpx.Client(
-            base_url=self.base_url.rstrip("/"),
-            headers=headers,
+            base_url=self.base_url,
+            headers=self._headers(),
             timeout=self.timeout,
             transport=self.transport,
         )
@@ -67,6 +101,20 @@ class OllabridgeConnector:
             response.raise_for_status()
             data = response.json()
         return [m.get("id") for m in data.get("data", []) if m.get("id")]
+
+    def health(self) -> bool:
+        """Liveness check against the gateway's root ``/health`` endpoint.
+
+        ``/health`` is unauthenticated on both local and cloud, so this answers
+        "is a gateway listening here?" independently of whether a key is valid or
+        any model is loaded. Never raises.
+        """
+        try:
+            with self._client() as client:
+                response = client.get("/health")
+            return response.status_code < 500
+        except (httpx.HTTPError, ValueError):
+            return False
 
     def ping(self) -> tuple[bool, float | None, list[str]]:
         """Return (reachable, latency_ms, models). Never raises."""

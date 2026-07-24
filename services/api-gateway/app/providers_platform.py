@@ -26,6 +26,7 @@ from daypilot_models.ollabridge_client import (
     CLOUD_DEFAULT_URL,
     LOCAL_DEFAULT_URL,
     OllabridgeConnector,
+    normalize_gateway_root,
 )
 from daypilot_orchestrator.integrations.credentials import credential_store
 
@@ -34,6 +35,35 @@ CLOUD = "ollabridge_cloud"
 
 # The canonical Cloud API (overridable). The HF Space is only a compat override.
 CLOUD_API_BASE = os.getenv("OLLABRIDGE_CLOUD_URL", CLOUD_DEFAULT_URL)
+
+
+def _cloud_auth_root() -> str:
+    """The cloud gateway root that hosts ``/v1/auth/login`` and ``/v1/auth/me``.
+
+    ``CLOUD_API_BASE`` is the OpenAI base (ends in ``/v1``); the JSON auth routes
+    are mounted at the *root* (router prefix ``/v1/auth``). Posting ``/v1/auth/login``
+    against a ``…/v1`` base would double the prefix (``…/v1/v1/auth/login`` → 404,
+    the "didn't respond like Ollabridge" error), so we normalise to the root.
+    """
+    return normalize_gateway_root(CLOUD_API_BASE)
+
+
+def _cloud_web_base() -> str:
+    """Base URL of the OllaBridge Cloud *web* app (login/register pages).
+
+    Defaults to the API host (same origin serves the web dashboard) and is
+    overridable for split web/API deployments via ``OLLABRIDGE_CLOUD_WEB_URL``.
+    """
+    explicit = os.getenv("OLLABRIDGE_CLOUD_WEB_URL", "").strip().rstrip("/")
+    return explicit or _cloud_auth_root()
+
+
+def cloud_web_login_url() -> str:
+    return f"{_cloud_web_base()}/login"
+
+
+def cloud_web_register_url() -> str:
+    return f"{_cloud_web_base()}/register"
 
 
 # ---- SSRF guard for user-entered local URLs ---------------------------------
@@ -98,13 +128,26 @@ def status(session: Session, workspace_id: str) -> dict[str, Any]:
     cloud = _get_or_create(session, workspace_id, CLOUD)
     active = next((c.kind for c in (local, cloud) if c.active), None)
     session.flush()
-    return {"connections": [_public(local), _public(cloud)], "active": active}
+    return {
+        "connections": [_public(local), _public(cloud)],
+        "active": active,
+        # Deep links to the OllaBridge Cloud web app so the UI can offer
+        # "log in on the web" (Google/SSO, password reset, create account).
+        "cloudLoginUrl": cloud_web_login_url(),
+        "cloudRegisterUrl": cloud_web_register_url(),
+    }
 
 
 # ---- local Ollabridge -------------------------------------------------------
 
 def _probe_local(base_url: str, api_key: str | None) -> dict[str, Any]:
-    """Return {code, latencyMs, models}. Specific, honest error codes."""
+    """Return {code, latencyMs, models}. Specific, honest error codes.
+
+    The connector normalises the base URL to the gateway root, so a stored
+    ``http://localhost:11435/v1`` and a bare root both probe ``/v1/models`` and
+    ``/health`` correctly (no more ``/v1/v1/models`` 404s that made a running
+    gateway look offline).
+    """
     import httpx
 
     connector = OllabridgeConnector(base_url=base_url, api_key=api_key)
@@ -116,13 +159,25 @@ def _probe_local(base_url: str, api_key: str | None) -> dict[str, Any]:
         if not models:
             return {"code": "no_models", "latencyMs": latency, "models": []}
         return {"code": "connected", "latencyMs": latency, "models": models}
-    # ping() swallows detail; re-probe /v1/models to classify the failure.
+
+    # ping() swallows detail. Re-probe the *normalized* root to classify the
+    # failure honestly: is anything listening (root /health), and if so did
+    # /v1/models reject the key (unauthorized) or answer oddly (invalid_response)?
+    root = connector.base_url  # normalized (no /v1)
+    headers = connector._headers()
     try:
-        with httpx.Client(base_url=base_url.rstrip("/"), timeout=4.0,
-                          headers={"Authorization": f"Bearer {api_key}"} if api_key else {}) as c:
+        with httpx.Client(base_url=root, timeout=4.0, headers=headers) as c:
             r = c.get("/v1/models")
             if r.status_code in (401, 403):
                 return {"code": "unauthorized", "latencyMs": None, "models": []}
+            if r.status_code == 200:
+                # Reachable and authorized after all — ping() may have hit a
+                # transient hiccup. Treat a well-formed list as connected.
+                data = r.json() if "json" in r.headers.get("content-type", "") else {}
+                found = [m.get("id") for m in data.get("data", []) if m.get("id")]
+                if found:
+                    return {"code": "connected", "latencyMs": None, "models": found}
+                return {"code": "no_models", "latencyMs": None, "models": []}
             return {"code": "invalid_response", "latencyMs": None, "models": []}
     except httpx.ConnectError:
         return {"code": "connection_refused", "latencyMs": None, "models": []}
@@ -178,8 +233,11 @@ def cloud_login(session: Session, workspace_id: str, email: str, password: str) 
     row = _get_or_create(session, workspace_id, CLOUD)
     row.state = "testing"
     session.flush()
+    # Auth routes live at the cloud *root* (/v1/auth/login, /v1/auth/me), not
+    # under the OpenAI /v1 base — normalize so we don't double the prefix.
+    auth_root = _cloud_auth_root()
     try:
-        with httpx.Client(base_url=CLOUD_API_BASE.rstrip("/"), timeout=8.0) as c:
+        with httpx.Client(base_url=auth_root, timeout=8.0) as c:
             resp = c.post("/v1/auth/login", json={"email": email, "password": password})
             if resp.status_code in (401, 403):
                 row.state = "unauthorized"
@@ -187,7 +245,8 @@ def cloud_login(session: Session, workspace_id: str, email: str, password: str) 
                 session.flush()
                 return {"code": "unauthorized"}
             resp.raise_for_status()
-            token = resp.json().get("token") or resp.json().get("access_token")
+            body = resp.json()
+            token = body.get("token") or body.get("access_token")
             if not token:
                 row.state = "offline"
                 row.last_error_code = "invalid_response"
@@ -204,9 +263,11 @@ def cloud_login(session: Session, workspace_id: str, email: str, password: str) 
     ref = f"provider:{row.id}"
     credential_store().put(ref, {"token": token})
     row.secret_reference = ref
-    row.account_subject = str(me.get("sub") or me.get("id") or "")
-    row.account_email = me.get("email") or email
-    row.account_display_name = me.get("name") or me.get("display_name")
+    # Cloud /v1/auth/me returns {user_id, email, display_name, ...}. Fall back to
+    # the login response and older field names so we stay tolerant.
+    row.account_subject = str(me.get("user_id") or body.get("user_id") or me.get("sub") or me.get("id") or "")
+    row.account_email = me.get("email") or body.get("email") or email
+    row.account_display_name = me.get("display_name") or me.get("name") or None
     row.state = "connected"
     row.last_error_code = None
     row.last_tested_at = utcnow()
