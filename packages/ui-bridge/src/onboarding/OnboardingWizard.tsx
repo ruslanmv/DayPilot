@@ -6,6 +6,7 @@ import {
   dismissSetup,
   isAiReady,
   isSetupComplete,
+  readSetup,
   onSetupReset,
   patchSetup,
 } from './setupState'
@@ -51,7 +52,13 @@ type TestState = 'idle' | 'testing' | 'ok' | 'fail'
  * "Enter DayPilot" does. Renders nothing once setup is completed.
  */
 export function OnboardingWizard({ onFinish }: { onFinish?: (profile: OnboardingProfile | null) => void }) {
-  const [open, setOpen] = useState(() => !isSetupComplete())
+  // Auto-open only for a fresh, never-dismissed setup. After "Skip for now",
+  // the wizard must not re-block every launch — the Home "Finish setting up
+  // DayPilot" banner (and Settings → Restart setup) are the resume paths.
+  const [open, setOpen] = useState(() => {
+    const s = readSetup()
+    return s.status !== 'completed' && !s.dismissedAt
+  })
   const [step, setStep] = useState(0)
   const [p, setP] = useState<OnboardingProfile>(EMPTY)
   const [test, setTest] = useState<TestState>('idle')

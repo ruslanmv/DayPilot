@@ -200,11 +200,20 @@ def daily_review(
     # i.e. whenever no *optimized* blocks exist yet — so every working day
     # starts from an optimized, up-to-date plan.
     regenerated = False
+    regenerate_error: str | None = None
     has_optimized = any(b.source == "planner" for b in plan.blocks)
     if not has_optimized and readiness["sufficient"]:
-        generate_plan(session, workspace_id, plan_date)
-        regenerated = True
-        plan = build_or_get_draft(session, workspace_id, plan_date)
+        # Regeneration is best-effort: a wrapped day (ValueError) or a planner
+        # failure must degrade the review, never turn a background poll into a
+        # 500 — the review's job is reconciling statuses either way.
+        try:
+            generate_plan(session, workspace_id, plan_date)
+            regenerated = True
+            plan = build_or_get_draft(session, workspace_id, plan_date)
+        except ValueError as exc:
+            regenerate_error = str(exc)
+        except Exception as exc:  # noqa: BLE001 - degrade, don't fail the review
+            regenerate_error = f"planner_failed: {type(exc).__name__}"
 
     sync_result = sync_plan(session, workspace_id, plan_date, now=now)
 
@@ -219,6 +228,7 @@ def daily_review(
     return {
         "planDate": plan_date,
         "regenerated": regenerated,
+        "regenerateError": regenerate_error,
         "blocks": len(blocks),
         "done": done,
         "missed": missed,

@@ -3,6 +3,7 @@ import { STATE_LANGUAGE } from '@daypilot/homepilot-theme'
 import { IntegrationsPanel } from '../integrations/IntegrationsPanel'
 import { AiProvidersPanel } from '../settings/AiProvidersPanel'
 import { MailSettingsPanel } from '../settings/MailSettingsPanel'
+import { KnowledgeSourcesPanel } from '../settings/KnowledgeSourcesPanel'
 import { resetSetup } from '../onboarding/setupState'
 import { getTheme, setTheme, type ThemeMode } from '../theme'
 import {
@@ -114,34 +115,7 @@ function SectionBody({ section, onClose }: { section: SettingsSectionId; onClose
     return <MailSettingsPanel />
   }
   if (section === 'sources') {
-    return (
-      <div className="dp-settings-list">
-        <p className="dp-muted">{SOURCES_SUMMARY.detail}</p>
-        {KNOWLEDGE_SOURCES.map((s) => (
-          <div key={s.label} className="dp-settings-row">
-            <div className="dp-settings-row__head">
-              <StateDot tone={s.status === 'available' ? 'available' : 'connected'} />
-              <strong>{s.label}</strong>
-              <span className="dp-pill dp-pill--muted">{s.kind}</span>
-              <ConnBadge status={s.status} />
-            </div>
-            <FieldRows
-              fields={[
-                { label: 'Scope', value: s.scope },
-                { label: 'Permission', value: s.permission },
-                { label: 'Projects', value: s.projects },
-              ]}
-            />
-          </div>
-        ))}
-        <div className="dp-settings-actions">
-          <button className="dp-ghost-button" type="button">Add folder</button>
-          <button className="dp-ghost-button" type="button">Connect Box</button>
-          <button className="dp-ghost-button" type="button">Re-index</button>
-        </div>
-        <p className="dp-muted">Grant local folders via <code className="dp-code">{SOURCES_SUMMARY.envHint}</code></p>
-      </div>
-    )
+    return <KnowledgeSourcesPanel />
   }
   if (section === 'permissions') {
     return (

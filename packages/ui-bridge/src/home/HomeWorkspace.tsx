@@ -10,17 +10,26 @@ import {
   listSessions,
   type ChatSessionSummary,
 } from '../chatSessions'
-import { isDemoMode } from '../env'
+import { isDemoMode, workspaceId } from '../env'
+import { api } from '../apiClient'
+import { openSetupWizard, readSetup } from '../onboarding/setupState'
 import {
   AI_PLAN_BULLETS,
   AI_SEED,
   AI_WELCOME,
+  ATTENTION_ITEMS,
   CONTINUE_ITEMS,
   HOME_SUGGESTIONS,
   NEXT_PRIORITY,
   TODAY_PLAN,
+  WORKING_AGENTS,
   aiReply,
+  clockTime,
+  greeting,
+  longDate,
+  type AttentionItem,
   type HomeTurn,
+  type WorkingAgent,
 } from './homeData'
 
 type HomeWorkspaceProps = {
@@ -47,11 +56,49 @@ function nowTime(): string {
  */
 const SESSION_KEY = 'daypilot.chat.session'
 
-export function HomeWorkspace({ onStartFocus, onNavigate, onOpenPalette, onOpenProjectWizard, onOpenApprovals }: HomeWorkspaceProps) {
+export function HomeWorkspace({ userName, onStartFocus, onNavigate, onOpenPalette, onOpenProjectWizard, onOpenApprovals }: HomeWorkspaceProps) {
   const [turns, setTurns] = useState<HomeTurn[]>(AI_SEED)
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
   const { state: availability, retry: retryAvailability } = useAssistantAvailability()
+
+  // Live clock for the morning header (updates each minute).
+  const [now, setNow] = useState(() => ({ date: longDate(), time: clockTime() }))
+  useEffect(() => {
+    const id = window.setInterval(() => setNow({ date: longDate(), time: clockTime() }), 30_000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  // Resume-setup banner (best practice: skippable onboarding must be easy to
+  // resume). Shown when setup was skipped mid-way or no AI provider is ready.
+  const [setupBanner, setSetupBanner] = useState(() => {
+    if (isDemoMode()) return false
+    const s = readSetup()
+    return s.status === 'in_progress' || (s.status === 'completed' && !s.aiReady)
+  })
+  const [setupDismissed, setSetupDismissed] = useState(false)
+
+  // Needs-your-attention + AI-working-now. Demo shows the sample queue; the real
+  // product reads live signals and shows honest empty states.
+  const [attention, setAttention] = useState<AttentionItem[]>(ATTENTION_ITEMS)
+  const [agents, setAgents] = useState<WorkingAgent[]>(WORKING_AGENTS)
+  useEffect(() => {
+    if (isDemoMode()) return
+    const ws = workspaceId()
+    api.get<{ pending?: number }>(`/v1/approvals/summary?workspaceId=${ws}`).then((r) => {
+      if (r.ok && (r.data.pending ?? 0) > 0) {
+        setAttention([{ id: 'approvals', kind: 'approvals', count: r.data.pending!, label: 'Approvals', detail: 'Awaiting your review' }])
+      }
+    })
+    api.get<{ items?: Array<{ id: string; name?: string; current_work?: string; display_status?: string }> }>(`/v1/agents?workspaceId=${ws}`).then((r) => {
+      if (!r.ok) return
+      const running = (r.data.items || []).filter((a) => (a.display_status || '').toLowerCase() === 'running')
+      setAgents(running.slice(0, 3).map((a, i) => ({
+        id: a.id, name: a.name || 'Agent', activity: a.current_work || 'Working…',
+        accent: (['blue', 'purple', 'green'] as const)[i % 3],
+      })))
+    })
+  }, [])
   // Persistent conversation history (ChatGPT/Claude-style), off in demo mode.
   const persistent = !isDemoMode()
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -177,10 +224,14 @@ export function HomeWorkspace({ onStartFocus, onNavigate, onOpenPalette, onOpenP
       <div className="dp-home__main">
         <header className="dp-home__header">
           <div>
-            <h1 className="dp-home__title">Home</h1>
-            <p className="dp-home__subtitle">Overview of your work and priorities.</p>
+            <h1 className="dp-home__title">{greeting(userName)}</h1>
+            <p className="dp-home__subtitle">Here's what's happening with your work today.</p>
           </div>
           <div className="dp-home__header-right">
+            <span className="dp-home__meta">
+              <span className="dp-home__meta-item"><span aria-hidden="true">🗓</span> {now.date}</span>
+              <span className="dp-home__meta-item"><span aria-hidden="true">◷</span> {now.time}</span>
+            </span>
             <button className="dp-home__search" onClick={onOpenPalette} aria-label="Search or jump to">
               <span className="dp-home__search-icon" aria-hidden="true">⌕</span>
               <span className="dp-home__search-text">Search or jump to…</span>
@@ -195,8 +246,24 @@ export function HomeWorkspace({ onStartFocus, onNavigate, onOpenPalette, onOpenP
         </header>
 
         <div className="dp-home__scroll">
-          {/* Your day is ready + Next priority */}
-          <section className="dp-home__ready">
+          {/* Resume setup — the AI provider is essential; skipping must stay resumable. */}
+          {setupBanner && !setupDismissed && (
+            <div className="dp-setup-banner" role="status">
+              <span className="dp-setup-banner__ic" aria-hidden="true">✦</span>
+              <span className="dp-setup-banner__body">
+                <strong>Finish setting up DayPilot</strong>
+                <span>Connect your AI provider to unlock planning, chat, and agent workflows. You can also connect your mailbox and knowledge sources.</span>
+              </span>
+              <span className="dp-setup-banner__actions">
+                <button className="dp-home__cta dp-setup-banner__cta" onClick={() => { openSetupWizard(); setSetupBanner(false) }}>Continue setup</button>
+                <button className="dp-home__ghost" onClick={() => setSetupDismissed(true)}>Later</button>
+              </span>
+            </div>
+          )}
+
+          {/* Now (top priority) + Needs your attention (decision queue) */}
+          <div className="dp-home__top">
+          <section className="dp-home__ready dp-home__now">
             {NEXT_PRIORITY ? (
               <>
                 <h2 className="dp-home__ready-title"><span className="dp-home__ready-icon" aria-hidden="true">☼</span> Your day is ready</h2>
@@ -231,6 +298,35 @@ export function HomeWorkspace({ onStartFocus, onNavigate, onOpenPalette, onOpenP
               </div>
             )}
           </section>
+
+          {/* Needs your attention — a decision queue, not analytics */}
+          <aside className="dp-home__attention" aria-label="Needs your attention">
+            <div className="dp-home__attention-head">
+              <span className="dp-home__attention-title"><span aria-hidden="true">🔔</span> Needs your attention</span>
+            </div>
+            {attention.length === 0 ? (
+              <p className="dp-home__attention-empty">You're all caught up. Nothing needs your attention right now.</p>
+            ) : (
+              <ul className="dp-home__attention-list">
+                {attention.map((a) => (
+                  <li key={a.id}>
+                    <button className={'dp-home__attn dp-home__attn--' + a.kind} onClick={() => onOpenApprovals?.()}>
+                      <span className="dp-home__attn-count">{a.count}</span>
+                      <span className="dp-home__attn-body">
+                        <span className="dp-home__attn-label">{a.label}</span>
+                        <span className="dp-home__attn-detail">{a.detail}</span>
+                      </span>
+                      <span className="dp-home__attn-chev" aria-hidden="true">›</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {attention.length > 0 && (
+              <button className="dp-linkbtn dp-home__attention-all" onClick={() => onOpenApprovals?.()}>View all ›</button>
+            )}
+          </aside>
+          </div>
 
           {/* Today's plan + Continue from yesterday */}
           <div className="dp-home__grid">
@@ -275,6 +371,30 @@ export function HomeWorkspace({ onStartFocus, onNavigate, onOpenPalette, onOpenP
               <button className="dp-linkbtn dp-home__morelink" onClick={() => onNavigate('projects')}>View all projects →</button>
             </section>
           </div>
+
+          {/* AI working now — observable background agents */}
+          <section className="dp-home__agents">
+            <div className="dp-home__agents-head">
+              <h3 className="dp-home__card-title"><span className="dp-home__card-icon" aria-hidden="true">✦</span> AI working now</h3>
+              <button className="dp-linkbtn" onClick={() => onNavigate('agents')}>View all agents →</button>
+            </div>
+            {agents.length === 0 ? (
+              <p className="dp-home__card-empty">No agents are running right now. Background work will appear here.</p>
+            ) : (
+              <div className="dp-home__agents-grid">
+                {agents.map((a) => (
+                  <button key={a.id} className="dp-home__agent" onClick={() => onNavigate('agents')}>
+                    <span className={'dp-home__agent-icon dp-home__agent-icon--' + a.accent} aria-hidden="true">◉</span>
+                    <span className="dp-home__agent-body">
+                      <span className="dp-home__agent-name">{a.name}</span>
+                      <span className="dp-home__agent-activity">{a.activity}</span>
+                      <span className="dp-home__agent-status"><span className="dp-home__agent-dot" aria-hidden="true" /> Running</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </div>
 

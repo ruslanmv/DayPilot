@@ -70,3 +70,30 @@ def test_setup_state_is_explicit_not_a_broad_boolean() -> None:
 def test_settings_profile_can_restart_setup() -> None:
     panel = (UI / "shell" / "SettingsPanel.tsx").read_text(encoding="utf-8")
     assert "resetSetup" in panel and "Restart setup" in panel
+
+
+def test_sign_out_really_leaves_the_workspace() -> None:
+    """Issue 6: after logout the gate lands on the login page directly instead
+    of re-resolving into anonymous mode, failures are surfaced, user caches are
+    cleared, and mobile has a real Sign out action."""
+    gate = (UI / "auth" / "AppGate.tsx").read_text(encoding="utf-8")
+    assert "kind: 'unauthenticated'" in gate and "clearUserCaches" in gate
+    assert "Sign out failed" in gate  # logout failure is never silent success
+    # signOut no longer just resolve()s back into the app.
+    sign_out_block = gate.split("async function signOut", 1)[1].split("}", 3)[0]
+    assert "resolve()" not in sign_out_block
+    portal = (UI / "minimalPortal.tsx").read_text(encoding="utf-8")
+    assert "MobilePortal emailEnabled={emailEnabled} user={user} onSignOut={onSignOut}" in portal
+    assert "dp-m__navitem--signout" in portal  # mobile drawer Sign out
+    env = (REPO / ".env.example").read_text(encoding="utf-8")
+    assert "DAYPILOT_REQUIRE_SESSION" in env and "DAYPILOT_COOKIE_SECURE" in env
+
+
+def test_skipped_onboarding_is_resumable_from_home() -> None:
+    """Best practice: the AI-provider step is skippable, so a resume path must
+    exist — a Home banner reopens the wizard without wiping progress."""
+    setup = (UI / "onboarding" / "setupState.ts").read_text(encoding="utf-8")
+    assert "openSetupWizard" in setup and "setup-open" in setup
+    home = (UI / "home" / "HomeWorkspace.tsx").read_text(encoding="utf-8")
+    assert "Finish setting up DayPilot" in home and "openSetupWizard" in home
+    assert "Continue setup" in home

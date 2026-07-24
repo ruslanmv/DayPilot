@@ -26,6 +26,7 @@ from .routers import (
     integrations,
     integrations_mcp,
     jobs,
+    knowledge,
     notifications,
     plan,
     planner,
@@ -45,8 +46,12 @@ REQUESTS = Counter("daypilot_api_gateway_requests_total", "Gateway requests", ["
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     # Auto-apply migrations on startup so a fresh install never hits
-    # 'no such table'. Opt out with DAYPILOT_AUTO_MIGRATE=0.
-    ensure_schema()
+    # 'no such table'. Opt out with DAYPILOT_AUTO_MIGRATE=0. This must never
+    # crash startup — ensure_schema swallows everything, and we guard again here.
+    try:
+        ensure_schema()
+    except BaseException:  # noqa: BLE001 - a schema hiccup can't take down the server
+        pass
     yield
 
 
@@ -75,6 +80,7 @@ for _router in (
     chat.router,
     auth_identity.router,
     assistant.router,
+    knowledge.router,
 ):
     app.include_router(_router)
 

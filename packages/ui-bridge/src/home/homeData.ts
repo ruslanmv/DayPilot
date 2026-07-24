@@ -45,6 +45,50 @@ export const NEXT_PRIORITY: NextPriority = isDemoMode() ? DEMO_NEXT_PRIORITY : n
 export const TODAY_PLAN: AgendaItem[] = isDemoMode() ? DEMO_TODAY_PLAN : []
 export const CONTINUE_ITEMS: ContinueItem[] = isDemoMode() ? DEMO_CONTINUE_ITEMS : []
 
+// --- Needs your attention (a decision queue, not an analytics panel) ---------
+export type AttentionItem = {
+  id: string
+  kind: 'approvals' | 'blocked' | 'integration'
+  count: number
+  label: string
+  detail: string
+}
+
+const DEMO_ATTENTION: AttentionItem[] = [
+  { id: 'a1', kind: 'approvals', count: 2, label: 'Approvals', detail: 'Awaiting your review' },
+  { id: 'a2', kind: 'blocked', count: 1, label: 'Blocked work', detail: 'Needs your input' },
+  { id: 'a3', kind: 'integration', count: 1, label: 'Integration issue', detail: 'GitPilot auth boundary' },
+]
+
+export const ATTENTION_ITEMS: AttentionItem[] = isDemoMode() ? DEMO_ATTENTION : []
+
+// --- AI working now (observable background agents) ---------------------------
+export type WorkingAgent = { id: string; name: string; activity: string; accent: 'blue' | 'purple' | 'green' }
+
+const DEMO_AGENTS: WorkingAgent[] = [
+  { id: 'g1', name: 'Project Analyst', activity: 'Analyzing delivery risks', accent: 'blue' },
+  { id: 'g2', name: 'GitPilot', activity: 'Running test suite', accent: 'purple' },
+  { id: 'g3', name: 'Email Sentinel', activity: 'Scanning for issues', accent: 'green' },
+]
+
+export const WORKING_AGENTS: WorkingAgent[] = isDemoMode() ? DEMO_AGENTS : []
+
+/** Time-of-day greeting for the Home header. */
+export function greeting(name?: string): string {
+  const h = new Date().getHours()
+  const part = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+  const first = (name || '').trim().split(/\s+/)[0]
+  return first ? `${part}, ${first}` : part
+}
+
+export function longDate(): string {
+  return new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+export function clockTime(): string {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 export type HomeTurn = { role: 'user' | 'assistant'; body: string; time?: string; action?: { label: string; target: string } }
 
 // The assistant does not fabricate a plan on load. In demo mode it shows a

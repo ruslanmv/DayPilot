@@ -444,6 +444,30 @@ class MailboxConnection(TimestampMixin, Base):
     __table_args__ = (Index("ix_mailbox_ws", "workspace_id", unique=True),)
 
 
+class KnowledgeSource(TimestampMixin, Base):
+    """A persisted knowledge source a workspace has granted for RAG (Issue 1).
+
+    The backend owns source state — the Settings screen lists real rows, not
+    hard-coded samples. Re-indexing runs as a durable background job; status
+    reflects the real lifecycle (queued → indexing → indexed | failed)."""
+
+    __tablename__ = "knowledge_sources"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    provider: Mapped[str] = mapped_column(String(20), default="local")  # local | box | vault
+    display_name: Mapped[str] = mapped_column(String(300), default="")
+    location: Mapped[str] = mapped_column(String(1000), default="")  # server path or box ref
+    scope: Mapped[str] = mapped_column(String(200), default="")
+    permission: Mapped[str] = mapped_column(String(20), default="read_index")  # read | read_index
+    status: Mapped[str] = mapped_column(String(20), default="queued")  # queued|indexing|indexed|failed|unconfigured
+    project_ids: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    last_indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(400), nullable=True)
+
+    __table_args__ = (Index("ix_knowledge_sources_ws", "workspace_id", "created_at"),)
+
+
 class AssistantRun(TimestampMixin, Base):
     """One assistant turn, orchestrated server-side (Batch 4).
 

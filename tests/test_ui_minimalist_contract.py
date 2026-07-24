@@ -112,6 +112,13 @@ def test_sidebar_nav_and_settings_menu_contract():
     assert 'AI Assistant' in home
     assert 'Ask anything or give an instruction' in home
     assert 'Next priority' in home and "Today's plan" in home and 'Continue from yesterday' in home
+    # Command-center hierarchy: greeting + live date/time, a "Needs your
+    # attention" decision queue, and an observable "AI working now" strip.
+    assert 'greeting(' in home and 'Needs your attention' in home and 'AI working now' in home
+    # Those queues read live signals in production (honest empty states), not fakes.
+    assert '/v1/approvals/summary' in home and '/v1/agents' in home
+    hd = (ui / 'home' / 'homeData.ts').read_text(encoding='utf-8')
+    assert 'ATTENTION_ITEMS' in hd and 'WORKING_AGENTS' in hd and 'isDemoMode()' in hd
     # The assistant is collapsible and reopenable (ChatGPT / Claude / Gemini style).
     assert 'dp-home--ai-collapsed' in home
     assert 'Open AI' in home and 'Close AI Assistant' in home
@@ -142,6 +149,14 @@ def test_sidebar_nav_and_settings_menu_contract():
                   'Knowledge sources', 'Appearance', 'Permissions & approvals',
                   'Keyboard shortcuts'):
         assert label in panel
+
+    # Knowledge sources are backend-owned and the buttons do real work (Issue 1):
+    # add a validated local folder, re-index (durable job), remove.
+    assert 'KnowledgeSourcesPanel' in panel
+    ksp = (ui / 'settings' / 'KnowledgeSourcesPanel.tsx').read_text(encoding='utf-8')
+    assert 'Add folder' in ksp and 'Re-index' in ksp and 'addFolder' in ksp
+    ksc = (ui / 'settings' / 'knowledgeSourcesClient.ts').read_text(encoding='utf-8')
+    assert '/v1/knowledge/sources' in ksc and 'reindex' in ksc
 
     settings = (ui / 'settings' / 'settingsData.ts').read_text(encoding='utf-8')
 

@@ -182,5 +182,93 @@ def get_project(session: Session, project_id: str) -> Project | None:
     return session.get(Project, project_id)
 
 
+# --- Project mutations (Issue 4: persistent, server-owned projects) ----------
+
+_PROJECT_EDITABLE = {
+    "name", "progress", "status", "risk", "ai_activity", "next_human_action",
+    "continue_action", "due_date", "ai_actions", "linked_sources",
+}
+
+
+def create_project(
+    session: Session,
+    workspace_id: str,
+    name: str,
+    *,
+    goal: str = "",
+    stack: str = "",
+    repository: str = "",
+    milestone: str = "",
+    status: str = "Active",
+    risk: str = "low",
+) -> tuple[Project, list[Task]]:
+    """Create a project and its initial actionable task(s) in one transaction.
+
+    Returns (project, created_tasks). The caller emits the project.created event
+    and notification so the whole thing is one atomic unit of work."""
+    from daypilot_knowledge.db import Project as _Project, Task as _Task  # local import keeps module import light
+
+    linked: list[dict[str, Any]] = []
+    if repository:
+        linked.append({"kind": "repository", "ref": repository})
+
+    project = _Project(
+        workspace_id=workspace_id,
+        name=name.strip(),
+        status=status,
+        risk=risk,
+        progress=0,
+        ai_activity="",
+        next_human_action=(f"Kick off: {milestone}" if milestone else "Define the first milestone"),
+        continue_action=(milestone or goal or "Plan the first steps"),
+        ai_actions=[],
+        linked_sources=linked,
+    )
+    session.add(project)
+    session.flush()
+
+    tasks: list[Task] = []
+    # The first milestone becomes a real, actionable task so the project can
+    # immediately contribute to planner readiness (Issue 2 + 4).
+    if milestone.strip():
+        task = _Task(
+            workspace_id=workspace_id,
+            title=milestone.strip(),
+            owner="you",
+            status="active",
+            priority="high",
+            source="project",
+            project_id=project.id,
+            context=(goal or f"First milestone for {name}."),
+        )
+        session.add(task)
+        tasks.append(task)
+    session.flush()
+    return project, tasks
+
+
+def update_project(session: Session, project_id: str, patch: dict[str, Any]) -> Project | None:
+    project = session.get(Project, project_id)
+    if project is None:
+        return None
+    for key, value in patch.items():
+        if key in _PROJECT_EDITABLE and value is not None:
+            setattr(project, key, value)
+    session.flush()
+    return project
+
+
+def delete_project(session: Session, project_id: str) -> bool:
+    project = session.get(Project, project_id)
+    if project is None:
+        return False
+    # Detach tasks so a deleted project doesn't orphan FK references.
+    for task in session.execute(select(Task).where(Task.project_id == project_id)).scalars():
+        task.project_id = None
+    session.delete(project)
+    session.flush()
+    return True
+
+
 def get_agent_run(session: Session, run_id: str) -> AgentRun | None:
     return session.get(AgentRun, run_id)

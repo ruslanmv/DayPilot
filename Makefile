@@ -104,7 +104,7 @@ run: ## Run the full app locally: API gateway + web UI (Ctrl+C stops both).
 	echo "  Press Ctrl+C to stop both."; \
 	echo ""; \
 	trap 'kill 0' INT TERM EXIT; \
-	PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
+	DAYPILOT_AUTO_MIGRATE=0 PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
 	  $(UV) run uvicorn app.main:app --app-dir services/api-gateway \
 	  --host $(API_HOST) --port $$port --reload & \
 	DAYPILOT_API_TARGET="http://localhost:$$port" \
@@ -118,7 +118,7 @@ run-api: ## Run the FastAPI API gateway with hot reload on an available port.
 	  echo "Port $(API_PORT) is busy; using free port $$port for the API gateway."; \
 	fi; \
 	echo "API gateway: http://localhost:$$port"; \
-	PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
+	DAYPILOT_AUTO_MIGRATE=0 PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
 	  $(UV) run uvicorn app.main:app --app-dir services/api-gateway \
 	  --host $(API_HOST) --port $$port --reload
 
@@ -134,7 +134,7 @@ start: ## Production: build the web UI and serve everything from one process/por
 	echo "  DayPilot (single origin): http://localhost:$(PORT)"; \
 	echo "  Press Ctrl+C to stop."; \
 	echo ""; \
-	PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
+	DAYPILOT_AUTO_MIGRATE=0 PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
 	  $(UV) run uvicorn app.main:app --app-dir services/api-gateway \
 	  --host $(API_HOST) --port $(PORT)
 

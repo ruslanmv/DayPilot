@@ -17,6 +17,7 @@ import { HomeWorkspace } from './home/HomeWorkspace'
 import { PlanningWorkspace } from './planning/PlanningWorkspace'
 import { OnboardingWizard } from './onboarding/OnboardingWizard'
 import { ProjectWizard, type NewProject } from './projects/ProjectWizard'
+import { useProjects } from './useProjects'
 import {
   AI_PLAN_BULLETS,
   AI_SEED,
@@ -360,6 +361,11 @@ function OperationalLedger({ tasks, onSelect }: { tasks: DayPilotTask[]; onSelec
   )
 }
 
+function mobileInitials(name?: string | null): string {
+  const n = (name || 'Ruslan M.').trim()
+  return n.split(/\s+/).map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+}
+
 function newProjectFrom(np: NewProject): DayPilotProject {
   return {
     id: `proj-${Date.now()}`,
@@ -568,7 +574,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
   const [view, setView] = useState<PortalView>('home')
   const [messages, setMessages] = useState<DayPilotMessage[]>(seedMessages)
   const [tasks, setTasks] = useState<DayPilotTask[]>(seedTasks)
-  const [projects, setProjects] = useState<DayPilotProject[]>(seedProjects)
+  const { projects, setProjects, createProject } = useProjects(seedProjects)
   const documents = useMemo(seedDocuments, [])
   const documentSources = useMemo(seedDocumentSources, [])
   const agents = useMemo(seedAgents, [])
@@ -671,7 +677,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
 
   // Phones get a dedicated ChatGPT-style shell (hamburger drawer, single-page
   // views, full-screen AI) rather than a squeezed desktop layout.
-  if (isMobile) return <MobilePortal emailEnabled={emailEnabled} />
+  if (isMobile) return <MobilePortal emailEnabled={emailEnabled} user={user} onSignOut={onSignOut} />
 
   return (
     <div className={cx('dp-shell', compact && 'dp-shell--compact')}>
@@ -706,6 +712,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
       <main className="dp-core">
         {view === 'home' ? (
           <HomeWorkspace
+            userName={user?.displayName ?? undefined}
             onStartFocus={startFocusMode}
             onNavigate={(target) => setView(target)}
             onOpenPalette={() => setPaletteOpen(true)}
@@ -748,7 +755,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
       <ProjectWizard
         open={projectWizardOpen}
         onClose={() => setProjectWizardOpen(false)}
-        onCreate={(np) => { const p = newProjectFrom(np); setProjects((cur) => [p, ...cur]); setView('projects'); setSelected({ kind: 'project', item: p }) }}
+        onCreate={(np) => { createProject(np, newProjectFrom).then((p) => { setView('projects'); setSelected({ kind: 'project', item: p }) }) }}
       />
       <OnboardingWizard />
     </div>
@@ -790,14 +797,18 @@ const MOBILE_TITLES: Record<PortalView, string> = {
 
 const RECENT_AI = isDemoMode() ? ['Email workspace status', 'Prepare Client Alpha meeting', "Today's plan"] : []
 
-function MobilePortal({ emailEnabled }: { emailEnabled: boolean }) {
+function MobilePortal({ emailEnabled, user, onSignOut }: {
+  emailEnabled: boolean
+  user?: { displayName?: string | null; email?: string | null; role?: string | null } | null
+  onSignOut?: () => void
+}) {
   const NAV = navViews(emailEnabled)
   const [view, setView] = useState<PortalView>('home')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiSeed, setAiSeed] = useState<string | undefined>()
   const [tasks] = useState<DayPilotTask[]>(seedTasks)
-  const [projects, setProjects] = useState<DayPilotProject[]>(seedProjects)
+  const { projects, setProjects, createProject } = useProjects(seedProjects)
   const documents = useMemo(seedDocuments, [])
   const documentSources = useMemo(seedDocumentSources, [])
   const agents = useMemo(seedAgents, [])
@@ -906,12 +917,18 @@ function MobilePortal({ emailEnabled }: { emailEnabled: boolean }) {
                 <span>Settings</span>
               </button>
               <button className="dp-m__profile" onClick={() => { setSettingsSection('profile'); setDrawerOpen(false) }}>
-                <span className="dp-m__avatar" aria-hidden="true">RM</span>
+                <span className="dp-m__avatar" aria-hidden="true">{mobileInitials(user?.displayName)}</span>
                 <span className="dp-m__profile-text">
-                  <span className="dp-m__profile-name">Ruslan M.</span>
-                  <span className="dp-m__profile-role">Product Lead</span>
+                  <span className="dp-m__profile-name">{user?.displayName || 'Ruslan M.'}</span>
+                  <span className="dp-m__profile-role">{user?.role || user?.email || 'Product Lead'}</span>
                 </span>
               </button>
+              {onSignOut && (
+                <button className="dp-m__navitem dp-m__navitem--signout" onClick={() => { setDrawerOpen(false); onSignOut() }}>
+                  <span className="dp-m__signout-ic" aria-hidden="true">⎋</span>
+                  <span>Sign out</span>
+                </button>
+              )}
             </div>
           </nav>
         </>
@@ -926,7 +943,7 @@ function MobilePortal({ emailEnabled }: { emailEnabled: boolean }) {
       <ProjectWizard
         open={projectWizardOpen}
         onClose={() => setProjectWizardOpen(false)}
-        onCreate={(np) => { const p = newProjectFrom(np); setProjects((cur) => [p, ...cur]); go('projects'); setSelected({ kind: 'project', item: p }) }}
+        onCreate={(np) => { createProject(np, newProjectFrom).then((p) => { go('projects'); setSelected({ kind: 'project', item: p }) }) }}
       />
       <OnboardingWizard />
     </div>
