@@ -140,51 +140,170 @@ def status(session: Session, workspace_id: str) -> dict[str, Any]:
 
 # ---- local Ollabridge -------------------------------------------------------
 
-def _probe_local(base_url: str, api_key: str | None) -> dict[str, Any]:
-    """Return {code, latencyMs, models}. Specific, honest error codes.
+def _default_route_gateway() -> str | None:
+    """The eth0 default-route gateway from ``/proc/net/route``.
 
-    The connector normalises the base URL to the gateway root, so a stored
-    ``http://localhost:11435/v1`` and a bare root both probe ``/v1/models`` and
-    ``/health`` correctly (no more ``/v1/v1/models`` 404s that made a running
-    gateway look offline).
+    On WSL2 this gateway IS the Windows host (services bound to 0.0.0.0 on the
+    host are reachable there), which is the canonical way to reach a Windows-side
+    gateway from inside WSL2 — more reliable than the resolv.conf nameserver,
+    which newer WSL builds set to a DNS-tunnel address (10.255.255.254) that does
+    not carry arbitrary TCP.
     """
+    try:
+        with open("/proc/net/route", encoding="utf-8") as fh:
+            for line in fh.readlines()[1:]:
+                fields = line.split()
+                # Destination 00000000 + RTF_GATEWAY flag (0x2) == default route.
+                if len(fields) >= 4 and fields[1] == "00000000" and int(fields[3], 16) & 0x2:
+                    gw = fields[2]  # little-endian hex, e.g. "0160D9AC"
+                    octets = [str(int(gw[i:i + 2], 16)) for i in range(0, 8, 2)]
+                    return ".".join(reversed(octets))
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _host_gateway_ips() -> list[str]:
+    """Best-effort host addresses reachable from inside WSL2/Docker.
+
+    DayPilot may run in WSL2 or a container while the Ollabridge gateway runs on
+    the Windows/host side. From there ``localhost`` is the VM/container itself, so
+    a loopback gateway URL connection-refuses even though the gateway is up. These
+    aliases point back at the host; we try them only after a loopback URL fails.
+    Ordered most-reliable-first: the default route (WSL2's Windows host), then any
+    private resolv.conf nameserver, then the Docker Desktop alias.
+    """
+    ips: list[str] = []
+    gw = _default_route_gateway()
+    if gw:
+        try:
+            if ipaddress.ip_address(gw).is_private:
+                ips.append(gw)
+        except ValueError:
+            pass
+    try:
+        with open("/etc/resolv.conf", encoding="utf-8") as fh:  # WSL2 (legacy): nameserver == host
+            for line in fh:
+                if line.startswith("nameserver"):
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        try:
+                            if ipaddress.ip_address(parts[1]).is_private:
+                                ips.append(parts[1])
+                        except ValueError:
+                            pass
+    except OSError:
+        pass
+    ips.append("host.docker.internal")
+    # De-dup, preserve order.
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for ip in ips:
+        if ip not in seen:
+            seen.add(ip)
+            uniq.append(ip)
+    return uniq
+
+
+def _loopback_candidates(root: str) -> list[str]:
+    """The gateway root plus host-side fallbacks when it's a loopback address."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(root)
+    host = (parts.hostname or "").lower()
+    out = [root]
+    if host in ("localhost", "127.0.0.1", "::1"):
+        port = f":{parts.port}" if parts.port else ""
+        for alt in _host_gateway_ips():
+            out.append(urlunsplit((parts.scheme, f"{alt}{port}", parts.path, "", "")))
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for u in out:
+        if u not in seen:
+            seen.add(u)
+            uniq.append(u)
+    return uniq
+
+
+def _probe_one(root: str, api_key: str | None) -> dict[str, Any]:
+    """Probe a single normalized gateway root, health-first.
+
+    ``/health`` is public (no key, no loopback requirement), so it — not
+    ``/v1/models`` — decides "is the gateway running?". That's the fix for the
+    false "Ollabridge isn't running at that address": the model list is gated
+    (``local-trust`` only bypasses auth for *loopback* callers, and ``required``
+    mode always needs a key), so probing models first made a healthy but
+    key-gated gateway look dead. Now a reachable gateway missing only its key is
+    reported as ``key_required``, not offline.
+    """
+    import time as _time
+
     import httpx
 
-    connector = OllabridgeConnector(base_url=base_url, api_key=api_key)
-    try:
-        reachable, latency, models = connector.ping()
-    except Exception:  # noqa: BLE001 - map any transport failure below
-        reachable, latency, models = False, None, []
-    if reachable:
-        if not models:
-            return {"code": "no_models", "latencyMs": latency, "models": []}
-        return {"code": "connected", "latencyMs": latency, "models": models}
+    key = (api_key or "").strip() or None
+    auth = {"Authorization": f"Bearer {key}", "X-API-Key": key} if key else {}
 
-    # ping() swallows detail. Re-probe the *normalized* root to classify the
-    # failure honestly: is anything listening (root /health), and if so did
-    # /v1/models reject the key (unauthorized) or answer oddly (invalid_response)?
-    root = connector.base_url  # normalized (no /v1)
-    headers = connector._headers()
+    start = _time.perf_counter()
     try:
-        with httpx.Client(base_url=root, timeout=4.0, headers=headers) as c:
-            r = c.get("/v1/models")
-            if r.status_code in (401, 403):
-                return {"code": "unauthorized", "latencyMs": None, "models": []}
-            if r.status_code == 200:
-                # Reachable and authorized after all — ping() may have hit a
-                # transient hiccup. Treat a well-formed list as connected.
-                data = r.json() if "json" in r.headers.get("content-type", "") else {}
-                found = [m.get("id") for m in data.get("data", []) if m.get("id")]
-                if found:
-                    return {"code": "connected", "latencyMs": None, "models": found}
-                return {"code": "no_models", "latencyMs": None, "models": []}
-            return {"code": "invalid_response", "latencyMs": None, "models": []}
+        with httpx.Client(base_url=root, timeout=5.0) as c:
+            health = c.get("/health")
     except httpx.ConnectError:
         return {"code": "connection_refused", "latencyMs": None, "models": []}
     except httpx.TimeoutException:
         return {"code": "timeout", "latencyMs": None, "models": []}
     except Exception:  # noqa: BLE001
-        return {"code": "not_installed", "latencyMs": None, "models": []}
+        return {"code": "connection_refused", "latencyMs": None, "models": []}
+
+    latency = round((_time.perf_counter() - start) * 1000, 1)
+    if health.status_code >= 500:
+        return {"code": "invalid_response", "latencyMs": None, "models": []}
+    try:  # a real Ollabridge /health answers JSON
+        health.json()
+    except ValueError:
+        return {"code": "invalid_response", "latencyMs": None, "models": []}
+
+    # Reachable & identified. Enumerate models (needs a key unless loopback+local-trust).
+    try:
+        with httpx.Client(base_url=root, timeout=6.0, headers=auth) as c:
+            r = c.get("/v1/models")
+    except httpx.HTTPError:
+        return {"code": "no_models", "latencyMs": latency, "models": []}
+
+    if r.status_code in (401, 403):
+        # Reachable, but the list is gated. Tell the two cases apart: nothing
+        # supplied ("add your key") vs. a wrong key supplied ("key rejected").
+        return {"code": "unauthorized" if key else "key_required", "latencyMs": latency, "models": []}
+    if r.status_code == 200:
+        try:
+            data = r.json()
+        except ValueError:
+            data = {}
+        found = [m.get("id") for m in data.get("data", []) if m.get("id")]
+        return {"code": "connected" if found else "no_models", "latencyMs": latency, "models": found}
+    return {"code": "invalid_response", "latencyMs": latency, "models": []}
+
+
+def _probe_local(base_url: str, api_key: str | None) -> dict[str, Any]:
+    """Return {code, latencyMs, models, resolvedBaseUrl}. Health-first, with
+    loopback→host fallbacks so DayPilot-in-WSL/Docker can reach a host gateway.
+
+    The connector-level normalization means a stored ``…/11435/v1`` and a bare
+    root both probe ``/health`` and ``/v1/models`` correctly (no ``/v1/v1/…``).
+    """
+    root0 = normalize_gateway_root(base_url)
+    # Reachable outcomes we can stop on (anything that proves a gateway is there).
+    reachable_codes = {"connected", "no_models", "unauthorized", "key_required"}
+    fallback: dict[str, Any] | None = None
+    for root in _loopback_candidates(root0):
+        res = _probe_one(root, api_key)
+        res["resolvedBaseUrl"] = root + "/v1"
+        if res["code"] in reachable_codes:
+            return res
+        fallback = fallback or res
+    if fallback is None:
+        fallback = {"code": "connection_refused", "latencyMs": None, "models": []}
+    fallback.setdefault("resolvedBaseUrl", root0 + "/v1")
+    return fallback
 
 
 def local_test(session: Session, workspace_id: str, base_url: str, api_key: str | None) -> dict[str, Any]:
@@ -194,16 +313,24 @@ def local_test(session: Session, workspace_id: str, base_url: str, api_key: str 
     row.state = "testing"
     session.flush()
     result = _probe_local(base_url, api_key)
-    row.base_url = base_url
+    code = result["code"]
+    # Persist the host that actually answered (may be a WSL/Docker host fallback),
+    # so later chat calls reuse the reachable address rather than a dead loopback.
+    row.base_url = result.get("resolvedBaseUrl") or base_url
     row.last_tested_at = utcnow()
     row.last_latency_ms = int(result["latencyMs"]) if result["latencyMs"] else None
-    row.last_error_code = None if result["code"] == "connected" else result["code"]
+    row.last_error_code = None if code == "connected" else code
     row.models_count = len(result["models"])
-    row.state = "connected" if result["code"] == "connected" else (
-        "unauthorized" if result["code"] == "unauthorized" else "offline"
-    )
+    if code == "connected":
+        row.state = "connected"
+    elif code == "no_models":
+        row.state = "degraded"  # reachable & authorized, just no models loaded yet
+    elif code in ("unauthorized", "key_required"):
+        row.state = "unauthorized"
+    else:
+        row.state = "offline"
     session.flush()
-    return {"code": result["code"], "models": result["models"], "connection": _public(row)}
+    return {"code": code, "models": result["models"], "connection": _public(row)}
 
 
 def local_connect(session: Session, workspace_id: str, base_url: str, api_key: str | None) -> dict[str, Any]:

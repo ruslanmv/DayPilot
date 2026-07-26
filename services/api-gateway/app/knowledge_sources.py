@@ -9,8 +9,10 @@ Box is offered honestly — only when the deployment has configured OAuth.
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -109,10 +111,20 @@ def _box_available() -> bool:
 
 
 def box_oauth_start(workspace_id: str) -> dict[str, Any]:
-    if not _box_available():
+    """Begin Box OAuth. When configured, return the Box authorize URL the client
+    opens in a new browser tab so the user can sign in and grant read access."""
+    client_id = os.getenv("BOX_OAUTH_CLIENT_ID")
+    if not client_id:
         return {"available": False, "reason": "box_not_configured",
                 "message": "Box isn't configured on this deployment. Add BOX_OAUTH_CLIENT_ID to enable it."}
-    return {"available": True}
+    # CSRF state ties the callback back to this workspace; opaque + unguessable.
+    state = f"{workspace_id}:{secrets.token_urlsafe(16)}"
+    params = {"response_type": "code", "client_id": client_id, "state": state}
+    redirect_uri = os.getenv("BOX_OAUTH_REDIRECT_URI", "").strip()
+    if redirect_uri:
+        params["redirect_uri"] = redirect_uri
+    auth_url = "https://account.box.com/api/oauth2/authorize?" + urlencode(params)
+    return {"available": True, "authUrl": auth_url, "state": state}
 
 
 def _now() -> Any:

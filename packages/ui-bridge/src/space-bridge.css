@@ -6,6 +6,7 @@
  * component styles; it must not hard-code palette values.
  */
 @import "../../homepilot-theme/src/tokens.css";
+@import "./agents/agents.css";
 
 * { box-sizing: border-box; }
 
@@ -2016,6 +2017,11 @@
 .dp-onb__weblink:hover { text-decoration: underline; }
 .dp-onb__weblink--muted { color: var(--text-secondary); font-weight: 500; }
 .dp-onb__field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.dp-onb__inline { display: flex; gap: 8px; align-items: stretch; }
+.dp-onb__inline input { flex: 1 1 auto; min-width: 0; }
+.dp-onb__inlinebtn { flex: 0 0 auto; padding: 0 14px; border: 1px solid var(--dp-border, rgba(255,255,255,0.14)); border-radius: 9px; background: var(--dp-surface, rgba(255,255,255,0.04)); color: var(--text-primary, inherit); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.dp-onb__inlinebtn:hover { border-color: var(--accent, #2f80ed); color: var(--accent, #2f80ed); }
+.dp-onb__inlinebtn:focus-visible { outline: 2px solid var(--accent, #2f80ed); outline-offset: 1px; }
 .dp-onb__field input { padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-subtle); color: var(--text-primary); font: inherit; font-size: 14px; outline: none; }
 .dp-onb__field input:focus { border-color: var(--accent); }
 .dp-onb__seg { display: flex; gap: 8px; }
@@ -2288,6 +2294,14 @@
 .dp-pl__ready li.is-missing .dp-pl__ready-icon { color: var(--dp-text-muted); }
 .dp-pl__ready-label { font-weight: 600; }
 .dp-pl__ready-detail { margin-left: auto; color: var(--dp-text-muted); font-size: 0.8rem; }
+.dp-pl__ready-action { flex: 0 0 auto; margin-left: 12px; background: none; border: 0; color: var(--accent, #2f80ff); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 7px; }
+.dp-pl__ready-action:hover { background: var(--dp-surface-elevated, rgba(255,255,255,0.05)); }
+.dp-pl__ready-action:focus-visible { outline: 2px solid var(--accent, #2f80ff); outline-offset: 1px; }
+.dp-pl__connect { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 14px; border: 1px solid var(--dp-border); border-radius: 12px; background: var(--dp-surface); }
+.dp-pl__connect-label { font-size: 0.82rem; font-weight: 600; color: var(--dp-text); }
+.dp-pl__connect-row { display: flex; gap: 8px; align-items: stretch; }
+.dp-pl__connect-row .dp-input { flex: 1 1 auto; min-width: 0; }
+.dp-pl__connect-alt { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 0.8rem; color: var(--dp-text-muted); }
 .dp-pl__stages { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .dp-pl__stages li { display: flex; align-items: center; gap: 10px; font-size: 0.88rem; color: var(--dp-text-muted); }
 .dp-spinner--sm { width: 14px; height: 14px; border-width: 2px; }
@@ -2388,6 +2402,37 @@
 .dp-mailwiz__perm-ic { background: rgba(53,198,122,0.18); color: var(--hp-accent-green, #35c67a); }
 .dp-mailwiz__perm-ic--gate { background: rgba(230,162,60,0.18); color: var(--dp-orange, #e6a23c); }
 .dp-mailwiz__perm-ic--no { background: rgba(242,96,122,0.14); color: var(--hp-accent-red, #f2607a); }
+
+/* Premium email wizard — account choice, credentials, progress, success. */
+.dp-mailwiz__back { padding: 4px 10px; font-size: 0.76rem; }
+.dp-mailwiz__stepno { font-size: 0.74rem; color: var(--dp-text-muted); font-weight: 600; }
+.dp-mailwiz__accounts { display: flex; flex-direction: column; gap: 10px; }
+.dp-mailwiz__account { display: flex; align-items: center; gap: 14px; min-height: 64px; padding: 12px 16px; border: 1px solid var(--dp-border); border-radius: 14px; background: var(--dp-surface); color: var(--dp-text); cursor: pointer; font: inherit; text-align: left; transition: 160ms ease; }
+.dp-mailwiz__account:hover { border-color: var(--dp-border-strong); background: var(--dp-surface-elevated); }
+.dp-mailwiz__account:focus-visible { outline: 2px solid var(--dp-blue); outline-offset: 2px; }
+.dp-mailwiz__account:disabled { opacity: 0.55; cursor: default; }
+.dp-mailwiz__account-ic { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; background: var(--dp-surface-elevated); color: var(--dp-text-dim); }
+.dp-mailwiz__account-main { flex: 1 1 auto; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dp-mailwiz__account-title { font-size: 0.95rem; font-weight: 600; color: var(--dp-text); }
+.dp-mailwiz__account-desc { font-size: 0.8rem; color: var(--dp-text-dim); }
+.dp-mailwiz__chev { flex: 0 0 auto; font-size: 1.3rem; color: var(--dp-text-muted); }
+.dp-mailwiz__trust { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.78rem; color: var(--dp-text-dim); }
+.dp-mailwiz__notnow { align-self: center; margin-top: 6px; background: none; border: none; color: var(--dp-text-muted); font: inherit; font-size: 0.82rem; cursor: pointer; padding: 6px 10px; }
+.dp-mailwiz__notnow:hover { color: var(--dp-text); }
+.dp-mailwiz__pwrow { display: flex; gap: 8px; align-items: stretch; }
+.dp-mailwiz__pwrow .dp-input { flex: 1 1 auto; min-width: 0; }
+.dp-mailwiz__reveal { flex: 0 0 auto; padding: 0 12px; border: 1px solid var(--dp-border); border-radius: 9px; background: var(--dp-surface); color: var(--dp-text-dim); font: inherit; font-size: 0.78rem; cursor: pointer; }
+.dp-mailwiz__reveal:hover { color: var(--dp-text); border-color: var(--dp-border-strong); }
+.dp-mailwiz__hint { margin: 0; font-size: 0.76rem; color: var(--dp-text-muted); line-height: 1.5; }
+.dp-mailwiz__field-err { font-size: 0.76rem; color: var(--hp-accent-red, #f2607a); }
+.dp-mailwiz__help { border: 1px solid var(--dp-border); border-radius: 11px; padding: 12px 14px; background: var(--dp-surface); display: flex; flex-direction: column; gap: 8px; }
+.dp-mailwiz__helpsteps { margin: 0; padding-left: 18px; font-size: 0.82rem; color: var(--dp-text-dim); line-height: 1.6; display: flex; flex-direction: column; gap: 2px; }
+.dp-mailwiz__progress { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 0.86rem; color: var(--dp-text); }
+.dp-mailwiz__connect { width: 100%; }
+.dp-mailwiz__success { align-items: center; text-align: center; }
+.dp-mailwiz__success-ic { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 999px; background: rgba(53,198,122,0.16); color: var(--hp-accent-green, #35c67a); font-size: 1.5rem; font-weight: 700; }
+.dp-mailwiz__addr { margin: 0; font-weight: 600; color: var(--dp-text); }
+.dp-mailwiz__success .dp-mailwiz__perms { text-align: left; align-self: stretch; }
 
 /* Real Mail settings panel bits. */
 .dp-statedot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }

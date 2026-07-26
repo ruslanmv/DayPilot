@@ -1,5 +1,6 @@
 from .base import Base
 from .models import (
+    AgentDelegation,
     AgentRun,
     Approval,
     AssistantRun,
@@ -18,6 +19,7 @@ from .models import (
     DocumentChunk,
     EmailItem,
     Event,
+    HomePilotAgentLink,
     InboxAccount,
     IntegrationConnection,
     Job,
@@ -55,6 +57,8 @@ __all__ = [
     "DocumentChunk",
     "EmailItem",
     "Event",
+    "AgentDelegation",
+    "HomePilotAgentLink",
     "InboxAccount",
     "IntegrationConnection",
     "Job",

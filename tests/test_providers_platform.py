@@ -63,10 +63,16 @@ def test_local_absent_is_not_connected(monkeypatch):
     assert out["connection"]["state"] == "offline" and out["connection"]["active"] is False
 
 
+def _connected_probe(models):
+    return lambda base, key: {
+        "code": "connected", "latencyMs": 12.0, "models": list(models),
+        "resolvedBaseUrl": pp.normalize_gateway_root(base) + "/v1",
+    }
+
+
 def test_local_connect_persists_after_successful_probe(monkeypatch):
     ws = _ws()
-    monkeypatch.setattr(pp.OllabridgeConnector, "ping",
-                        lambda self: (True, 12.0, ["llama3.1", "qwen2.5"]))
+    monkeypatch.setattr(pp, "_probe_local", _connected_probe(["llama3.1", "qwen2.5"]))
     with session_scope(ENGINE) as s:
         out = pp.local_connect(s, ws, "http://localhost:11435/v1", None)
     assert out["code"] == "connected"
@@ -83,7 +89,7 @@ def test_set_active_requires_connected_provider(monkeypatch):
     assert resp.status_code == 409
 
     # Connect local, then activate it.
-    monkeypatch.setattr(pp.OllabridgeConnector, "ping", lambda self: (True, 9.0, ["llama3.1"]))
+    monkeypatch.setattr(pp, "_probe_local", _connected_probe(["llama3.1"]))
     with session_scope(ENGINE) as s:
         pp.local_connect(s, ws, "http://localhost:11435/v1", None)
     ok = client.patch("/v1/providers/active", json={"workspaceId": ws, "kind": "local"})
@@ -91,20 +97,102 @@ def test_set_active_requires_connected_provider(monkeypatch):
 
 
 def test_local_probe_normalizes_stored_v1_base(monkeypatch):
-    """The stored base is http://localhost:11435/v1; the probe must build a
-    connector whose root has /v1 stripped, so /v1/models resolves (no 404 →
+    """The stored base is http://localhost:11435/v1; the probe must hand
+    _probe_one a root with /v1 stripped, so /v1/models resolves (no 404 →
     "not running" false negative)."""
     seen: dict = {}
 
-    def fake_ping(self):
-        seen["base"] = self.base_url
-        return (True, 5.0, ["llama3"])
+    def fake_probe_one(root, key):
+        seen["root"] = root
+        return {"code": "connected", "latencyMs": 5.0, "models": ["llama3"]}
 
-    monkeypatch.setattr(pp.OllabridgeConnector, "ping", fake_ping)
+    monkeypatch.setattr(pp, "_probe_one", fake_probe_one)
     with session_scope(ENGINE) as s:
         out = pp.local_test(s, _ws(), "http://localhost:11435/v1", None)
     assert out["code"] == "connected"
-    assert seen["base"] == "http://localhost:11435"  # /v1 stripped → no doubling
+    assert seen["root"] == "http://localhost:11435"  # /v1 stripped → no doubling
+
+
+def _tiny_gateway(models_status: int, models_body: dict | None = None):
+    """A throwaway local gateway: public /health, gated/variable /v1/models."""
+    import json as _json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class _H(BaseHTTPRequestHandler):
+        def log_message(self, *a):  # silence
+            pass
+
+        def do_GET(self):  # noqa: N802
+            if self.path.rstrip("/").endswith("/health"):
+                body = _json.dumps({"status": "ok", "nodes": 1}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path.rstrip("/").endswith("/v1/models"):
+                if models_status == 200:
+                    body = _json.dumps(models_body or {"data": []}).encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    self.send_response(models_status)
+                    self.end_headers()
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.server_address[1]}/v1"
+
+
+def test_local_probe_health_first_reports_key_required_not_offline():
+    """Regression for 'Ollabridge isn't running at that address': a healthy
+    gateway that gates /v1/models behind a key (non-loopback / required mode) is
+    reachable via public /health, so it must NOT be reported as offline."""
+    srv, base = _tiny_gateway(models_status=401)
+    try:
+        no_key = pp._probe_local(base, None)
+        with_key = pp._probe_local(base, "sk-ollabridge-wrong")
+    finally:
+        srv.shutdown()
+    assert no_key["code"] == "key_required"   # reachable; just needs the key
+    assert with_key["code"] == "unauthorized"  # a key was supplied but rejected
+
+
+def test_wsl_host_fallbacks_prioritise_default_gateway(monkeypatch):
+    """WSL2 fix: the eth0 default-route gateway (the Windows host) is tried
+    first, ahead of the Docker alias, so a host-side gateway is reachable when
+    localhost (the WSL VM) refuses."""
+    monkeypatch.setattr(pp, "_default_route_gateway", lambda: "172.31.96.1")
+    ips = pp._host_gateway_ips()
+    assert ips[0] == "172.31.96.1"           # host first
+    assert ips[-1] == "host.docker.internal"  # docker alias last
+    # A loopback URL expands to include the host gateway as a candidate.
+    cands = pp._loopback_candidates("http://localhost:11435")
+    assert "http://172.31.96.1:11435" in cands
+    assert cands[0] == "http://localhost:11435"  # original first
+
+
+def test_default_route_gateway_parses_valid_ipv4_or_none():
+    gw = pp._default_route_gateway()
+    if gw is not None:
+        import ipaddress as _ip
+        _ip.ip_address(gw)  # raises if the little-endian decode is wrong
+
+
+def test_local_probe_connected_when_models_listed():
+    srv, base = _tiny_gateway(200, {"data": [{"id": "llama3"}, {"id": "qwen2.5"}]})
+    try:
+        res = pp._probe_local(base, None)
+    finally:
+        srv.shutdown()
+    assert res["code"] == "connected" and res["models"] == ["llama3", "qwen2.5"]
 
 
 def test_cloud_auth_root_and_web_links_never_double_v1():
@@ -122,7 +210,7 @@ def test_status_exposes_cloud_web_login():
 
 def test_public_view_never_leaks_secrets(monkeypatch):
     ws = _ws()
-    monkeypatch.setattr(pp.OllabridgeConnector, "ping", lambda self: (True, 5.0, ["llama3.1"]))
+    monkeypatch.setattr(pp, "_probe_local", _connected_probe(["llama3.1"]))
     with session_scope(ENGINE) as s:
         pp.local_connect(s, ws, "http://localhost:11435/v1", "sk-secret-key")
     body = client.get(f"/v1/providers/status?workspaceId={ws}").json()

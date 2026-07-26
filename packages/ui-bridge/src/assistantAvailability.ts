@@ -13,6 +13,7 @@
 import React from 'react'
 import { api } from './apiClient'
 import { isDemoMode } from './env'
+import { PROVIDERS_CHANGED_EVENT } from './providersClient'
 
 export type AssistantAvailability = 'checking' | 'down' | 'limited' | 'ready'
 
@@ -27,15 +28,32 @@ export async function checkAssistantAvailability(): Promise<AssistantAvailabilit
   return connected ? 'ready' : 'limited'
 }
 
-/** React hook: re-checks on mount and exposes a manual retry. */
+/** React hook: re-checks on mount, when a provider connection changes, and when
+ *  the tab regains focus — so connecting a provider flips the assistant out of
+ *  "Limited mode" immediately, without a reload. Also exposes a manual retry. */
 export function useAssistantAvailability(): { state: AssistantAvailability; retry: () => void } {
   const [state, setState] = React.useState<AssistantAvailability>('checking')
+  const aliveRef = React.useRef(true)
   const run = React.useCallback(() => {
-    let alive = true
     setState('checking')
-    checkAssistantAvailability().then((s) => { if (alive) setState(s) })
-    return () => { alive = false }
+    checkAssistantAvailability().then((s) => { if (aliveRef.current) setState(s) })
   }, [])
-  React.useEffect(() => run(), [run])
+  React.useEffect(() => {
+    aliveRef.current = true
+    run()
+    // Re-sync when a provider is connected/activated elsewhere (onboarding wizard
+    // or Settings → AI providers), or when the user returns to the tab.
+    const onChange = () => run()
+    const onVisible = () => { if (document.visibilityState === 'visible') run() }
+    window.addEventListener(PROVIDERS_CHANGED_EVENT, onChange)
+    window.addEventListener('focus', onChange)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      aliveRef.current = false
+      window.removeEventListener(PROVIDERS_CHANGED_EVENT, onChange)
+      window.removeEventListener('focus', onChange)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [run])
   return { state, retry: run }
 }

@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import imaplib
 import os
+import secrets
 import smtplib
 import socket
 import ssl
 from typing import Any
+from urllib.parse import urlencode
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -42,7 +44,59 @@ _PROVIDER_HOSTS = {
     "microsoft": ("outlook.office365.com", 993, "ssl", "smtp.office365.com", 587, "starttls"),
 }
 
+# Domain → (imap_host, imap_port, imap_security, smtp_host, smtp_port, smtp_security,
+# app_password_recommended). An internal implementation detail: the user only ever
+# sees "settings discovered automatically". Both secure SMTP shapes are represented —
+# 465+SSL and 587+STARTTLS — rather than assuming 587/STARTTLS for every domain.
+_GMAIL = ("imap.gmail.com", 993, "ssl", "smtp.gmail.com", 587, "starttls", True)
+_MS = ("outlook.office365.com", 993, "ssl", "smtp.office365.com", 587, "starttls", True)
+_ICLOUD = ("imap.mail.me.com", 993, "ssl", "smtp.mail.me.com", 587, "starttls", True)
+_YAHOO = ("imap.mail.yahoo.com", 993, "ssl", "smtp.mail.yahoo.com", 465, "ssl", True)
+_AOL = ("imap.aol.com", 993, "ssl", "smtp.aol.com", 465, "ssl", True)
+_FASTMAIL = ("imap.fastmail.com", 993, "ssl", "smtp.fastmail.com", 465, "ssl", True)
+_GMX = ("imap.gmx.com", 993, "ssl", "mail.gmx.com", 587, "starttls", False)
+_ZOHO = ("imap.zoho.com", 993, "ssl", "smtp.zoho.com", 465, "ssl", False)
+DOMAIN_PRESETS: dict[str, tuple] = {
+    "gmail.com": _GMAIL, "googlemail.com": _GMAIL,
+    "outlook.com": _MS, "hotmail.com": _MS, "live.com": _MS, "msn.com": _MS, "office365.com": _MS,
+    "icloud.com": _ICLOUD, "me.com": _ICLOUD, "mac.com": _ICLOUD,
+    "yahoo.com": _YAHOO, "ymail.com": _YAHOO, "yahoo.co.uk": _YAHOO,
+    "aol.com": _AOL,
+    "fastmail.com": _FASTMAIL, "fastmail.fm": _FASTMAIL,
+    "gmx.com": _GMX, "gmx.net": _GMX,
+    "zoho.com": _ZOHO,
+}
+
 _PROBE_TIMEOUT = 8.0
+
+
+def discover_mailbox(email_address: str) -> dict[str, Any]:
+    """Resolve IMAP/SMTP settings from an email domain, so the user never types a
+    server. ``status`` is 'found' for a known domain, otherwise 'manual_required'
+    (a best-guess is still returned so Advanced settings can be pre-filled). The
+    hostname is never *presented* as confirmed until a probe verifies it."""
+    email = (email_address or "").strip().lower()
+    if "@" not in email:
+        return {"status": "manual_required"}
+    domain = email.rsplit("@", 1)[1]
+    preset = DOMAIN_PRESETS.get(domain)
+    if preset:
+        ih, ip, isec, sh, sp, ssec, apr = preset
+        return {
+            "status": "found", "username": email, "appPasswordRecommended": apr,
+            "settings": {
+                "imapHost": ih, "imapPort": ip, "imapSecurity": isec,
+                "smtpHost": sh, "smtpPort": sp, "smtpSecurity": ssec,
+            },
+        }
+    # Unknown domain: return a conventional guess (unverified) for Advanced to show.
+    return {
+        "status": "manual_required", "username": email, "appPasswordRecommended": False,
+        "settings": {
+            "imapHost": f"imap.{domain}", "imapPort": 993, "imapSecurity": "ssl",
+            "smtpHost": f"smtp.{domain}", "smtpPort": 587, "smtpSecurity": "starttls",
+        },
+    }
 
 
 # ---- persistence helpers ----------------------------------------------------
@@ -97,6 +151,16 @@ def _resolve_hosts(provider: str, cfg: dict[str, Any]) -> dict[str, Any]:
             "imap_host": ih, "imap_port": ip, "imap_security": isec,
             "smtp_host": sh, "smtp_port": sp, "smtp_security": ssec,
         }
+    # No manual host supplied → discover from the email domain, so a generic
+    # account can connect with just an address + password.
+    if not (cfg.get("imapHost") or "").strip():
+        disc = discover_mailbox(cfg.get("emailAddress") or cfg.get("username") or "")
+        s = disc.get("settings")
+        if s:
+            return {
+                "imap_host": s["imapHost"], "imap_port": s["imapPort"], "imap_security": s["imapSecurity"],
+                "smtp_host": s["smtpHost"], "smtp_port": s["smtpPort"], "smtp_security": s["smtpSecurity"],
+            }
     return {
         "imap_host": (cfg.get("imapHost") or "").strip(),
         "imap_port": int(cfg.get("imapPort") or 993),
@@ -358,12 +422,29 @@ def adapter_for_workspace(session: Session, workspace_id: str):
     )
 
 
+# OAuth authorize endpoints + the IMAP/SMTP scopes DayPilot needs (XOAUTH2).
+_OAUTH_AUTHORIZE = {
+    "google": (
+        "https://accounts.google.com/o/oauth2/v2/auth",
+        "https://mail.google.com/ https://www.googleapis.com/auth/userinfo.email",
+    ),
+    "microsoft": (
+        "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "https://outlook.office.com/IMAP.AccessAsUser.All "
+        "https://outlook.office.com/SMTP.Send offline_access openid email",
+    ),
+}
+
+
 def oauth_start(session: Session, workspace_id: str, provider: str) -> dict[str, Any]:
     """OAuth for Gmail/Microsoft. Honest: only available when the deployment has
-    configured OAuth client credentials. Otherwise the UI falls back to app
-    passwords over IMAP/SMTP rather than pretending a flow exists."""
+    configured OAuth client credentials. When configured, returns the real
+    provider authorization URL the browser redirects to (authorization-code flow,
+    with a CSRF ``state`` bound to the workspace). Otherwise the UI falls back to
+    an app password over IMAP/SMTP rather than pretending a flow exists."""
     provider = provider.lower()
-    env_prefix = "GOOGLE" if provider in ("google", "gmail") else "MICROSOFT"
+    key = "google" if provider in ("google", "gmail") else "microsoft"
+    env_prefix = "GOOGLE" if key == "google" else "MICROSOFT"
     client_id = os.getenv(f"{env_prefix}_OAUTH_CLIENT_ID", "")
     if not client_id:
         return {
@@ -371,9 +452,26 @@ def oauth_start(session: Session, workspace_id: str, provider: str) -> dict[str,
             "reason": "oauth_not_configured",
             "fallback": "imap",
             "message": (
-                f"{provider.title()} OAuth isn't configured on this deployment. "
-                "Connect using an app password over IMAP/SMTP instead."
+                f"{key.title()} secure sign-in isn't configured on this deployment. "
+                "Connect using an app password instead."
             ),
         }
-    # A configured deployment would return an authorization URL here.
-    return {"available": True, "provider": provider}
+    authorize_base, scope = _OAUTH_AUTHORIZE[key]
+    state = f"{workspace_id}:{secrets.token_urlsafe(16)}"
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "scope": scope,
+        "state": state,
+        "access_type": "offline",   # Google: return a refresh token
+        "prompt": "select_account consent",
+    }
+    redirect_uri = os.getenv(f"{env_prefix}_OAUTH_REDIRECT_URI", "").strip()
+    if redirect_uri:
+        params["redirect_uri"] = redirect_uri
+    return {
+        "available": True,
+        "provider": key,
+        "authorizationUrl": f"{authorize_base}?{urlencode(params)}",
+        "state": state,
+    }

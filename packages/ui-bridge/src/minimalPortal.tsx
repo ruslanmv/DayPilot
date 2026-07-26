@@ -15,6 +15,8 @@ import { EmailWorkspace } from './email/EmailWorkspace'
 import { ApprovalCenter } from './approvals/ApprovalCenter'
 import { HomeWorkspace } from './home/HomeWorkspace'
 import { PlanningWorkspace } from './planning/PlanningWorkspace'
+import { AgentsLandingPage } from './agents/AgentsLandingPage'
+import { useRoute, type PortalView } from './shell/route'
 import { OnboardingWizard } from './onboarding/OnboardingWizard'
 import { ProjectWizard, type NewProject } from './projects/ProjectWizard'
 import { useProjects } from './useProjects'
@@ -50,7 +52,7 @@ function navViews(emailEnabled: boolean): NavItem[] {
   return [...NAV_BASE.slice(0, docsIndex), EMAIL_NAV, ...NAV_BASE.slice(docsIndex)]
 }
 
-type PortalView = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'documents' | 'agents' | 'email'
+// PortalView + the hash router live in ./shell/route (Batch A3).
 type DrawerItem =
   | { kind: 'task'; item: DayPilotTask }
   | { kind: 'project'; item: DayPilotProject }
@@ -485,29 +487,8 @@ function DocumentsCore({ sources, documents, onSelect }: {
   )
 }
 
-function AgentsCore({ agents, onSelect }: { agents: DayPilotAgent[]; onSelect: (agent: DayPilotAgent) => void }) {
-  return (
-    <section className="dp-projects-screen">
-      <div className="dp-calendar-controls">
-        <div>
-          <h3>AI Workforce</h3>
-          <p>Running, Needs Approval, or Blocked. Everything else stays in the drawer.</p>
-        </div>
-        <span className="dp-pill">OLLĀBRIDGE · LOCAL</span>
-      </div>
-      <div className="dp-agent-table">
-        {agents.map((agent) => (
-          <button key={agent.id} type="button" className="dp-agent-row" onClick={() => onSelect(agent)}>
-            <span>{agent.name}</span>
-            <span>{agent.currentWork}</span>
-            <span className={cx('dp-tag', agent.status === 'Blocked' ? 'dp-tag--critical' : agent.status === 'Needs Approval' ? 'dp-tag--high' : 'dp-tag--agent')}>{agent.status}</span>
-            <span>{agent.provider}</span>
-          </button>
-        ))}
-      </div>
-    </section>
-  )
-}
+// The legacy agent run-table was replaced by the four-column staff directory
+// (agents/AgentsLandingPage.tsx) in the HomePilot agents integration.
 
 function DetailDrawer({ selected, documents, onClose }: { selected?: DrawerItem; documents: DayPilotDocument[]; onClose: () => void }) {
   const title = selected?.item && ('title' in selected.item ? selected.item.title : selected.item.name)
@@ -571,7 +552,11 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
   // when the host app didn't call initTheme() itself.
   useEffect(() => { initTheme() }, [])
   const NAV_VIEWS = navViews(emailEnabled)
-  const [view, setView] = useState<PortalView>('home')
+  // Deep-linkable hash routing (Batch A3). `setView` keeps the old call sites
+  // working; navigating also updates the URL and browser history.
+  const { route, navigate } = useRoute()
+  const view = route.view
+  const setView = navigate
   const [messages, setMessages] = useState<DayPilotMessage[]>(seedMessages)
   const [tasks, setTasks] = useState<DayPilotTask[]>(seedTasks)
   const { projects, setProjects, createProject } = useProjects(seedProjects)
@@ -723,19 +708,30 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
           <>
             <header className="dp-topbar">
               <div>
-                <h2>{view === 'planning' ? 'Day Planner' : view === 'calendar' ? 'Minute Plan' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : view === 'email' ? 'Email' : 'AI Workflows'}</h2>
+                <h2>{view === 'planning' ? 'Day Planner' : view === 'calendar' ? 'Minute Plan' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : view === 'email' ? 'Email' : 'Agents'}</h2>
                 <p>DayPilot = Calendar + Tasks + Projects + Agents + Documents + Natural Tools.</p>
               </div>
               <span className="dp-pill">NOW · DOCUMENTS · AI RUNNING · APPROVALS</span>
             </header>
 
             <div className="dp-view">
-              {view === 'planning' && <PlanningWorkspace onStartFocus={startFocusMode} />}
+              {view === 'planning' && <PlanningWorkspace onStartFocus={startFocusMode} onNavigate={(t) => {
+                if (t === 'email') setView('email')
+                else if (t === 'tasks') setView('tasks')
+                else if (t === 'new-project') setProjectWizardOpen(true)
+                else if (t === 'settings-profile') setSettingsSection('profile')
+              }} />}
               {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
               {view === 'tasks' && <OperationalLedger tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
               {view === 'projects' && <ProjectsCore projects={projects} documents={documents} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
               {view === 'documents' && <DocumentsCore sources={documentSources} documents={documents} onSelect={(item) => setSelected({ kind: 'document', item })} />}
-              {view === 'agents' && <AgentsCore agents={agents} onSelect={(item) => setSelected({ kind: 'agent', item })} />}
+              {view === 'agents' && (
+                <AgentsLandingPage
+                  onAddAgent={() => setSettingsSection('homepilot')}
+                  openAgentId={route.agentId}
+                  onOpenAgent={(id) => navigate('agents', { agentId: id })}
+                />
+              )}
               {view === 'email' && <EmailWorkspace />}
             </div>
           </>
@@ -803,7 +799,10 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
   onSignOut?: () => void
 }) {
   const NAV = navViews(emailEnabled)
-  const [view, setView] = useState<PortalView>('home')
+  // Deep-linkable hash routing (Batch A3); shared with the desktop shell.
+  const { route, navigate } = useRoute()
+  const view = route.view
+  const setView = navigate
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiSeed, setAiSeed] = useState<string | undefined>()
@@ -839,7 +838,7 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
   }, [drawerOpen, aiOpen])
 
   function go(target: PortalView) {
-    setView(target)
+    navigate(target)
     setDrawerOpen(false)
   }
   function openAi(seed?: string) {
@@ -868,12 +867,23 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
 
       <main className="dp-m__main">
         {view === 'home' && <MobileHome onStartFocus={startFocus} onNavigate={go} onAsk={openAi} />}
-        {view === 'planning' && <PlanningWorkspace onStartFocus={startFocus} />}
+        {view === 'planning' && <PlanningWorkspace onStartFocus={startFocus} onNavigate={(t) => {
+          if (t === 'email') go('email')
+          else if (t === 'tasks') go('tasks')
+          else if (t === 'new-project') setProjectWizardOpen(true)
+          else if (t === 'settings-profile') setSettingsSection('profile')
+        }} />}
         {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
         {view === 'tasks' && <OperationalLedger tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
         {view === 'projects' && <ProjectsCore projects={projects} documents={documents} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
         {view === 'documents' && <DocumentsCore sources={documentSources} documents={documents} onSelect={(item) => setSelected({ kind: 'document', item })} />}
-        {view === 'agents' && <AgentsCore agents={agents} onSelect={(item) => setSelected({ kind: 'agent', item })} />}
+        {view === 'agents' && (
+          <AgentsLandingPage
+            onAddAgent={() => setSettingsSection('homepilot')}
+            openAgentId={route.agentId}
+            onOpenAgent={(id) => navigate('agents', { agentId: id })}
+          />
+        )}
         {view === 'email' && <EmailWorkspace />}
       </main>
 

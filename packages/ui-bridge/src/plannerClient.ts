@@ -136,4 +136,21 @@ export async function chatPlan(message: string, date = isoToday()): Promise<Plan
   return res.ok ? res.data : null
 }
 
+/** Create a task so the planner has a real work source. Returns true on success;
+ *  the readiness check then reports tasksOpen > 0 and the plan can be built. */
+export async function createQuickTask(title: string, dueToday = false): Promise<boolean> {
+  const trimmed = title.trim()
+  if (!trimmed) return false
+  const res = await api.post('/v1/tasks', {
+    workspaceId: workspaceId(),
+    title: trimmed,
+    owner: 'you',
+    priority: 'medium',
+    status: 'active',
+    source: 'planner_setup',
+    ...(dueToday ? { day: isoToday() } : {}),
+  })
+  return res.ok
+}
+
 export { isoToday }

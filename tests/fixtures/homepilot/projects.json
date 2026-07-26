@@ -1,0 +1,40 @@
+{
+  "projects": [
+    {
+      "id": "scarlett-project-id",
+      "name": "Scarlett",
+      "description": "Executive Secretary — manages priorities, comms, schedules.",
+      "project_type": "persona",
+      "persona_agent": {
+        "label": "Scarlett",
+        "role": "Executive Secretary",
+        "category": "Executive Support",
+        "allowed_tools": ["email", "calendar", "tasks"],
+        "memory_mode": "adaptive"
+      },
+      "persona_appearance": {
+        "selected_thumb_filename": "projects/scarlett-project-id/persona/appearance/thumb_avatar_scarlett.webp"
+      },
+      "updated_at": "2026-07-20T10:00:00Z"
+    },
+    {
+      "id": "atlas-project-id",
+      "name": "Atlas",
+      "description": "Research Analyst — gathers data and risk summaries.",
+      "project_type": "persona",
+      "persona_agent": {
+        "label": "Atlas",
+        "role": "Research Analyst",
+        "category": "Research",
+        "allowed_tools": ["web", "documents"],
+        "memory_mode": "adaptive"
+      },
+      "updated_at": "2026-07-20T09:30:00Z"
+    },
+    {
+      "id": "some-doc-project",
+      "name": "Q3 Docs",
+      "project_type": "document"
+    }
+  ]
+}

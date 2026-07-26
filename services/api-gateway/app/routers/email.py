@@ -111,6 +111,19 @@ def status(session: Session = Depends(get_session), workspaceId: str = "default"
 
 # ---- mailbox setup wizard (Batch 3) -----------------------------------------
 
+class DiscoverBody(BaseModel):
+    emailAddress: str = ""
+    workspaceId: str = "default"
+
+
+@router.post("/discover")
+def mailbox_discover(body: DiscoverBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Resolve IMAP/SMTP settings from an email domain so the user never types a
+    server. Returns discovered settings (kept hidden unless Advanced is opened)."""
+    _require_enabled()
+    return mail_setup.discover_mailbox(body.emailAddress)
+
+
 @router.post("/test")
 def mailbox_test(body: MailboxTestBody, session: Session = Depends(get_session)) -> dict[str, Any]:
     """Non-destructive IMAP/SMTP probe. Never sends, never marks read, never

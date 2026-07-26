@@ -87,7 +87,7 @@ the endpoint and key format differ.
 ```bash
 OLLABRIDGE_MODE=local                 # local | cloud — picks the default endpoint
 OLLABRIDGE_URL=http://localhost:11435/v1                             # local gateway
-OLLABRIDGE_CLOUD_URL=https://ruslanmv-ollabridge-cloud.hf.space/v1  # used when MODE=cloud
+OLLABRIDGE_CLOUD_URL=https://ruslanmv-ollabridge.hf.space/v1  # used when MODE=cloud
 OLLABRIDGE_API_KEY=                    # sk-ollabridge-… (local) or ob_live_… (cloud)
 OLLABRIDGE_DEFAULT_MODEL=llama3.1
 ```

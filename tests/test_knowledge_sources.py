@@ -69,3 +69,18 @@ def test_box_oauth_is_honest_when_unconfigured(monkeypatch):
     monkeypatch.delenv("BOX_OAUTH_CLIENT_ID", raising=False)
     out = client.post("/v1/knowledge/box/oauth/start", json={"workspaceId": _ws()}).json()
     assert out["available"] is False and out["reason"] == "box_not_configured"
+
+
+def test_box_oauth_returns_authorize_url_when_configured(monkeypatch):
+    """Configured Box returns a real authorize URL the client opens in a new tab,
+    carrying the client id and a CSRF state bound to the workspace."""
+    monkeypatch.setenv("BOX_OAUTH_CLIENT_ID", "box-client-123")
+    monkeypatch.setenv("BOX_OAUTH_REDIRECT_URI", "https://app.example.com/box/callback")
+    ws = _ws()
+    out = client.post("/v1/knowledge/box/oauth/start", json={"workspaceId": ws}).json()
+    assert out["available"] is True
+    assert out["authUrl"].startswith("https://account.box.com/api/oauth2/authorize?")
+    assert "client_id=box-client-123" in out["authUrl"]
+    assert "response_type=code" in out["authUrl"]
+    assert "redirect_uri=" in out["authUrl"]
+    assert out["state"].startswith(f"{ws}:")

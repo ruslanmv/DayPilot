@@ -215,6 +215,20 @@ class Task(TimestampMixin, Base):
     parallel_ai: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_action: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # HomePilot agent work (agents integration, A7). A task produced from a
+    # persona directive records which agent it belongs to. ``assigned`` does the
+    # work, ``manager`` delegated it (Phase 10), ``created_by`` proposed it.
+    # ``remote_reference`` holds the safe proposal payload (capability + args)
+    # for a ``daypilot.action.propose`` task; ``approval_id`` links the Approval
+    # gating an external write. A directive-created task NEVER starts completed.
+    assigned_agent_link_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    manager_agent_link_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by_agent_link_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    parent_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    progress_percent: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    remote_reference: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    approval_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
     __table_args__ = (
         Index(
             "ix_tasks_owner_status_project_due",
@@ -247,6 +261,8 @@ class AgentRun(TimestampMixin, Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
+    # Ties a run to the HomePilot agent that owns it (agents integration, A7).
+    agent_link_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     __table_args__ = (Index("ix_agent_runs_state_updated", "state", "updated_at"),)
 
@@ -383,6 +399,16 @@ class ChatSession(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(200), default="New conversation")
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     message_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # Agent workspace (HomePilot integration, A4). A session is either the shared
+    # assistant ("assistant") or one agent's dedicated workspace ("agent"). For an
+    # agent session, `agent_link_id` references the HomePilotAgentLink, and the
+    # remote ids let a later batch resume HomePilot's own conversation. HomePilot
+    # owns the remote conversation; DayPilot only stores the reference.
+    kind: Mapped[str] = mapped_column(String(20), default="assistant", server_default="assistant")
+    agent_link_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    remote_session_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    remote_conversation_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     messages: Mapped[list[ChatMessage]] = relationship(
         back_populates="session", cascade="all, delete-orphan", order_by="ChatMessage.seq"
@@ -716,3 +742,73 @@ class CalendarEvent(TimestampMixin, Base):
     project_id: Mapped[str | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
 
     __table_args__ = (Index("ix_calendar_events_ws_start", "workspace_id", "start_at"),)
+
+
+class HomePilotAgentLink(TimestampMixin, Base):
+    """A DayPilot-side *reference* to a HomePilot persona (agents integration).
+
+    HomePilot owns the agent (identity, prompt, memory, sessions); DayPilot only
+    stores display metadata + local ownership flags (enabled/favorite/status).
+    The persona prompt and memory are NEVER stored here (contract rule 5). When a
+    persona disappears from HomePilot the link is marked ``offline`` — never
+    deleted — so historical tasks/conversations survive (rule 9).
+    """
+
+    __tablename__ = "homepilot_agent_links"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    connection_id: Mapped[str] = mapped_column(String(36), index=True)
+    # The HomePilot account this agent belongs to (multi-account security). Every
+    # synced link is stamped with the connection's bound account so one user's
+    # agents can never blend with another's; a link whose account no longer
+    # matches the connection is marked offline, never surfaced.
+    account_ref: Mapped[str] = mapped_column(String(200), default="", server_default="", index=True)
+    homepilot_project_id: Mapped[str] = mapped_column(String(120))
+    homepilot_model_id: Mapped[str] = mapped_column(String(160), default="")  # persona:<project_id>
+    name: Mapped[str] = mapped_column(String(200), default="")
+    role: Mapped[str] = mapped_column(String(200), default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    avatar_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)      # HomePilot-relative
+    thumbnail_ref: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    capabilities_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    memory_mode: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)   # disabled until the user enables it
+    favorite: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="disabled")  # AGENT_STATUSES
+    snapshot_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # safe display snapshot
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_homepilot_link_unique",
+            "workspace_id", "connection_id", "homepilot_project_id",
+            unique=True,
+        ),
+    )
+
+
+class AgentDelegation(TimestampMixin, Base):
+    """A manager agent delegating a sub-task to a worker agent (agents
+    integration, A9). HomePilot runs the personas; DayPilot records and governs
+    the delegation chain (``You → manager → worker``) and enforces the safety
+    limits: no self, no cycles, depth ≤ 2, ≤ 3 workers per manager task, ≤ 10
+    child tasks, and a worker never granted more capability than its manager.
+    Both agents must be the same account (multi-account security)."""
+
+    __tablename__ = "agent_delegations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    manager_agent_link_id: Mapped[str] = mapped_column(String(36), index=True)
+    worker_agent_link_id: Mapped[str] = mapped_column(String(36), index=True)
+    parent_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    child_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    capability: Mapped[str] = mapped_column(String(120), default="")
+    depth: Mapped[int] = mapped_column(Integer, default=1)
+    status: Mapped[str] = mapped_column(String(20), default="assigned")  # assigned|rejected|completed
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (Index("ix_agent_delegations_ws_parent", "workspace_id", "parent_task_id"),)

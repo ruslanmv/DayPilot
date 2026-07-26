@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { isDemoMode } from '../env'
 import { KNOWLEDGE_SOURCES, SOURCES_SUMMARY } from './settingsData'
 import { knowledgeApi, sourceStatusLabel, type KnowledgeSource } from './knowledgeSourcesClient'
+import { pickWorkspaceFolder, supportsDirectoryPicker } from './workspaceFolder'
 
 /**
  * Settings → Knowledge sources (Issue 1).
@@ -29,8 +30,11 @@ export function KnowledgeSourcesPanel() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  async function addFolder() {
-    const path = window.prompt('Enter a folder path on the DayPilot server (a browser can’t hand the server an arbitrary local folder):', '/data/projects')
+  async function addFolder(prefill?: string, picked?: string) {
+    const prompt = picked
+      ? `Confirm the server path for “${picked}” (browsers can’t hand over the absolute path):`
+      : 'Enter a folder path on the DayPilot server (a browser can’t hand the server an arbitrary local folder):'
+    const path = window.prompt(prompt, prefill ?? '/data/projects')
     if (!path) return
     setBusy('add'); setNote(null)
     const r = await knowledgeApi.addLocal(path.trim())
@@ -39,11 +43,25 @@ export function KnowledgeSourcesPanel() {
     else setNote(r.error === 'path_not_found' || (r.status === 404) ? `No folder found at ${path} on the server.` : 'Could not add that folder.')
   }
 
+  /** Open the native OS folder picker (choose or create a folder), then confirm
+   *  the server path. Falls back to the plain prompt when unsupported. */
+  async function browseFolder() {
+    const p = await pickWorkspaceFolder('/data/projects')
+    if (p) return addFolder(p.suggestedPath, p.name)
+    if (!supportsDirectoryPicker()) return addFolder()
+    // Supported but cancelled — do nothing.
+  }
+
   async function connectBox() {
     setBusy('box'); setNote(null)
     const r = await knowledgeApi.boxStart()
     setBusy(null)
-    setNote(r.ok ? (r.data.available ? 'Opening Box sign-in…' : r.data.message ?? 'Box isn’t configured on this deployment.') : 'Could not reach the server.')
+    if (r.ok && r.data.authUrl) {
+      window.open(r.data.authUrl, '_blank', 'noopener,noreferrer')
+      setNote('Opening Box sign-in in a new tab — authorize read access, then return here.')
+    } else {
+      setNote(r.ok ? (r.data.message ?? 'Box isn’t configured on this deployment.') : 'Could not reach the server.')
+    }
   }
 
   async function reindex(id: string) {
@@ -99,7 +117,8 @@ export function KnowledgeSourcesPanel() {
       ))}
       {note && <p className="dp-muted">{note}</p>}
       <div className="dp-settings-actions">
-        <button className="dp-ghost-button" type="button" disabled={busy !== null} onClick={addFolder}>{busy === 'add' ? 'Adding…' : 'Add folder'}</button>
+        <button className="dp-ghost-button" type="button" disabled={busy !== null} onClick={browseFolder}>{busy === 'add' ? 'Adding…' : 'Browse folder…'}</button>
+        <button className="dp-ghost-button" type="button" disabled={busy !== null} onClick={() => addFolder()}>Add by path</button>
         <button className="dp-ghost-button" type="button" disabled={busy !== null || !boxAvailable} title={boxAvailable ? '' : 'Box isn’t configured on this deployment'} onClick={connectBox}>Connect Box</button>
       </div>
       <p className="dp-muted">Local folders are read + indexed only. Add them by a path that exists on the DayPilot server.</p>

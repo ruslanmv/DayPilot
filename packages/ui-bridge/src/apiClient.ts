@@ -14,11 +14,14 @@ export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; s
 
 async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T>> {
   const url = `${apiBase()}${path.startsWith('/') ? path : `/${path}`}`
+  // For multipart/FormData, let the browser set Content-Type (with its
+  // boundary) — forcing application/json would corrupt the upload.
+  const isForm = typeof FormData !== 'undefined' && init?.body instanceof FormData
   try {
     const res = await fetch(url, {
       ...init,
       headers: {
-        'Content-Type': 'application/json',
+        ...(isForm ? {} : { 'Content-Type': 'application/json' }),
         'X-Workspace-Id': workspaceId(),
         ...(init?.headers || {}),
       },
@@ -59,6 +62,8 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
+  postForm: <T>(path: string, form: FormData) =>
+    request<T>(path, { method: 'POST', body: form }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body) }),
   del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
