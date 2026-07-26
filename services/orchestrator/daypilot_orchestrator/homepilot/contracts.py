@@ -103,7 +103,16 @@ AGENT_STATUSES: frozenset[str] = frozenset(
 
 
 class HomePilotFeature(str, Enum):
-    """Feature flags gating each phase. Everything is OFF until explicitly set."""
+    """Feature flags for the HomePilot integration.
+
+    These are **administrator overrides**, not user-facing on/off switches. The
+    integration is a first-class onboarding experience, not an experiment: it is
+    ON by default (see ``_FEATURE_DEFAULTS``). An unset flag means "use the
+    default"; an admin may pin a flag by setting it explicitly. Only an explicit
+    falsey ``RUNTIME`` value hard-disables the whole surface (an admin lock) —
+    ordinary users then see "unavailable — disabled by your administrator", never
+    the variable name.
+    """
 
     RUNTIME = "DAYPILOT_HOMEPILOT_RUNTIME_ENABLED"
     SYNC = "DAYPILOT_HOMEPILOT_SYNC_ENABLED"
@@ -112,21 +121,57 @@ class HomePilotFeature(str, Enum):
     IMPORTS = "DAYPILOT_HOMEPILOT_IMPORTS_ENABLED"
 
 
+# Default state of each flag when the admin has not pinned it. The runtime, agent
+# sync, and chat (sessions/memory) are the out-of-the-box experience; delegation
+# stays off until the backend is production-ready; the offline ``.hpersona``
+# importer stays off (agents are added in HomePilot, not imported).
+_FEATURE_DEFAULTS: dict[HomePilotFeature, bool] = {
+    HomePilotFeature.RUNTIME: True,
+    HomePilotFeature.SYNC: True,
+    HomePilotFeature.CHAT: True,
+    HomePilotFeature.DELEGATION: False,
+    HomePilotFeature.IMPORTS: False,
+}
+
+INSTALL_WIZARD_FLAG = "DAYPILOT_HOMEPILOT_INSTALL_WIZARD_ENABLED"
+
+
 def _truthy(value: str | None) -> bool:
     return (value or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _flag(name: str, default: bool) -> bool:
+    """Resolve an override flag: unset/blank → default; else its truthiness."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return _truthy(raw)
+
+
+def admin_disabled() -> bool:
+    """True only when an administrator explicitly set the master flag to a falsey
+    value. This is the one state that hard-disables the whole integration; every
+    other state is a normal (enabled) connection state."""
+    raw = os.getenv(HomePilotFeature.RUNTIME.value)
+    return raw is not None and raw.strip() != "" and not _truthy(raw)
+
+
+def install_wizard_enabled() -> bool:
+    """Whether the guided install/connect wizard is offered (default on)."""
+    return _flag(INSTALL_WIZARD_FLAG, True)
+
+
 def runtime_enabled() -> bool:
-    """Master switch — all other HomePilot features imply this being on."""
-    return _truthy(os.getenv(HomePilotFeature.RUNTIME.value))
+    """Master switch — on by default; off only under an explicit admin lock."""
+    return _flag(HomePilotFeature.RUNTIME.value, _FEATURE_DEFAULTS[HomePilotFeature.RUNTIME])
 
 
 def feature_enabled(feature: HomePilotFeature) -> bool:
-    """A feature is enabled only when BOTH the master runtime flag and the
-    feature's own flag are set — so a single master switch disables everything."""
+    """A feature is enabled when the master runtime is on AND the feature's own
+    override resolves on. A single admin lock on ``RUNTIME`` disables everything."""
     if feature is HomePilotFeature.RUNTIME:
         return runtime_enabled()
-    return runtime_enabled() and _truthy(os.getenv(feature.value))
+    return runtime_enabled() and _flag(feature.value, _FEATURE_DEFAULTS[feature])
 
 
 # HomePilot addresses a persona as this model id on its OpenAI-compatible API.
@@ -159,6 +204,9 @@ __all__ = [
     "VALID_PRIORITIES",
     "runtime_enabled",
     "feature_enabled",
+    "admin_disabled",
+    "install_wizard_enabled",
+    "INSTALL_WIZARD_FLAG",
     "persona_model_id",
     "is_persona_model",
     "project_id_from_model",

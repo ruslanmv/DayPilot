@@ -24,7 +24,9 @@ from daypilot_orchestrator.homepilot.directives import validate_directives
 from daypilot_orchestrator.homepilot.contracts import (
     HomePilotFeature,
     ToolMode,
+    admin_disabled,
     feature_enabled,
+    install_wizard_enabled,
     persona_model_id,
     runtime_enabled,
 )
@@ -52,6 +54,37 @@ def _secret(connection_id: str) -> dict[str, str]:
         return credential_store().get(f"homepilot:{connection_id}") or {}
     except Exception:  # noqa: BLE001 - missing/again-later secret is not fatal
         return {}
+
+
+# Per-connection sync + agent-behavior preferences (non-secret metadata, stored
+# alongside the credential). The safety rule "external actions require approval"
+# is NOT a preference — it is permanent and lives in the Approval Center.
+DEFAULT_PREFS: dict[str, Any] = {
+    "autoSync": True,
+    "syncOnStart": True,
+    "syncIntervalMinutes": 15,
+    "newAgentsDisabled": True,
+    "showOffline": True,
+    "useSessions": True,
+    "allowDelegation": False,
+}
+
+
+def _prefs(connection_id: str) -> dict[str, Any]:
+    """The connection's preferences, defaults filled in for anything unset."""
+    stored = _secret(connection_id).get("prefs")
+    prefs = dict(DEFAULT_PREFS)
+    if isinstance(stored, dict):
+        for k in DEFAULT_PREFS:
+            if k in stored:
+                prefs[k] = stored[k]
+    return prefs
+
+
+def _store_prefs(connection_id: str, prefs: dict[str, Any]) -> None:
+    secret = _secret(connection_id)
+    secret["prefs"] = {k: prefs.get(k, DEFAULT_PREFS[k]) for k in DEFAULT_PREFS}
+    credential_store().put(f"homepilot:{connection_id}", secret)
 
 
 def _client_for(row: IntegrationConnection) -> HomePilotClient | None:
@@ -129,6 +162,7 @@ def _public(row: IntegrationConnection) -> dict[str, Any]:
         # chat-only (plain replies, no directives).
         "chatMode": secret.get("chat_mode") or "unknown",
         "bridgeVersion": secret.get("bridge_version") or "",
+        "prefs": _prefs(row.id),
         "lastTestedAt": row.last_activity_at.isoformat() if row.last_activity_at else None,
         "lastError": row.detail or None,
     }
@@ -156,6 +190,81 @@ def _first_connection(session: Session, workspace_id: str) -> IntegrationConnect
 
 def enabled() -> bool:
     return runtime_enabled()
+
+
+# Map a connection's probe status to the wizard's connection-state machine.
+_CONNECTION_STATE_BY_STATUS = {
+    "connected": "connected",
+    "unreachable": "offline",
+    "unauthorized": "needs_attention",
+    "unconfigured": "not_connected",
+}
+_HEALTH_BY_STATUS = {"connected": "healthy", "unreachable": "unreachable", "unauthorized": "starting"}
+
+
+def _agent_count(session: Session, workspace_id: str, connection_id: str) -> int:
+    return len(
+        session.execute(
+            select(HomePilotAgentLink.id).where(
+                HomePilotAgentLink.workspace_id == workspace_id,
+                HomePilotAgentLink.connection_id == connection_id,
+            )
+        ).scalars().all()
+    )
+
+
+def setup_status(session: Session, workspace_id: str) -> dict[str, Any]:
+    """Drive the settings page + wizard: the single source of truth for the
+    connection-state machine. Always reachable (even under an admin lock) so the
+    UI can render the right message instead of an error."""
+    if admin_disabled():
+        # An administrator explicitly turned the integration off. Ordinary users
+        # see "unavailable — disabled by your administrator"; never the var name.
+        return {
+            "featureEnabled": False,
+            "adminLocked": True,
+            "connectionState": "admin_disabled",
+            "detectionAvailable": False,
+            "installWizardAvailable": False,
+            "connection": None,
+        }
+
+    row = _first_connection(session, workspace_id)
+    if row is None:
+        return {
+            "featureEnabled": True,
+            "adminLocked": False,
+            "connectionState": "not_connected",
+            "detectionAvailable": True,
+            "installWizardAvailable": install_wizard_enabled(),
+            "connection": None,
+        }
+
+    pub = _public(row)
+    count = _agent_count(session, workspace_id, row.id)
+    state = _CONNECTION_STATE_BY_STATUS.get(row.status, "needs_attention")
+    return {
+        "featureEnabled": True,
+        "adminLocked": False,
+        "connectionState": state,
+        "detectionAvailable": True,
+        "installWizardAvailable": install_wizard_enabled(),
+        "connection": {
+            "id": row.id,
+            "displayName": "HomePilot",
+            "browserUrl": _gallery_url(pub["baseUrl"]),
+            "apiUrl": pub["baseUrl"],
+            "health": _HEALTH_BY_STATUS.get(row.status, "unreachable"),
+            "version": "",
+            "agentCount": count,
+            "chatMode": pub["chatMode"],
+            "accountLabel": pub["accountLabel"],
+            "remoteKind": pub["remoteKind"],
+            "prefs": pub["prefs"],
+            "lastSyncedAt": pub["lastTestedAt"],
+            "lastError": pub["lastError"],
+        },
+    }
 
 
 def imports_enabled() -> bool:
@@ -366,8 +475,37 @@ def list_profiles(session: Session, workspace_id: str) -> dict[str, Any]:
         select(HomePilotAgentLink)
         .where(HomePilotAgentLink.workspace_id == workspace_id)
         .order_by(HomePilotAgentLink.favorite.desc(), HomePilotAgentLink.name.asc())
-    ).scalars()
-    return {"profiles": [_public_profile(r) for r in rows]}
+    ).scalars().all()
+    profiles = [_public_profile(r) for r in rows]
+    # Honour the "show offline agents" preference (default on → unchanged).
+    conn = _first_connection(session, workspace_id)
+    if conn is not None and not _prefs(conn.id)["showOffline"]:
+        profiles = [p for p in profiles if p["status"] != "offline"]
+    return {"profiles": profiles}
+
+
+def patch_connection(session: Session, workspace_id: str, connection_id: str,
+                     prefs_patch: dict[str, Any]) -> dict[str, Any] | None:
+    """Update a connection's sync + agent-behavior preferences. Unknown keys are
+    ignored; the permanent approval rule is never a preference."""
+    row = _get_connection(session, workspace_id, connection_id)
+    if row is None:
+        return None
+    current = _prefs(connection_id)
+    for key, value in (prefs_patch or {}).items():
+        if key not in DEFAULT_PREFS:
+            continue
+        if key == "syncIntervalMinutes":
+            try:
+                current[key] = max(1, min(1440, int(value)))
+            except (TypeError, ValueError):
+                continue
+        else:
+            current[key] = bool(value)
+    _store_prefs(connection_id, current)
+    row.last_activity_at = utcnow()
+    session.flush()
+    return {"connection": _public(row)}
 
 
 def _get_link(session: Session, workspace_id: str, link_id: str) -> HomePilotAgentLink | None:
