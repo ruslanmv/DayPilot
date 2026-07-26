@@ -96,9 +96,90 @@ export type AgentTaskRow = {
   updatedAt?: string | null
 }
 
+/** The onboarding connection-state machine (backend shape). Drives the settings
+ * page + wizard: the integration is enabled by default, so `not_connected` is a
+ * setup prompt, never an error. `admin_disabled` is the one hard-off state. */
+export type HomePilotConnectionState =
+  | 'not_connected'
+  | 'detecting'
+  | 'detected'
+  | 'connecting'
+  | 'connected'
+  | 'syncing'
+  | 'needs_attention'
+  | 'offline'
+  | 'admin_disabled'
+
+/** Per-connection sync + agent-behavior preferences (the approval rule is not
+ * a preference — external actions always require approval). */
+export type HomePilotPrefs = {
+  autoSync: boolean
+  syncOnStart: boolean
+  syncIntervalMinutes: number
+  newAgentsDisabled: boolean
+  showOffline: boolean
+  useSessions: boolean
+  allowDelegation: boolean
+}
+
+export type HomePilotSetupConnection = {
+  id: string
+  displayName: string
+  browserUrl: string
+  apiUrl: string
+  health: 'healthy' | 'starting' | 'unreachable'
+  version?: string
+  agentCount: number
+  chatMode?: 'bridge' | 'chat_only' | 'unknown'
+  accountLabel?: string
+  remoteKind?: 'local' | 'cloud'
+  prefs?: HomePilotPrefs
+  lastSyncedAt?: string | null
+  lastError?: string | null
+}
+
+export type HomePilotSetupStatus = {
+  featureEnabled: boolean
+  adminLocked: boolean
+  connectionState: HomePilotConnectionState
+  detectionAvailable: boolean
+  installWizardAvailable: boolean
+  connection: HomePilotSetupConnection | null
+}
+
+export type HomePilotDetectedInstance = {
+  apiUrl: string
+  browserUrl: string
+  health: 'healthy' | 'starting' | 'unreachable'
+  version?: string | null
+  installationType: 'desktop' | 'single_container' | 'docker_compose' | 'remote' | 'unknown'
+}
+
+export type HomePilotDetectResult = {
+  detected: boolean
+  instance: HomePilotDetectedInstance | null
+  probes: { apiUrl: string; health: string }[]
+}
+
+export type HomePilotTestCheck = { key: string; ok: boolean; label: string }
+export type HomePilotTestResult = {
+  ok: boolean
+  code: string
+  checks: HomePilotTestCheck[]
+  personaCount: number
+  chatCount: number
+  version?: string | null
+  chatMode: 'bridge' | 'chat_only' | 'unknown'
+}
+
 const ws = () => workspaceId()
 
 export const homepilotApi = {
+  // Onboarding / setup (H2). status is always reachable — even under an admin lock.
+  setupStatus: () => api.get<HomePilotSetupStatus>(`/v1/homepilot/setup/status?workspaceId=${ws()}`),
+  detect: () => api.post<HomePilotDetectResult>('/v1/homepilot/setup/detect', {}),
+  testAddress: (baseUrl: string, apiKey?: string, allowPrivate = true) =>
+    api.post<HomePilotTestResult>('/v1/homepilot/setup/test', { baseUrl, apiKey, allowPrivate }),
   listConnections: () => api.get<{ connections: HomePilotConnection[] }>(`/v1/homepilot/connections?workspaceId=${ws()}`),
   connect: (baseUrl: string, apiKey?: string) =>
     api.post<{ connection: HomePilotConnection; code: string }>('/v1/homepilot/connections', { workspaceId: ws(), baseUrl, apiKey }),
@@ -106,6 +187,8 @@ export const homepilotApi = {
     api.post<{ code: string; connection: HomePilotConnection }>(`/v1/homepilot/connections/${encodeURIComponent(id)}/test`, { workspaceId: ws() }),
   disconnect: (id: string) =>
     api.del(`/v1/homepilot/connections/${encodeURIComponent(id)}?workspaceId=${ws()}`),
+  patchPrefs: (id: string, prefs: Partial<HomePilotPrefs>) =>
+    api.patch<{ connection: HomePilotConnection }>(`/v1/homepilot/connections/${encodeURIComponent(id)}`, { workspaceId: ws(), ...prefs }),
   sync: (id: string) =>
     api.post<SyncResult>(`/v1/homepilot/connections/${encodeURIComponent(id)}/sync`, { workspaceId: ws() }),
   listProfiles: () => api.get<{ profiles: AgentProfile[] }>(`/v1/agents/profiles?workspaceId=${ws()}`),

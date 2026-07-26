@@ -145,7 +145,8 @@ def test_turn_404_when_chat_flag_off(monkeypatch):
     fake = _FakeRuntime(_fixture("projects.json")["projects"],
                         [m["id"] for m in _fixture("models.json")["data"]])
     link_id = _enable(monkeypatch, ws, fake)
-    monkeypatch.delenv("DAYPILOT_HOMEPILOT_CHAT_ENABLED", raising=False)  # master on, chat off
+    # Chat is on by default; an admin can pin it off by setting the flag falsey.
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_CHAT_ENABLED", "false")  # master on, chat off
     r = client.post(f"/v1/agents/profiles/{link_id}/turn", json={"workspaceId": ws, "message": "Hi"})
     assert r.status_code == 404
 

@@ -34,16 +34,30 @@ def _ws() -> str:
 
 # --- contract ---------------------------------------------------------------
 
-def test_feature_flags_default_off_and_gate_on_master(monkeypatch):
+def test_feature_flags_enabled_by_default_and_admin_lock(monkeypatch):
+    # Nothing pinned → the integration is ON by default (first-class experience).
     for f in contracts.HomePilotFeature:
         monkeypatch.delenv(f.value, raising=False)
-    assert contracts.runtime_enabled() is False
-    assert contracts.feature_enabled(contracts.HomePilotFeature.SYNC) is False
-    # Sync needs BOTH master + its own flag.
-    monkeypatch.setenv("DAYPILOT_HOMEPILOT_SYNC_ENABLED", "true")
-    assert contracts.feature_enabled(contracts.HomePilotFeature.SYNC) is False
-    monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
+    assert contracts.runtime_enabled() is True
+    assert contracts.admin_disabled() is False
     assert contracts.feature_enabled(contracts.HomePilotFeature.SYNC) is True
+    assert contracts.feature_enabled(contracts.HomePilotFeature.CHAT) is True
+    # Delegation + offline imports stay off until explicitly enabled.
+    assert contracts.feature_enabled(contracts.HomePilotFeature.DELEGATION) is False
+    assert contracts.feature_enabled(contracts.HomePilotFeature.IMPORTS) is False
+    assert contracts.install_wizard_enabled() is True
+
+    # An explicit admin lock on the master flag hard-disables everything.
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "false")
+    assert contracts.runtime_enabled() is False
+    assert contracts.admin_disabled() is True
+    assert contracts.feature_enabled(contracts.HomePilotFeature.SYNC) is False
+
+    # An admin can also pin an individual feature off while the runtime stays on.
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_CHAT_ENABLED", "false")
+    assert contracts.admin_disabled() is False
+    assert contracts.feature_enabled(contracts.HomePilotFeature.CHAT) is False
 
 
 def test_contract_directives_and_persona_ids():
@@ -147,10 +161,19 @@ def test_sync_creates_refs_marks_shared_and_offline():
 
 # --- gateway endpoints ------------------------------------------------------
 
-def test_endpoints_404_when_runtime_disabled(monkeypatch):
-    monkeypatch.delenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", raising=False)
+def test_endpoints_404_under_admin_lock(monkeypatch):
+    # The integration is ON by default now; only an explicit admin lock
+    # (RUNTIME set to a falsey value) makes the data surface inert.
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "false")
     assert client.get(f"/v1/agents/profiles?workspaceId={_ws()}").status_code == 404
     assert client.get(f"/v1/homepilot/connections?workspaceId={_ws()}").status_code == 404
+
+
+def test_endpoints_enabled_by_default_without_env(monkeypatch):
+    # No RUNTIME env set at all → enabled (not an error). The data endpoints work.
+    monkeypatch.delenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", raising=False)
+    assert client.get(f"/v1/agents/profiles?workspaceId={_ws()}").status_code == 200
+    assert client.get(f"/v1/homepilot/connections?workspaceId={_ws()}").status_code == 200
 
 
 def test_connect_sync_and_enable_profile(monkeypatch):

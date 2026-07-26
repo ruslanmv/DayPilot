@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from starlette.responses import Response
 
 from .. import homepilot_platform as hp
+from .. import homepilot_setup as hp_setup
 from ..db import get_session
 
 router = APIRouter(tags=["homepilot"])
@@ -42,6 +43,37 @@ class ConnectBody(BaseModel):
     workspaceId: str = "default"
     baseUrl: str | None = None
     apiKey: str | None = None
+
+
+class SetupTestBody(BaseModel):
+    baseUrl: str
+    apiKey: str | None = None
+    allowPrivate: bool = True
+
+
+# ---- setup / onboarding -----------------------------------------------------
+
+@router.get("/v1/homepilot/setup/status")
+def setup_status(workspaceId: str = "default", session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Connection-state machine for the settings page + wizard. Always reachable
+    (even under an admin lock) so the UI renders the right message, not an error."""
+    return hp.setup_status(session, workspaceId)
+
+
+@router.post("/v1/homepilot/setup/detect")
+def setup_detect() -> dict[str, Any]:
+    """Look for a HomePilot installation on this host (backend-only probe of a
+    fixed candidate list). The browser never probes the network itself."""
+    _require_runtime()
+    return hp_setup.detect()
+
+
+@router.post("/v1/homepilot/setup/test")
+def setup_test(body: SetupTestBody) -> dict[str, Any]:
+    """Run a connection checklist against an address without persisting anything.
+    Never echoes the API key back."""
+    _require_runtime()
+    return hp_setup.test_address(body.baseUrl, body.apiKey, allow_private=body.allowPrivate)
 
 
 class WsBody(BaseModel):
@@ -82,6 +114,29 @@ def connection_status(connection_id: str, workspaceId: str = "default", session:
     _require_runtime()
     out = hp.connection_status(session, workspaceId, connection_id)
     if out.get("code") == "not_found":
+        raise HTTPException(status_code=404, detail="connection_not_found")
+    return out
+
+
+class ConnectionPrefsBody(BaseModel):
+    workspaceId: str = "default"
+    autoSync: bool | None = None
+    syncOnStart: bool | None = None
+    syncIntervalMinutes: int | None = None
+    newAgentsDisabled: bool | None = None
+    showOffline: bool | None = None
+    useSessions: bool | None = None
+    allowDelegation: bool | None = None
+
+
+@router.patch("/v1/homepilot/connections/{connection_id}")
+def patch_connection(connection_id: str, body: ConnectionPrefsBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Update a connection's sync + agent-behavior preferences. The permanent
+    approval rule is never a preference (external actions always need approval)."""
+    _require_runtime()
+    prefs = {k: v for k, v in body.model_dump(exclude={"workspaceId"}).items() if v is not None}
+    out = hp.patch_connection(session, body.workspaceId, connection_id, prefs)
+    if out is None:
         raise HTTPException(status_code=404, detail="connection_not_found")
     return out
 

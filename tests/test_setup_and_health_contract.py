@@ -345,16 +345,37 @@ def test_a12_hardening_guardrails_observability_mobile_docs() -> None:
 
 
 def test_homepilot_connection_panel_wired() -> None:
-    """Batch A1: a Settings → HomePilot agents panel connects to a side-by-side
-    HomePilot, syncs persona references, and enables agents — the browser only
-    ever calls DayPilot's own endpoints, and the runtime-off state is handled."""
+    """The Settings → HomePilot agents panel is a guided connection experience,
+    driven by the backend connection-state machine — never an env-var toggle. It
+    connects, syncs persona references, and enables agents through DayPilot's own
+    endpoints, and hides the variable name from ordinary users."""
     client = (UI / 'settings' / 'homepilotClient.ts').read_text(encoding='utf-8')
     assert '/v1/homepilot/connections' in client and '/v1/agents/profiles' in client
+    assert '/v1/homepilot/setup/status' in client and '/v1/homepilot/setup/detect' in client
+    assert '/v1/homepilot/setup/test' in client
     panel = (UI / 'settings' / 'HomePilotConnectionPanel.tsx').read_text(encoding='utf-8')
-    assert 'Refresh agents' in panel and 'runtime_off' in panel
+    assert 'setupStatus' in panel and 'connectionState' in panel
+    assert 'Set up HomePilot' in panel and 'disabled by your administrator' in panel
+    # The deployment variable name is never shown to ordinary users.
+    assert 'DAYPILOT_HOMEPILOT_RUNTIME_ENABLED' not in panel
     assert 'without copying their identity' in panel  # the contract promise, surfaced
     sp = (UI / 'shell' / 'SettingsPanel.tsx').read_text(encoding='utf-8')
     assert 'HomePilotConnectionPanel' in sp and "'homepilot'" in sp
+
+
+def test_homepilot_setup_wizard_present() -> None:
+    """A guided install → connect → choose agents → complete wizard exists, links
+    to the official HomePilot docs, and never runs shell/Docker commands from the
+    browser (it only shows + copies them)."""
+    wiz = (UI / 'settings' / 'HomePilotSetupWizard.tsx').read_text(encoding='utf-8')
+    assert 'ruslanmv.com/HomePilot/getting-started' in wiz
+    assert 'github.com/ruslanmv/HomePilot' in wiz
+    for phase in ('Install', 'Connect', 'Choose agents', 'Complete'):
+        assert phase in wiz
+    # Detection + testing go through the backend; the browser never probes itself.
+    assert 'homepilotApi.detect' in wiz and 'homepilotApi.testAddress' in wiz
+    # New agents start disabled (selection is opt-in).
+    assert 'start disabled' in wiz
 
 
 def test_planner_readiness_buttons_are_wired() -> None:

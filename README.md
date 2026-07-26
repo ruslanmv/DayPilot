@@ -156,6 +156,13 @@ never copies their identity or memory. See [`docs/agents-ui.md`](docs/agents-ui.
 
 <img src="docs/assets/screenshots/agents/add-agent.png" alt="Add agent — points to HomePilot, disabled by default" width="100%" />
 
+**Connecting HomePilot** is a guided experience — enabled by default, not an
+env-var toggle. When nothing is connected you get a "Set up HomePilot" prompt
+(not an error), and a wizard walks you through **Install → Connect → Choose
+agents → Complete**. See [`docs/homepilot-onboarding.md`](docs/homepilot-onboarding.md).
+
+<img src="docs/assets/screenshots/homepilot/setup-wizard.png" alt="HomePilot setup wizard — install, connect, choose agents, complete" width="100%" />
+
 ### Approval Center
 
 Every sensitive action — email sends, calendar writes, repo writes/PRs, file generation,
