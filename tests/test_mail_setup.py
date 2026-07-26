@@ -142,3 +142,52 @@ def test_oauth_start_is_honest_without_client_credentials(monkeypatch):
     out = client.post("/v1/email/oauth/google/start", json={"workspaceId": _ws()}).json()
     assert out["available"] is False
     assert out["fallback"] == "imap"
+
+
+def test_oauth_start_returns_authorization_url_when_configured(monkeypatch):
+    """Configured OAuth returns a real provider authorization URL to redirect to,
+    with client id + CSRF state bound to the workspace (authorization-code flow)."""
+    _enable(monkeypatch)
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "goog-client-123")
+    monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URI", "https://app.example.com/mail/oauth/callback")
+    ws = _ws()
+    out = client.post("/v1/email/oauth/google/start", json={"workspaceId": ws}).json()
+    assert out["available"] is True
+    assert out["authorizationUrl"].startswith("https://accounts.google.com/o/oauth2/v2/auth?")
+    assert "client_id=goog-client-123" in out["authorizationUrl"]
+    assert "response_type=code" in out["authorizationUrl"]
+    assert "redirect_uri=" in out["authorizationUrl"]
+    assert out["state"].startswith(f"{ws}:")
+
+
+def test_discover_resolves_known_domain_and_flags_unknown(monkeypatch):
+    _enable(monkeypatch)
+    found = client.post("/v1/email/discover", json={"emailAddress": "alex@fastmail.com"}).json()
+    assert found["status"] == "found"
+    assert found["settings"]["imapHost"] == "imap.fastmail.com"
+    # Fastmail's secure submission is 465/SSL — not the generic 587/STARTTLS default.
+    assert found["settings"]["smtpPort"] == 465 and found["settings"]["smtpSecurity"] == "ssl"
+    assert found["appPasswordRecommended"] is True
+    unknown = client.post("/v1/email/discover", json={"emailAddress": "person@some-corp.example"}).json()
+    assert unknown["status"] == "manual_required"
+
+
+def test_connect_resolves_hosts_from_domain_without_manual_entry(monkeypatch):
+    """A generic account can connect with only email + password: the backend
+    discovers the domain's hosts before probing (no imapHost supplied)."""
+    _enable(monkeypatch)
+    seen: dict = {}
+
+    def fake_probe(provider, cfg, username, password):
+        seen["hosts"] = mail_setup._resolve_hosts(provider, cfg)
+        return {"code": "connected", "checks": {"imap": "ok", "smtp": "ok"}, "hosts": seen["hosts"]}
+
+    monkeypatch.setattr(mail_setup, "probe", fake_probe)
+    ws = _ws()
+    out = client.post("/v1/email/connect", json={
+        "provider": "imap", "workspaceId": ws,
+        "emailAddress": "someone@fastmail.com", "password": "app-pw-here",
+    }).json()
+    assert out["code"] == "connected"
+    assert seen["hosts"]["imap_host"] == "imap.fastmail.com"  # discovered, not typed
+    assert seen["hosts"]["smtp_port"] == 465

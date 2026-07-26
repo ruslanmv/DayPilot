@@ -4,9 +4,12 @@ import {
   heightPx, minutesOf, slotLabels, topPx,
 } from '../calendar/calendarData'
 import {
-  applyProposal, chatPlan, dailyReview, discardProposal, generatePlan, loadPlan, loadReadiness, syncPlan,
+  applyProposal, chatPlan, createQuickTask, dailyReview, discardProposal, generatePlan, loadPlan, loadReadiness, syncPlan,
   type PlanProposal, type PlannerBlock, type PlannerPlan, type PlannerQuality, type PlannerReadiness,
 } from '../plannerClient'
+
+/** Where a readiness action sends the user. Resolved by the shell. */
+export type PlannerNav = 'email' | 'tasks' | 'new-project' | 'settings-profile'
 
 /**
  * Connected Day Planner — the primary screen once DayPilot's AI has generated a
@@ -47,7 +50,7 @@ function useNowMinute(): Date {
 }
 function fmtHM(min: number): string { return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}` }
 
-export function PlannerBoard({ onStartFocus }: { onStartFocus?: () => void }) {
+export function PlannerBoard({ onStartFocus, onNavigate }: { onStartFocus?: () => void; onNavigate?: (t: PlannerNav) => void }) {
   const [exp, setExp] = useState<Experience>('loading')
   const [readiness, setReadiness] = useState<PlannerReadiness | null>(null)
   const [plan, setPlan] = useState<PlannerPlan | null>(null)
@@ -78,6 +81,22 @@ export function PlannerBoard({ onStartFocus }: { onStartFocus?: () => void }) {
     })
   }, [])
 
+  // Re-check readiness only (no plan rebuild) after the user adds a source, so
+  // the checklist and the "Create my plan" gate update live.
+  const recheck = useCallback(async () => {
+    const r = await loadReadiness()
+    setReadiness(r)
+    if (r) setExp(r.sufficient ? 'ready_to_create' : 'initial_setup_required')
+  }, [])
+
+  const addTask = useCallback(async (title: string, dueToday: boolean) => {
+    setBusy(true)
+    const ok = await createQuickTask(title, dueToday)
+    setBusy(false)
+    if (ok) await recheck()
+    return ok
+  }, [recheck])
+
   if (exp === 'loading') return <PlannerState><span className="dp-spinner" aria-hidden="true" /><p>Loading your plan…</p></PlannerState>
   if (exp === 'creating') return <CreatingView />
   if (exp === 'failed') {
@@ -90,42 +109,86 @@ export function PlannerBoard({ onStartFocus }: { onStartFocus?: () => void }) {
     )
   }
   if (exp === 'initial_setup_required' || exp === 'ready_to_create') {
-    return <ReadinessView readiness={readiness} canCreate={exp === 'ready_to_create'} busy={busy} onCreate={() => create()} />
+    return <ReadinessView readiness={readiness} canCreate={exp === 'ready_to_create'} busy={busy}
+      onCreate={() => create()} onNavigate={onNavigate} onAddTask={addTask} />
   }
   return <PlanReadyView plan={plan!} readiness={readiness} busy={busy} onReplan={() => create('replan the rest of today')} onChat={setPlan} onStartFocus={onStartFocus} />
 }
 
 // --- readiness (first-time / empty) -----------------------------------------
 
-function ReadinessView({ readiness, canCreate, busy, onCreate }: { readiness: PlannerReadiness | null; canCreate: boolean; busy: boolean; onCreate: () => void }) {
+type ReadyRow = { key: string; label: string; ok: boolean; detail: string; action: string; nav?: PlannerNav }
+
+function ReadinessView({ readiness, canCreate, busy, onCreate, onNavigate, onAddTask }: {
+  readiness: PlannerReadiness | null; canCreate: boolean; busy: boolean; onCreate: () => void
+  onNavigate?: (t: PlannerNav) => void; onAddTask?: (title: string, dueToday: boolean) => Promise<boolean>
+}) {
   const r = readiness
-  const rows: [string, boolean, string][] = [
-    ['Working hours', !!r?.workingHoursConfigured, r?.workingHoursConfigured ? 'Set' : 'Using defaults'],
-    ['Calendar', !!r?.calendarConnected, r?.calendarConnected ? 'Connected' : 'Not connected'],
-    ['Tasks', (r?.tasksOpen ?? 0) > 0, `${r?.tasksOpen ?? 0} open · ${r?.tasksDueToday ?? 0} due today`],
-    ['Projects', (r?.projectsActive ?? 0) > 0, `${r?.projectsActive ?? 0} active`],
-    ['Focus preferences', !!r?.focusPrefsConfigured, r?.focusPrefsConfigured ? 'Configured' : 'Not configured'],
+  const [taskTitle, setTaskTitle] = useState('')
+  const [adding, setAdding] = useState(false)
+  const hasTasks = (r?.tasksOpen ?? 0) > 0
+
+  const rows: ReadyRow[] = [
+    { key: 'hours', label: 'Working hours', ok: !!r?.workingHoursConfigured, detail: r?.workingHoursConfigured ? 'Set' : 'Using defaults', action: 'Adjust', nav: 'settings-profile' },
+    { key: 'calendar', label: 'Calendar', ok: !!r?.calendarConnected, detail: r?.calendarConnected ? 'Connected' : 'Not connected', action: 'Connect', nav: 'email' },
+    { key: 'tasks', label: 'Tasks', ok: hasTasks, detail: `${r?.tasksOpen ?? 0} open · ${r?.tasksDueToday ?? 0} due today`, action: 'Add', nav: 'tasks' },
+    { key: 'projects', label: 'Projects', ok: (r?.projectsActive ?? 0) > 0, detail: `${r?.projectsActive ?? 0} active`, action: 'New', nav: 'new-project' },
+    { key: 'focus', label: 'Focus preferences', ok: !!r?.focusPrefsConfigured, detail: r?.focusPrefsConfigured ? 'Configured' : 'Not configured', action: 'Set', nav: 'settings-profile' },
   ]
+
+  async function addFirstTask() {
+    if (!taskTitle.trim() || !onAddTask) return
+    setAdding(true)
+    const ok = await onAddTask(taskTitle.trim(), true)
+    setAdding(false)
+    if (ok) setTaskTitle('')
+  }
+
   return (
     <PlannerState wide>
       <h2>{canCreate ? 'DayPilot is ready to build your plan' : 'DayPilot is preparing your first plan'}</h2>
       <p>{canCreate ? 'DayPilot has enough information to build a realistic plan from your real work.' : 'Connect at least one work source so DayPilot can build a useful schedule.'}</p>
       <ul className="dp-pl__ready">
-        {rows.map(([label, ok, detail]) => (
-          <li key={label} className={ok ? 'is-ok' : 'is-missing'}>
-            <span className="dp-pl__ready-icon" aria-hidden="true">{ok ? '✓' : '○'}</span>
-            <span className="dp-pl__ready-label">{label}</span>
-            <span className="dp-pl__ready-detail">{detail}</span>
+        {rows.map((row) => (
+          <li key={row.key} className={row.ok ? 'is-ok' : 'is-missing'}>
+            <span className="dp-pl__ready-icon" aria-hidden="true">{row.ok ? '✓' : '○'}</span>
+            <span className="dp-pl__ready-label">{row.label}</span>
+            <span className="dp-pl__ready-detail">{row.detail}</span>
+            {row.nav && onNavigate && (
+              <button type="button" className="dp-pl__ready-action" onClick={() => onNavigate(row.nav!)}>
+                {row.ok ? 'Manage' : row.action} →
+              </button>
+            )}
           </li>
         ))}
       </ul>
-      <div className="dp-pl__staterow">
-        {canCreate
-          ? <button className="dp-pl__primary" disabled={busy} onClick={onCreate}>{busy ? 'Creating…' : 'Create my plan'}</button>
-          : (r?.tasksOpen ?? 0) > 0
-            ? <button className="dp-pl__primary" disabled={busy} onClick={onCreate}>Create plan with tasks only</button>
-            : <button className="dp-ghost-button" disabled>Connect a source to continue</button>}
-      </div>
+
+      {canCreate ? (
+        <div className="dp-pl__staterow">
+          <button className="dp-pl__primary" disabled={busy} onClick={onCreate}>{busy ? 'Creating…' : 'Create my plan'}</button>
+        </div>
+      ) : hasTasks ? (
+        <div className="dp-pl__staterow">
+          <button className="dp-pl__primary" disabled={busy} onClick={onCreate}>{busy ? 'Creating…' : 'Create plan with tasks only'}</button>
+        </div>
+      ) : (
+        <div className="dp-pl__connect">
+          <label className="dp-pl__connect-label" htmlFor="dp-first-task">Add your first task to continue</label>
+          <div className="dp-pl__connect-row">
+            <input id="dp-first-task" className="dp-input" value={taskTitle} placeholder="e.g. Draft the Q3 proposal"
+              onChange={(e) => setTaskTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addFirstTask() } }} />
+            <button className="dp-pl__primary" disabled={!taskTitle.trim() || adding} onClick={addFirstTask}>{adding ? 'Adding…' : 'Add task'}</button>
+          </div>
+          {onNavigate && (
+            <div className="dp-pl__connect-alt">
+              <span>or connect a source:</span>
+              <button type="button" className="dp-linkbtn" onClick={() => onNavigate('email')}>Connect email</button>
+              <button type="button" className="dp-linkbtn" onClick={() => onNavigate('new-project')}>New project</button>
+            </div>
+          )}
+        </div>
+      )}
     </PlannerState>
   )
 }

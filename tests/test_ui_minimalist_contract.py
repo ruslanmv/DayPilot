@@ -187,12 +187,22 @@ def test_sidebar_nav_and_settings_menu_contract():
     # The shared mailbox setup wizard (Batch 3): real probe, honest states, no
     # fabricated connection, and a clear non-destructive guarantee.
     wiz = (ui / 'email' / 'MailSetupWizard.tsx').read_text(encoding='utf-8')
-    assert 'Connect your email' in wiz and 'Test connection' in wiz
-    assert 'never sends without your approval' in wiz
-    assert 'emailApi.test' in wiz and 'emailApi.connect' in wiz
+    # Premium wizard: guided sign-in (Choose account → Credentials → Connected),
+    # one connect action (no separate Test step), OAuth redirect, and a11y.
+    assert 'Connect your email' in wiz and 'Connect securely' in wiz
+    assert 'Nothing is sent or deleted without your approval' in wiz
+    assert 'Continue with Google' in wiz and 'Continue with Microsoft' in wiz
+    assert 'Connect another email account' in wiz
+    assert "'choose-account'" in wiz and "'connected'" in wiz
+    assert 'emailApi.connect' in wiz and 'emailApi.discover' in wiz
+    assert 'window.location.assign(r.data.authorizationUrl)' in wiz  # real OAuth redirect
+    assert 'setPassword(\'\')' in wiz  # secret cleared from state after connect
+    assert 'aria-live="polite"' in wiz and 'aria-invalid' in wiz  # accessible progress + errors
+    # No separate Test-connection step in the primary flow anymore.
+    assert 'Test connection' not in wiz
     client_src = (ui / 'email' / 'emailClient.ts').read_text(encoding='utf-8')
     assert '/v1/email/status' in client_src and '/v1/email/messages' in client_src
-    assert '/v1/email/test' in client_src and '/v1/email/connect' in client_src
+    assert '/v1/email/connect' in client_src and '/v1/email/discover' in client_src
     sani = (ui / 'email' / 'sanitizeEmailHtml.ts').read_text(encoding='utf-8')
     assert 'ALLOWED_TAGS' in sani and 'javascript' in sani and 'allowRemoteImages' in sani
 

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { OLLABRIDGE_PAIRING } from '../settings/settingsData'
+import { knowledgeApi } from '../settings/knowledgeSourcesClient'
+import { pickWorkspaceFolder, supportsDirectoryPicker } from '../settings/workspaceFolder'
 import {
   providersApi,
   localErrorText,
@@ -69,6 +71,7 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
   const [p, setP] = useState<OnboardingProfile>(EMPTY)
   const [test, setTest] = useState<TestState>('idle')
   const [testMsg, setTestMsg] = useState('')
+  const [srcNote, setSrcNote] = useState('')  // knowledge-source picker feedback
   // Web-app deep links for OllaBridge Cloud (Google/SSO, reset, create account).
   // Resolved from the backend (which knows the real deployment) with a default.
   const [cloudLoginUrl, setCloudLoginUrl] = useState(CLOUD_WEB_LOGIN_URL)
@@ -127,6 +130,30 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
     set({ aiProvider: mode, aiBaseUrl: m.endpoint, aiReady: false })
     setTest('idle')
     setTestMsg('')
+  }
+
+  /** Open the native OS folder picker (choose or create a folder). Falls back to
+   *  the manual path field when the browser can't do it. Additive — never blocks. */
+  async function browseFolder() {
+    const picked = await pickWorkspaceFolder(p.source)
+    if (picked) {
+      set({ source: picked.suggestedPath })
+      setSrcNote(`Selected “${picked.name}”. Confirm the full path DayPilot should read on the server.`)
+    } else if (!supportsDirectoryPicker()) {
+      setSrcNote('This browser can’t open a folder picker — type the folder path DayPilot should read.')
+    }
+  }
+
+  /** Link Box by opening its sign-in page in a new tab (server builds the URL). */
+  async function connectBox() {
+    setSrcNote('Opening Box sign-in…')
+    const r = await knowledgeApi.boxStart()
+    if (r.ok && r.data.authUrl) {
+      window.open(r.data.authUrl, '_blank', 'noopener,noreferrer')
+      setSrcNote('Continue in the Box sign-in tab, then return here.')
+    } else {
+      setSrcNote(r.ok ? (r.data.message ?? 'Box isn’t configured on this deployment.') : 'Couldn’t reach the server.')
+    }
   }
 
   /** Really connect the provider via the backend — not a generic health probe. */
@@ -262,13 +289,33 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
             <h2 className="dp-onb__title">Add a knowledge source</h2>
             <p className="dp-onb__sub">Point DayPilot at one place to read from so the AI can answer over your projects (RAG). Read + index only.</p>
             <div className="dp-onb__seg">
-              <button className={'dp-onb__segbtn' + (p.sourceKind === 'folder' ? ' is-active' : '')} onClick={() => set({ sourceKind: 'folder' })}>📁 Local folder</button>
-              <button className={'dp-onb__segbtn' + (p.sourceKind === 'box' ? ' is-active' : '')} onClick={() => set({ sourceKind: 'box' })}>▤ Box</button>
+              <button className={'dp-onb__segbtn' + (p.sourceKind === 'folder' ? ' is-active' : '')} onClick={() => { set({ sourceKind: 'folder' }); setSrcNote('') }}>📁 Local folder</button>
+              <button className={'dp-onb__segbtn' + (p.sourceKind === 'box' ? ' is-active' : '')} onClick={() => { set({ sourceKind: 'box' }); setSrcNote('') }}>▤ Box</button>
             </div>
-            <label className="dp-onb__field">
-              <span>{p.sourceKind === 'folder' ? 'Folder path' : 'Box folder'}</span>
-              <input value={p.source} onChange={(e) => set({ source: e.target.value })} placeholder={p.sourceKind === 'folder' ? '/data/projects' : 'box://folder/…'} autoFocus />
-            </label>
+            {p.sourceKind === 'folder' ? (
+              <>
+                <label className="dp-onb__field">
+                  <span>Folder path</span>
+                  <div className="dp-onb__inline">
+                    <input value={p.source} onChange={(e) => set({ source: e.target.value })} placeholder="/data/projects" autoFocus />
+                    <button type="button" className="dp-onb__inlinebtn" onClick={browseFolder}>Browse…</button>
+                  </div>
+                </label>
+                <p className="dp-onb__hint">Choose an existing folder or create a new one in the dialog. We suggest a clean project path you can confirm.</p>
+              </>
+            ) : (
+              <>
+                <label className="dp-onb__field">
+                  <span>Box folder</span>
+                  <div className="dp-onb__inline">
+                    <input value={p.source} onChange={(e) => set({ source: e.target.value })} placeholder="box://folder/…" />
+                    <button type="button" className="dp-onb__inlinebtn" onClick={connectBox}>Connect Box</button>
+                  </div>
+                </label>
+                <p className="dp-onb__hint">Connect opens Box sign-in in a new tab to authorize read access.</p>
+              </>
+            )}
+            {srcNote && <p className="dp-onb__hint" role="status">{srcNote}</p>}
             <p className="dp-onb__hint">You can add more sources anytime in Settings → Knowledge sources.</p>
           </div>
         )}

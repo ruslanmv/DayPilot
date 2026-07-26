@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { isDemoMode } from '../env'
 import { chatPlan, generatePlan, loadPlan, type PlannerBlock } from '../plannerClient'
-import { PlannerBoard } from './PlannerBoard'
+import { PlannerBoard, type PlannerNav } from './PlannerBoard'
 import {
   INITIAL_FOCUS_MINUTES,
   INITIAL_PLAN,
@@ -37,8 +37,8 @@ function toUiBlock(b: PlannerBlock, i: number): PlanUIBlock {
  */
 /** Planning dispatches to the connected Day Planner board in production; demo
  *  mode keeps the offline sample timeline below. */
-export function PlanningWorkspace({ onStartFocus }: { onStartFocus?: () => void }) {
-  return DEMO ? <DemoPlanning onStartFocus={onStartFocus} /> : <PlannerBoard onStartFocus={onStartFocus} />
+export function PlanningWorkspace({ onStartFocus, onNavigate }: { onStartFocus?: () => void; onNavigate?: (t: PlannerNav) => void }) {
+  return DEMO ? <DemoPlanning onStartFocus={onStartFocus} /> : <PlannerBoard onStartFocus={onStartFocus} onNavigate={onNavigate} />
 }
 
 function DemoPlanning({ onStartFocus }: { onStartFocus?: () => void }) {

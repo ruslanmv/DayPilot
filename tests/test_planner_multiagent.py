@@ -127,6 +127,21 @@ def test_readiness_reports_real_source_counts():
     assert resp.status_code == 200 and resp.json()["tasksOpen"] == len(TASKS)
 
 
+def test_add_task_unblocks_first_plan_readiness():
+    """The readiness screen's 'Add your first task' posts to POST /v1/tasks; a
+    single created task flips sufficient=false → true so the plan can be built."""
+    ws = "ws_readiness_addtask"
+    before = client.get(f"/v1/planner/plans/2026-07-14/readiness?workspaceId={ws}").json()
+    assert before["tasksOpen"] == 0 and before["sufficient"] is False
+    created = client.post("/v1/tasks", json={
+        "workspaceId": ws, "title": "Draft the Q3 proposal", "owner": "you",
+        "priority": "medium", "status": "active", "source": "planner_setup",
+    })
+    assert created.status_code == 201
+    after = client.get(f"/v1/planner/plans/2026-07-14/readiness?workspaceId={ws}").json()
+    assert after["tasksOpen"] == 1 and after["sufficient"] is True
+
+
 def test_generate_includes_block_type_reason_and_quality():
     ws = "ws_quality"
     _seed_tasks(ws)

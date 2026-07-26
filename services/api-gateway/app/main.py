@@ -23,6 +23,7 @@ from .routers import (
     documents,
     email,
     events,
+    homepilot,
     integrations,
     integrations_mcp,
     jobs,
@@ -59,6 +60,9 @@ app = FastAPI(title="DayPilot API Gateway", version="0.3.0", lifespan=_lifespan)
 install_observability(app)
 
 for _router in (
+    # HomePilot first so its specific /v1/agents/profiles* routes are matched
+    # before the agents router's /v1/agents/{run_id} catch-all.
+    homepilot.router,
     tasks.router,
     projects.router,
     agents.router,

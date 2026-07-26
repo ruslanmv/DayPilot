@@ -33,21 +33,54 @@ export type ProviderStatus = {
   cloudRegisterUrl?: string
 }
 
-/** Fallback web endpoints when the backend status hasn't loaded yet. */
-export const CLOUD_WEB_LOGIN_URL = 'https://ruslanmv-ollabridge-cloud.hf.space/login'
-export const CLOUD_WEB_REGISTER_URL = 'https://ruslanmv-ollabridge-cloud.hf.space/register'
+/** Fallback web endpoints when the backend status hasn't loaded yet. Points at
+ *  the live OllaBridge Cloud space (…-ollabridge.hf.space), whose /login and
+ *  /register pages are deployed; the backend status may override these. */
+export const CLOUD_WEB_LOGIN_URL = 'https://ruslanmv-ollabridge.hf.space/login'
+export const CLOUD_WEB_REGISTER_URL = 'https://ruslanmv-ollabridge.hf.space/register'
 
 const ws = () => workspaceId()
 
+/**
+ * Fired whenever a provider connection changes (connect, sign in/out, activate)
+ * so already-mounted views — chiefly the assistant availability badge — re-sync
+ * immediately instead of waiting for a remount. Without this the assistant stays
+ * "Limited mode" until reload even though a provider was just connected.
+ */
+export const PROVIDERS_CHANGED_EVENT = 'daypilot:providers-changed'
+export function notifyProvidersChanged(): void {
+  try { window.dispatchEvent(new Event(PROVIDERS_CHANGED_EVENT)) } catch { /* non-browser */ }
+}
+
 export const providersApi = {
   status: () => api.get<ProviderStatus>(`/v1/providers/status?workspaceId=${ws()}`),
-  localDiscover: () => api.post<{ code: string; models: string[]; connection: ProviderConnection }>('/v1/providers/local/discover', { workspaceId: ws() }),
+  localDiscover: async () => {
+    const r = await api.post<{ code: string; models: string[]; connection: ProviderConnection }>('/v1/providers/local/discover', { workspaceId: ws() })
+    if (r.ok && r.data.code === 'connected') notifyProvidersChanged()
+    return r
+  },
   localTest: (baseUrl: string, apiKey?: string) => api.post<{ code: string; models: string[]; connection: ProviderConnection }>('/v1/providers/local/test', { workspaceId: ws(), baseUrl, apiKey }),
-  localConnect: (baseUrl: string, apiKey?: string) => api.post<{ code: string; connection: ProviderConnection }>('/v1/providers/local/connect', { workspaceId: ws(), baseUrl, apiKey }),
-  cloudLogin: (email: string, password: string) => api.post<{ code: string; connection?: ProviderConnection }>('/v1/providers/cloud/login', { workspaceId: ws(), email, password }),
+  localConnect: async (baseUrl: string, apiKey?: string) => {
+    const r = await api.post<{ code: string; connection: ProviderConnection }>('/v1/providers/local/connect', { workspaceId: ws(), baseUrl, apiKey })
+    if (r.ok && r.data.code === 'connected') notifyProvidersChanged()
+    return r
+  },
+  cloudLogin: async (email: string, password: string) => {
+    const r = await api.post<{ code: string; connection?: ProviderConnection }>('/v1/providers/cloud/login', { workspaceId: ws(), email, password })
+    if (r.ok && r.data.code === 'connected') notifyProvidersChanged()
+    return r
+  },
   cloudModels: () => api.get<{ models: string[] }>(`/v1/providers/cloud/models?workspaceId=${ws()}`),
-  cloudLogout: () => api.post<{ loggedOut: boolean; connection: ProviderConnection }>('/v1/providers/cloud/logout', { workspaceId: ws() }),
-  setActive: (kind: ProviderKind) => api.patch<{ active: ProviderKind }>('/v1/providers/active', { workspaceId: ws(), kind }),
+  cloudLogout: async () => {
+    const r = await api.post<{ loggedOut: boolean; connection: ProviderConnection }>('/v1/providers/cloud/logout', { workspaceId: ws() })
+    if (r.ok) notifyProvidersChanged()
+    return r
+  },
+  setActive: async (kind: ProviderKind) => {
+    const r = await api.patch<{ active: ProviderKind }>('/v1/providers/active', { workspaceId: ws(), kind })
+    if (r.ok) notifyProvidersChanged()
+    return r
+  },
   setDefaultModel: (kind: ProviderKind, model: string) => api.patch<{ connection: ProviderConnection }>('/v1/providers/default-model', { workspaceId: ws(), kind, model }),
 }
 
@@ -57,7 +90,8 @@ export function localErrorText(code: string): string {
     case 'connection_refused': return 'Ollabridge isn’t running at that address.'
     case 'not_installed': return 'Ollabridge doesn’t appear to be installed. Install it, then detect again.'
     case 'timeout': return 'The local gateway didn’t respond in time.'
-    case 'unauthorized': return 'The local gateway rejected the key.'
+    case 'unauthorized': return 'The local gateway rejected that key. Check the sk-ollabridge-… key from the gateway startup output.'
+    case 'key_required': return 'Ollabridge is running, but this connection needs its API key. Paste the sk-ollabridge-… key shown when the gateway started into the API key field.'
     case 'no_models': return 'The gateway is reachable but has no usable models.'
     case 'invalid_response': return 'That address didn’t respond like Ollabridge.'
     default: return 'Couldn’t reach the local gateway.'

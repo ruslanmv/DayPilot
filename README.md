@@ -141,6 +141,21 @@ dark and light themes.
 </tr>
 </table>
 
+### AI staff — Agents
+
+Your **AI staff**: a directory of HomePilot personas you connect to and put to
+work, each shown with its own portrait pulled straight from the persona. Open an
+agent for a dedicated workspace — a live conversation plus a task rail (Active /
+Waiting for approval / Completed). Agents **propose** work; nothing is sent,
+changed, or delegated without your approval. HomePilot owns the agents — DayPilot
+never copies their identity or memory. See [`docs/agents-ui.md`](docs/agents-ui.md).
+
+<img src="docs/assets/screenshots/agents/agents-directory.png" alt="Agents directory — your AI staff" width="100%" />
+
+<img src="docs/assets/screenshots/agents/agent-workspace.png" alt="Agent workspace — live chat + task rail with approvals" width="100%" />
+
+<img src="docs/assets/screenshots/agents/add-agent.png" alt="Add agent — points to HomePilot, disabled by default" width="100%" />
+
 ### Approval Center
 
 Every sensitive action — email sends, calendar writes, repo writes/PRs, file generation,
@@ -434,7 +449,7 @@ DAYPILOT_AUTH_ENABLED=false          # local-first; enable + map tokens for team
 DAYPILOT_MODEL_BACKEND=mock          # mock | ollama | vllm | ollabridge
 OLLABRIDGE_MODE=local                # local | cloud (picks the default endpoint)
 OLLABRIDGE_URL=http://localhost:11435/v1                             # local gateway
-OLLABRIDGE_CLOUD_URL=https://ruslanmv-ollabridge-cloud.hf.space/v1  # used when MODE=cloud
+OLLABRIDGE_CLOUD_URL=https://ruslanmv-ollabridge.hf.space/v1  # used when MODE=cloud
 OLLABRIDGE_API_KEY=                  # sk-ollabridge-… (local) or ob_live_…/ob_test_… (cloud)
 DAYPILOT_CODING_EXECUTOR=gitpilot    # gitpilot | claude_code | codex
 

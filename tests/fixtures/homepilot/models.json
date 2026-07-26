@@ -1,0 +1,8 @@
+{
+  "object": "list",
+  "data": [
+    { "id": "llama3:8b", "object": "model" },
+    { "id": "persona:scarlett-project-id", "object": "model", "owned_by": "homepilot" },
+    { "id": "personality:therapist", "object": "model", "owned_by": "homepilot" }
+  ]
+}

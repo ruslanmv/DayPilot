@@ -68,9 +68,19 @@ def decide_approval(
             detail=f"Deciding a '{approval.resource_type}' approval requires role '{needed}'.",
         )
     try:
-        return decide(session, approval_id, body.decision, principal.subject, body.reason)
+        result = decide(session, approval_id, body.decision, principal.subject, body.reason)
     except ApprovalDecisionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    # A8: if this approval gated a HomePilot agent's proposed action, execute it
+    # through DayPilot's own integrations (approve) or mark it rejected. No-op for
+    # every other kind of approval, so the generic Approval Center stays generic.
+    from .. import homepilot_platform as hp
+
+    execution = hp.on_approval_decided(session, approval)
+    if execution is not None:
+        result["agentExecution"] = execution
+    return result
 
 
 @router.get("/audit/export")

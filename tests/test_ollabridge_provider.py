@@ -76,7 +76,7 @@ def test_connector_from_env_pairs_with_cloud(monkeypatch):
 
     conn = connector_from_env()
     assert conn.mode == "cloud"
-    assert conn.base_url == "https://ruslanmv-ollabridge-cloud.hf.space"
+    assert conn.base_url == "https://ruslanmv-ollabridge.hf.space"  # live cloud host
     assert conn.api_key == "ob_live_secret"
 
 

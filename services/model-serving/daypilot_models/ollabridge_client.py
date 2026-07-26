@@ -153,8 +153,11 @@ class OllabridgeConnector:
 
 
 # Sensible defaults for each deployment target. Both are OpenAI-compatible.
+# The cloud host is the *live* OllaBridge Cloud space (ruslanmv-ollabridge.hf.space):
+# its /health, /login, /register and POST /v1/auth/login are all deployed. The
+# ``…-cloud.hf.space`` name is not served (404s), so it must not be the default.
 LOCAL_DEFAULT_URL = "http://localhost:11435/v1"
-CLOUD_DEFAULT_URL = "https://ruslanmv-ollabridge-cloud.hf.space/v1"
+CLOUD_DEFAULT_URL = "https://ruslanmv-ollabridge.hf.space/v1"
 
 
 def connector_from_env(transport: httpx.BaseTransport | None = None) -> OllabridgeConnector:

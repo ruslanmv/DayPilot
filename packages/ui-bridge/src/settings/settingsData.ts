@@ -11,6 +11,7 @@ export type SettingsSectionId =
   | 'providers'
   | 'mail'
   | 'sources'
+  | 'homepilot'
   | 'appearance'
   | 'permissions'
   | 'shortcuts'
@@ -121,7 +122,7 @@ export const OLLABRIDGE_PAIRING: {
     {
       id: 'cloud',
       label: 'Ollabridge Cloud',
-      endpoint: 'https://ruslanmv-ollabridge-cloud.hf.space/v1',
+      endpoint: 'https://ruslanmv-ollabridge.hf.space/v1',
       endpointEnv: 'OLLABRIDGE_CLOUD_URL',
       keyFormat: 'ob_live_… / ob_test_… (Bearer)',
       status: 'available',

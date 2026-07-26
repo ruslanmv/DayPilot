@@ -4,6 +4,7 @@ import { IntegrationsPanel } from '../integrations/IntegrationsPanel'
 import { AiProvidersPanel } from '../settings/AiProvidersPanel'
 import { MailSettingsPanel } from '../settings/MailSettingsPanel'
 import { KnowledgeSourcesPanel } from '../settings/KnowledgeSourcesPanel'
+import { HomePilotConnectionPanel } from '../settings/HomePilotConnectionPanel'
 import { resetSetup } from '../onboarding/setupState'
 import { getTheme, setTheme, type ThemeMode } from '../theme'
 import {
@@ -29,6 +30,7 @@ const SECTION_TITLES: Record<SettingsSectionId, string> = {
   providers: 'AI providers',
   mail: 'Mail settings',
   sources: 'Knowledge sources',
+  homepilot: 'HomePilot agents',
   appearance: 'Appearance',
   permissions: 'Permissions & approvals',
   shortcuts: 'Keyboard shortcuts',
@@ -37,7 +39,7 @@ const SECTION_TITLES: Record<SettingsSectionId, string> = {
 // Order shown in the in-panel navigation rail — the ONLY place these sections
 // are listed; the account dropdown never duplicates them.
 const SECTION_ORDER: SettingsSectionId[] = [
-  'profile', 'integrations', 'providers', 'mail', 'sources', 'appearance', 'permissions', 'shortcuts',
+  'profile', 'integrations', 'providers', 'mail', 'sources', 'homepilot', 'appearance', 'permissions', 'shortcuts',
 ]
 
 function StateDot({ tone }: { tone: 'connected' | 'default' | 'available' | 'disabled' }) {
@@ -116,6 +118,9 @@ function SectionBody({ section, onClose }: { section: SettingsSectionId; onClose
   }
   if (section === 'sources') {
     return <KnowledgeSourcesPanel />
+  }
+  if (section === 'homepilot') {
+    return <HomePilotConnectionPanel />
   }
   if (section === 'permissions') {
     return (

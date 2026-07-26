@@ -536,3 +536,6 @@ export interface DayPilotIntegration {
   execute(action: string, input: unknown): Promise<unknown>
   health(): Promise<IntegrationHealth>
 }
+
+// HomePilot remote-agent integration types.
+export * from './homepilot'

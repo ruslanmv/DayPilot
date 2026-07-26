@@ -33,7 +33,7 @@ export const knowledgeApi = {
     api.post<{ source: KnowledgeSource; jobId: string }>(`/v1/knowledge/sources/${encodeURIComponent(id)}/reindex`, { workspaceId: ws() }),
   remove: (id: string) =>
     api.del(`/v1/knowledge/sources/${encodeURIComponent(id)}?workspaceId=${ws()}`),
-  boxStart: () => api.post<{ available: boolean; message?: string }>('/v1/knowledge/box/oauth/start', { workspaceId: ws() }),
+  boxStart: () => api.post<{ available: boolean; message?: string; authUrl?: string; state?: string }>('/v1/knowledge/box/oauth/start', { workspaceId: ws() }),
 }
 
 export function sourceStatusLabel(status: string): string {

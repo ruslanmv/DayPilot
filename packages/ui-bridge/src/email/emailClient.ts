@@ -41,6 +41,16 @@ export type MailboxProbeResult = {
 }
 export type OAuthStartResult = {
   available: boolean; reason?: string; fallback?: string; message?: string; provider?: string
+  authorizationUrl?: string; state?: string
+}
+export type MailDiscovery = {
+  status: 'found' | 'manual_required'
+  username?: string
+  appPasswordRecommended?: boolean
+  settings?: {
+    imapHost: string; imapPort: number; imapSecurity: string
+    smtpHost: string; smtpPort: number; smtpSecurity: string
+  }
 }
 export type EmailSummary = {
   id: string; externalId: string; subject: string; sender: string
@@ -69,6 +79,8 @@ export const emailApi = {
     '/v1/email/drafts/send', { draftUid, to, subject, text, workspaceId: ws(), approval: { confirmed_by_user: approved, visible_action_text: subject } }),
 
   // --- mailbox setup wizard (Batch 3) ---------------------------------------
+  discover: (emailAddress: string) => api.post<MailDiscovery>(
+    '/v1/email/discover', { emailAddress, workspaceId: ws() }),
   test: (input: MailboxTestInput) => api.post<MailboxProbeResult>(
     '/v1/email/test', { ...input, workspaceId: ws() }),
   connect: (input: MailboxTestInput) => api.post<MailboxProbeResult>(
@@ -95,6 +107,55 @@ export function mailErrorMessage(code: string): string {
     case 'smtp_auth_failed': return 'Sending sign-in was rejected. Reads work, but sending would fail.'
     case 'smtp_error': return 'The outgoing (SMTP) server could not be reached. Reads work, but sending would fail.'
     default: return 'The mailbox could not be verified. Check the settings and try again.'
+  }
+}
+
+export type MailRecoveryAction = 'retry' | 'app_password_help' | 'manual_settings' | 'advanced' | 'security_activity'
+export type MailRecovery = {
+  title: string
+  message: string
+  field?: 'emailAddress' | 'password' | 'imapHost' | 'smtpHost'
+  primary: MailRecoveryAction
+  secondary?: MailRecoveryAction
+}
+
+/**
+ * Map a backend probe code to a premium, actionable recovery: what failed, what
+ * to do, and which field it belongs to. Consumes the existing granular codes so
+ * the backend contract is unchanged.
+ */
+export function mailRecovery(code: string, appPasswordRecommended?: boolean): MailRecovery {
+  switch (code) {
+    case 'imap_auth_failed':
+      return appPasswordRecommended
+        ? { title: 'We couldn’t sign in', field: 'password', primary: 'app_password_help', secondary: 'retry',
+            message: 'The password was not accepted. This service needs a password created for external email apps.' }
+        : { title: 'We couldn’t sign in', field: 'password', primary: 'retry', secondary: 'app_password_help',
+            message: 'The password was not accepted by your email service. Check for typos, or use an app password.' }
+    case 'imap_select_failed':
+      return { title: 'Email app access may be disabled', primary: 'retry',
+        message: 'Your email service signed you in but wouldn’t open the inbox. Enable IMAP / external app access in your email settings, then try again.' }
+    case 'dns_error':
+    case 'missing_host':
+      return { title: 'We couldn’t find your mail settings', field: 'imapHost', primary: 'manual_settings', secondary: 'retry',
+        message: 'DayPilot couldn’t discover the secure incoming and outgoing servers for this address.' }
+    case 'tls_error':
+      return { title: 'We couldn’t create a secure connection', primary: 'advanced', secondary: 'retry',
+        message: 'The server was found, but its encryption settings didn’t match what we detected. Review Advanced settings.' }
+    case 'timeout':
+    case 'connection_refused':
+      return { title: 'Your email server isn’t responding', primary: 'retry', secondary: 'advanced',
+        message: 'Your details may be correct, but the server didn’t respond in time. Please try again.' }
+    case 'smtp_auth_failed':
+    case 'smtp_error':
+      return { title: 'Your inbox is available', primary: 'retry', secondary: 'advanced',
+        message: 'DayPilot can read and organize this account, but it couldn’t verify outgoing mail. Sending stays disabled until this is fixed.' }
+    case 'missing_credentials':
+      return { title: 'Enter your sign-in details', field: 'password', primary: 'retry',
+        message: 'Add your email address and password (or app password) to connect.' }
+    default:
+      return { title: 'We couldn’t complete the connection', primary: 'retry', secondary: 'advanced',
+        message: 'DayPilot couldn’t verify this mailbox. Check the details and try again.' }
   }
 }
 
