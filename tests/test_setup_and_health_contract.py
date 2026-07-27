@@ -41,6 +41,10 @@ def test_make_has_setup_and_start_targets() -> None:
     assert "\nsetup:" in mk and "install migrate" in mk  # one-command setup
     start_block = mk.split("\nstart:", 1)[1].split("\n\n", 1)[0]
     assert "operator-web build" in start_block and "uvicorn app.main:app" in start_block
+    # start never dies on "address already in use": it resolves a free port
+    # (the requested one, else the next) and serves on that.
+    assert "find_free_port.py" in start_block
+    assert "--port $$port" in start_block
 
 
 def test_assistant_composer_is_health_gated() -> None:

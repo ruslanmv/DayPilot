@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -252,7 +253,7 @@ def setup_status(session: Session, workspace_id: str) -> dict[str, Any]:
         "connection": {
             "id": row.id,
             "displayName": "HomePilot",
-            "browserUrl": _gallery_url(pub["baseUrl"]),
+            "browserUrl": _browser_url(pub["baseUrl"], _secret(row.id).get("browser_url")),
             "apiUrl": pub["baseUrl"],
             "health": _HEALTH_BY_STATUS.get(row.status, "unreachable"),
             "version": "",
@@ -271,24 +272,67 @@ def imports_enabled() -> bool:
     return feature_enabled(HomePilotFeature.IMPORTS)
 
 
+# The API host may be a Docker-internal service name or a bind-all address that a
+# *browser* can never resolve. When we derive a human-facing (gallery) URL we
+# translate those to localhost. Real hostnames / LAN IPs are kept as-is (the
+# browser runs on the same host as HomePilot in the common local/WSL setup).
+_INTERNAL_API_HOSTS = {"homepilot", "host.docker.internal", "0.0.0.0", "::", "[::]"}
+# HomePilot's compose/source build serves its API on 8000 but the human UI on
+# 3000; the desktop/single-container build serves both on 7860.
+_API_TO_UI_PORT = {8000: 3000}
+
+
+def _browser_url(api_base: str, stored: str | None = None) -> str:
+    """A browser-reachable HomePilot UI URL (where the gallery lives).
+
+    Prefers an explicit ``stored`` browser URL captured at connect time; otherwise
+    derives one from the API base by dropping any ``/api`` path, translating a
+    Docker-internal / bind-all host to ``localhost``, and mapping the API port to
+    the UI port. This is why "Open Gallery" must never send the user to
+    ``http://homepilot:7860`` (which their browser can't resolve)."""
+    src = (stored or api_base or "").strip()
+    if not src:
+        return "http://localhost:3000"
+    parts = urlsplit(src if "://" in src else f"http://{src}")
+    scheme = parts.scheme or "http"
+    host = (parts.hostname or "localhost")
+    port = parts.port
+    if host.lower() in _INTERNAL_API_HOSTS:
+        host = "localhost"
+    # Only remap the port when deriving from the API base — a stored browser URL
+    # already points at the UI.
+    if stored is None and port in _API_TO_UI_PORT:
+        port = _API_TO_UI_PORT[port]
+    netloc = host if port is None else f"{host}:{port}"
+    return f"{scheme}://{netloc}"
+
+
+# Back-compat alias (still referenced by setup_status); browser-reachable now.
 def _gallery_url(base_url: str) -> str:
-    """The HomePilot web app / gallery URL derived from the API base (strip the
-    trailing ``/api``). Where the user creates and manages their agents."""
-    base = (base_url or "").rstrip("/")
-    if base.endswith("/api"):
-        base = base[: -len("/api")]
-    return base or _default_base_url()
+    return _browser_url(base_url)
+
+
+# The public HomePilot Community Gallery — always reachable, and where personas
+# are actually browsed and downloaded. Used when no local HomePilot is connected,
+# so "Open Gallery" never dead-ends on an unreachable local address.
+COMMUNITY_GALLERY_URL = "https://ruslanmv.com/HomePilot/gallery.html"
 
 
 def add_info(session: Session, workspace_id: str) -> dict[str, Any]:
-    """Everything the 'Add agent' screen needs: whether a HomePilot connection
-    exists, its gallery URL, and whether the offline importer is available."""
+    """Everything the 'Add agent' screen needs. ``galleryUrl`` is what "Open
+    Gallery" opens: the connected HomePilot's own UI when connected (browser-
+    reachable — never the internal ``homepilot`` host), else the public community
+    gallery so the button always leads somewhere real."""
     row = _first_connection(session, workspace_id)
-    base = (_secret(row.id).get("base_url") if row is not None else "") or _default_base_url()
+    connected = bool(row is not None and row.status == "connected")
+    secret = _secret(row.id) if row is not None else {}
+    base = secret.get("base_url") or _default_base_url()
+    gallery = _browser_url(base, secret.get("browser_url")) if connected else COMMUNITY_GALLERY_URL
     return {
-        "connected": bool(row is not None and row.status == "connected"),
+        "connected": connected,
         "connectionId": row.id if row is not None else None,
-        "galleryUrl": _gallery_url(base),
+        "galleryUrl": gallery,
+        "communityGalleryUrl": COMMUNITY_GALLERY_URL,
         "importsEnabled": imports_enabled(),
     }
 
@@ -307,9 +351,12 @@ def hpersona_import(session: Session, workspace_id: str, data: bytes) -> dict[st
 
 # ---- connections ------------------------------------------------------------
 
-def connect(session: Session, workspace_id: str, base_url: str | None, api_key: str | None) -> dict[str, Any]:
+def connect(session: Session, workspace_id: str, base_url: str | None, api_key: str | None,
+            browser_url: str | None = None) -> dict[str, Any]:
     """Create/update the HomePilot connection and test it. Secrets go to the
-    credential store; only safe metadata is persisted."""
+    credential store; only safe metadata is persisted. ``browser_url`` is the
+    human-facing HomePilot UI (where the gallery lives) — captured so "Open
+    Gallery" points at a browser-reachable address, not the internal API host."""
     base = (base_url or _default_base_url()).strip()
     row = _first_connection(session, workspace_id)
     if row is None:
@@ -317,7 +364,10 @@ def connect(session: Session, workspace_id: str, base_url: str | None, api_key: 
         session.add(row)
         session.flush()
     row.capabilities = _CAPABILITIES
-    credential_store().put(f"homepilot:{row.id}", {"base_url": base, "api_key": (api_key or "").strip()})
+    secret: dict[str, Any] = {"base_url": base, "api_key": (api_key or "").strip()}
+    # Store a browser-reachable UI URL (explicit if given, else derived).
+    secret["browser_url"] = _browser_url(base, (browser_url or "").strip() or None)
+    credential_store().put(f"homepilot:{row.id}", secret)
 
     result = _probe(row)
     row.status = result["status"]

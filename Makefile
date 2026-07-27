@@ -130,13 +130,17 @@ start: ## Production: build the web UI and serve everything from one process/por
 	$(PNPM) --filter @daypilot/operator-web build; \
 	echo "Applying database migrations…"; \
 	$(UV) run alembic upgrade head || echo "  (migrations will also auto-apply on startup)"; \
+	port=$$($(UV) run python scripts/find_free_port.py $(PORT) $(API_HOST)); \
+	if [ "$$port" != "$(PORT)" ]; then \
+	  echo "  Port $(PORT) is busy; using the next free port $$port."; \
+	fi; \
 	echo ""; \
-	echo "  DayPilot (single origin): http://localhost:$(PORT)"; \
+	echo "  DayPilot (single origin): http://localhost:$$port"; \
 	echo "  Press Ctrl+C to stop."; \
 	echo ""; \
 	DAYPILOT_AUTO_MIGRATE=0 PYTHONPATH="$(SERVICE_PYTHONPATH):$$PYTHONPATH" \
 	  $(UV) run uvicorn app.main:app --app-dir services/api-gateway \
-	  --host $(API_HOST) --port $(PORT)
+	  --host $(API_HOST) --port $$port
 
 run-web: serve ## Alias for `serve` (backwards compatible).
 

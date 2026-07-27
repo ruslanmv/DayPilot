@@ -27,8 +27,8 @@ Governed multi-agent orchestration · HomePilot persona portability · MCP tool 
 > Open it every morning and it answers: *What should I do now? What is AI doing for me?
 > Which project needs attention? What changed since yesterday? What needs my approval?*
 
-DayPilot is a premium, daily-use AI command center for an AI/ML principal engineer or
-technical executive juggling thousands of tasks, many repositories, client obligations,
+DayPilot is a premium, daily-use AI command center for a senior AI/ML technical leader or
+technology executive juggling thousands of tasks, many repositories, client obligations,
 inbox pressure, agent runs, and document workflows at once. It routes coding to
 **GitPilot** (with **Claude Code** and **Codex** as optional executors), models to
 **Ollabridge**, planning and design review to **Matrix Designer**, and inbox triage to the
@@ -88,7 +88,7 @@ config proposal → **Approval Center** → new config version. See
 ### Create a project in seconds
 
 A small, essentials-only **project wizard** (name, goal, stack, repository, first milestone)
-opens from the command palette, the Projects view, or the mobile drawer — so a principal engineer
+opens from the command palette, the Projects view, or the mobile drawer — so a senior technical leader
 can spin up a project without a form marathon.
 
 <img src="docs/screenshots/project-wizard.png" alt="Project creation wizard" width="60%" />
@@ -208,7 +208,7 @@ gives a fast offline Today check-in with push-ready approvals.
 
 ### Verified end to end
 
-A real, reproducible **five-day week simulation** for a principal AI/ML engineer pairs DayPilot to
+A real, reproducible **five-day week simulation** for a senior AI/ML technical leader pairs DayPilot to
 a local Ollabridge-compatible endpoint and drives planning, coding, email drafting, and RAG with
 **20 real inferences** — while the governance contract holds (0 emails sent, 0 unapproved writes,
 5/5 approvals, continuity carried across days). Run it with `make sim`; the full write-up is
@@ -419,7 +419,7 @@ make seed           # 5,000 tasks / 40 projects / 200 docs / 100 agent runs
 ```bash
 make sim            # pairs to a local Ollabridge-compatible endpoint and runs a
                     # real 5-day week (planning · coding · email · RAG) for a
-                    # principal AI/ML engineer → docs/simulation/week_report.md
+                    # senior AI/ML technical leader → docs/simulation/week_report.md
 ```
 
 ### Full Docker stack

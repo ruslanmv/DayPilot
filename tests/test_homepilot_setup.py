@@ -73,7 +73,9 @@ def test_status_connected_reports_agent_count(monkeypatch):
     status = resp.json()
     assert status["connectionState"] == "connected"
     assert status["connection"]["apiUrl"] == "http://homepilot:7860/api"
-    assert status["connection"]["browserUrl"] == "http://homepilot:7860"
+    # The gallery/browser URL is browser-reachable: the Docker-internal "homepilot"
+    # host is translated to localhost (the browser can't resolve the service name).
+    assert status["connection"]["browserUrl"] == "http://localhost:7860"
     assert status["connection"]["agentCount"] == 0  # connected, no agents synced yet
     assert "sekret-99" not in resp.text
 
@@ -84,12 +86,13 @@ def test_detect_finds_a_reachable_candidate(monkeypatch):
     monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
 
     def fake_health(self):
-        # Only the loopback 7860 desktop candidate answers.
+        # Only the loopback 7860 desktop candidate answers on /health.
         if self.base_url.startswith("http://127.0.0.1:7860"):
             return HealthResult(reachable=True, status_code=200, payload={"version": "3.1"})
         return HealthResult(reachable=False, error="connection_refused")
 
     monkeypatch.setattr("daypilot_orchestrator.homepilot.client.HomePilotClient.health", fake_health)
+    monkeypatch.setattr("daypilot_orchestrator.homepilot.client.HomePilotClient.list_models", lambda self: [])
     r = client.post("/v1/homepilot/setup/detect")
     assert r.status_code == 200
     data = r.json()
@@ -99,13 +102,45 @@ def test_detect_finds_a_reachable_candidate(monkeypatch):
     assert data["instance"]["version"] == "3.1"
 
 
+def test_detect_finds_compose_via_models_only(monkeypatch):
+    # The compose/source build answers on :8000 /v1/models even if /health is
+    # absent — the detector must still find it (the OllaBridge-style probe).
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
+    monkeypatch.setattr("daypilot_orchestrator.homepilot.client.HomePilotClient.health",
+                        lambda self: HealthResult(reachable=False, error="connection_refused"))
+
+    def fake_models(self):
+        return ["persona:assistant"] if self.base_url == "http://127.0.0.1:8000" else []
+
+    monkeypatch.setattr("daypilot_orchestrator.homepilot.client.HomePilotClient.list_models", fake_models)
+    data = client.post("/v1/homepilot/setup/detect").json()
+    assert data["detected"] is True
+    assert data["instance"]["apiUrl"] == "http://127.0.0.1:8000"
+    assert data["instance"]["installationType"] == "docker_compose"
+
+
 def test_detect_none_when_nothing_answers(monkeypatch):
     monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
     monkeypatch.setattr("daypilot_orchestrator.homepilot.client.HomePilotClient.health",
                         lambda self: HealthResult(reachable=False, error="connection_refused"))
+    monkeypatch.setattr("daypilot_orchestrator.homepilot.client.HomePilotClient.list_models", lambda self: [])
     data = client.post("/v1/homepilot/setup/detect").json()
     assert data["detected"] is False and data["instance"] is None
-    assert len(data["probes"]) == len(hp_setup.DETECT_CANDIDATES)
+    assert len(data["probes"]) == len(hp_setup.candidates()) and len(data["probes"]) >= 8
+
+
+def test_candidates_cover_both_ports_and_include_discovered_hosts():
+    cands = hp_setup.candidates()
+    apis = {c[0] for c in cands}
+    # Both port profiles (desktop 7860/api, compose 8000) for loopback.
+    assert "http://127.0.0.1:7860/api" in apis
+    assert "http://127.0.0.1:8000" in apis
+    # The Docker service name + host alias are always tried.
+    assert "http://homepilot:8000" in apis
+    assert "http://host.docker.internal:8000" in apis
+    # Discovered gateways (WSL2/Docker) are appended when present.
+    for host in hp_setup._discovered_hosts():
+        assert f"http://{host}:8000" in apis
 
 
 # --- connection test (checklist) --------------------------------------------
@@ -235,3 +270,66 @@ def test_patch_connection_404_for_unknown(monkeypatch):
     monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
     r = client.patch("/v1/homepilot/connections/nope", json={"workspaceId": _ws(), "showOffline": False})
     assert r.status_code == 404
+
+
+# --- browser-reachable gallery URL (Open Gallery must never 404) -------------
+
+def test_browser_url_is_reachable_across_topologies():
+    from app import homepilot_platform as hp
+    # Docker service name + API port → localhost + UI port (7860 desktop/container).
+    assert hp._browser_url("http://homepilot:7860/api") == "http://localhost:7860"
+    assert hp._browser_url("http://host.docker.internal:7860/api") == "http://localhost:7860"
+    # Compose/source: API :8000 → human UI :3000.
+    assert hp._browser_url("http://localhost:8000") == "http://localhost:3000"
+    assert hp._browser_url("http://127.0.0.1:8000") == "http://127.0.0.1:3000"
+    # A bind-all host is not browser-reachable either.
+    assert hp._browser_url("http://0.0.0.0:8000") == "http://localhost:3000"
+    # A real remote host is kept (only the port is mapped).
+    assert hp._browser_url("http://192.168.1.50:8000") == "http://192.168.1.50:3000"
+    # An explicit stored UI URL wins and is host-sanitized but not port-mapped.
+    assert hp._browser_url("http://homepilot:8000", "http://homepilot:3000") == "http://localhost:3000"
+
+
+def test_add_info_gallery_url_is_browser_reachable(monkeypatch):
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
+    ws = _ws()
+    # No connection yet → "Open Gallery" leads to the public community gallery
+    # (always reachable), never the internal "homepilot" host.
+    info = client.get(f"/v1/homepilot/add-info?workspaceId={ws}").json()
+    assert "homepilot:7860" not in info["galleryUrl"]
+    assert info["galleryUrl"] == "https://ruslanmv.com/HomePilot/gallery.html"
+
+    # After connecting with an explicit browser URL, that (sanitized) URL is used.
+    class _Fake:
+        def health(self):
+            return HealthResult(reachable=True, status_code=200, payload={"status": "ok"})
+
+        def identity(self):
+            return None
+
+        def capabilities(self):
+            return None
+
+    monkeypatch.setattr("app.homepilot_platform._client_for", lambda row: _Fake())
+    client.post("/v1/homepilot/connections",
+                json={"workspaceId": ws, "baseUrl": "http://homepilot:8000",
+                      "apiKey": "k", "browserUrl": "http://localhost:3000"})
+    info = client.get(f"/v1/homepilot/add-info?workspaceId={ws}").json()
+    assert info["galleryUrl"] == "http://localhost:3000"
+
+
+def test_detect_browser_url_translates_docker_service_name(monkeypatch):
+    # The Docker single-container answers as the "homepilot" service; the detected
+    # browserUrl must be browser-reachable (localhost), not the service name.
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
+
+    def fake_health(self):
+        return HealthResult(reachable=True, status_code=200, payload={"version": "3.0"}) \
+            if self.base_url.startswith("http://homepilot:7860") else HealthResult(reachable=False, error="x")
+
+    monkeypatch.setattr("daypilot_orchestrator.homepilot.client.HomePilotClient.health", fake_health)
+    monkeypatch.setattr("daypilot_orchestrator.homepilot.client.HomePilotClient.list_models", lambda self: [])
+    inst = client.post("/v1/homepilot/setup/detect").json()["instance"]
+    assert inst["apiUrl"] == "http://homepilot:7860/api"
+    assert inst["browserUrl"] == "http://localhost:7860"
+    assert inst["installationType"] == "single_container"
