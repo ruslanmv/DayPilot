@@ -101,7 +101,7 @@ export function HomePilotSetupWizard({ onClose, onOpenAgents }: { onClose: () =>
 
   async function connectAndSync() {
     setBusy('connect'); setNote(null)
-    const c = await homepilotApi.connect(apiUrl.trim(), apiKey.trim() || undefined)
+    const c = await homepilotApi.connect(apiUrl.trim(), apiKey.trim() || undefined, browserUrl.trim() || undefined)
     if (!c.ok || c.data.code !== 'connected') {
       setBusy(null); setNote('Connection could not be saved. Check the address and key, then test again.'); return
     }

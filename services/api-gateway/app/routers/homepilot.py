@@ -43,6 +43,7 @@ class ConnectBody(BaseModel):
     workspaceId: str = "default"
     baseUrl: str | None = None
     apiKey: str | None = None
+    browserUrl: str | None = None
 
 
 class SetupTestBody(BaseModel):
@@ -91,7 +92,7 @@ class ProfilePatch(BaseModel):
 @router.post("/v1/homepilot/connections")
 def create_connection(body: ConnectBody, session: Session = Depends(get_session)) -> dict[str, Any]:
     _require_runtime()
-    return hp.connect(session, body.workspaceId, body.baseUrl, body.apiKey)
+    return hp.connect(session, body.workspaceId, body.baseUrl, body.apiKey, body.browserUrl)
 
 
 @router.get("/v1/homepilot/connections")

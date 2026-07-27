@@ -181,8 +181,8 @@ export const homepilotApi = {
   testAddress: (baseUrl: string, apiKey?: string, allowPrivate = true) =>
     api.post<HomePilotTestResult>('/v1/homepilot/setup/test', { baseUrl, apiKey, allowPrivate }),
   listConnections: () => api.get<{ connections: HomePilotConnection[] }>(`/v1/homepilot/connections?workspaceId=${ws()}`),
-  connect: (baseUrl: string, apiKey?: string) =>
-    api.post<{ connection: HomePilotConnection; code: string }>('/v1/homepilot/connections', { workspaceId: ws(), baseUrl, apiKey }),
+  connect: (baseUrl: string, apiKey?: string, browserUrl?: string) =>
+    api.post<{ connection: HomePilotConnection; code: string }>('/v1/homepilot/connections', { workspaceId: ws(), baseUrl, apiKey, browserUrl }),
   test: (id: string) =>
     api.post<{ code: string; connection: HomePilotConnection }>(`/v1/homepilot/connections/${encodeURIComponent(id)}/test`, { workspaceId: ws() }),
   disconnect: (id: string) =>
