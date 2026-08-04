@@ -72,7 +72,9 @@ def test_setup_state_is_explicit_not_a_broad_boolean() -> None:
 
 
 def test_settings_profile_can_restart_setup() -> None:
-    panel = (UI / "shell" / "SettingsPanel.tsx").read_text(encoding="utf-8")
+    # Restart-setup now lives in the profile editor's Setup-checklist tab
+    # (SettingsPanel renders YourProfilePanel for the 'profile' section).
+    panel = (UI / "settings" / "YourProfilePanel.tsx").read_text(encoding="utf-8")
     assert "resetSetup" in panel and "Restart setup" in panel
 
 

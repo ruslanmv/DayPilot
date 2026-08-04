@@ -8,8 +8,10 @@ connected, and exposes runs + events + cancel over the gateway.
 """
 from __future__ import annotations
 
+import json
 import uuid
 
+import httpx
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -17,12 +19,84 @@ from daypilot_knowledge.db import MailboxConnection, ProviderConnection, session
 from daypilot_orchestrator.assistant import orchestrator
 from daypilot_orchestrator.assistant.intents import classify_intent
 from daypilot_orchestrator.assistant.tools import ToolRisk, is_invokable, risk_of
+from daypilot_orchestrator.integrations.credentials import credential_store
 
 client = TestClient(app)
 
 
 def _ws() -> str:
     return "asst-" + uuid.uuid4().hex[:8]
+
+
+# --- real inference through the active provider (R2) -------------------------
+
+def test_general_question_uses_active_provider_inference(monkeypatch):
+    """An arbitrary question must reach the active provider's
+    /v1/chat/completions (with its stored URL/key/model) and return the
+    generated text — not the hard-coded 'unknown' fallback."""
+    ws = _ws()
+    ref = f"prov-secret-{ws}"
+    credential_store().put(ref, {"api_key": "sk-test-123"})
+    with session_scope() as s:
+        s.add(ProviderConnection(
+            workspace_id=ws, kind="local", state="connected", active=True,
+            base_url="http://prov-host:11435/v1", default_model="llama-x",
+            secret_reference=ref,
+        ))
+
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["auth"] = request.headers.get("authorization")
+        body = json.loads(request.content)
+        seen["model"] = body["model"]
+        seen["roles"] = [m["role"] for m in body["messages"]]
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content":
+                "Supervised learning uses labeled data; unsupervised finds structure in unlabeled data."}}],
+            "usage": {},
+        })
+
+    transport = httpx.MockTransport(handler)
+    from daypilot_models import ollabridge_client as oc
+    real = oc.OllabridgeConnector
+
+    def _factory(**kwargs):
+        kwargs["transport"] = transport
+        return real(**kwargs)
+
+    # active_connector imports the class lazily from this module.
+    monkeypatch.setattr(oc, "OllabridgeConnector", _factory)
+
+    r = client.post("/v1/assistant/turn", json={
+        "workspaceId": ws,
+        "message": "Explain the difference between supervised and unsupervised learning.",
+    })
+    assert r.status_code == 200
+    data = r.json()
+
+    # /v1/chat/completions was called, with the provider's stored key + model.
+    assert seen.get("path") == "/v1/chat/completions"
+    assert seen.get("auth") == "Bearer sk-test-123"
+    assert seen.get("model") == "llama-x"
+    assert seen["roles"][0] == "system" and seen["roles"][-1] == "user"
+    # The provider-generated text is returned, not the deterministic fallback.
+    assert "unsupervised" in data["reply"].lower()
+    assert "I don't have information" not in data["reply"]
+    assert data["intent"] == "unknown"
+
+
+def test_general_question_falls_back_without_active_provider():
+    """With no active provider, an arbitrary question gets the deterministic
+    reply (never a fabricated answer) — and no inference call is made."""
+    ws = _ws()
+    r = client.post("/v1/assistant/turn", json={
+        "workspaceId": ws, "message": "Explain gradient descent in one paragraph.",
+    })
+    data = r.json()
+    assert data["reply"].startswith("I'm connected to your DayPilot workspace")
+    assert "Connect an AI provider" in data["reply"]
 
 
 # --- intent classification is the server-side authority ---------------------

@@ -18,8 +18,13 @@ import {
   onSetupReset,
   patchSetup,
 } from './setupState'
+import { profileClient, USE_CASE_LABELS, type UseCase } from '../settings/profileClient'
 
 const PROFILE_KEY = 'daypilot.profile'
+
+function browserTimezone(): string {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { return 'UTC' }
+}
 
 export type OnboardingProfile = {
   name: string
@@ -33,12 +38,16 @@ export type OnboardingProfile = {
   cloudEmail: string
   cloudPassword: string
   aiReady: boolean
+  // Personal minimum, persisted to the server AI profile (not just localStorage).
+  timezone: string
+  useCases: UseCase[]
 }
 
 const EMPTY: OnboardingProfile = {
   name: '', email: '', mailbox: '', sourceKind: 'folder', source: '',
   aiProvider: 'local', aiBaseUrl: OLLABRIDGE_PAIRING.modes[0].endpoint, aiApiKey: '',
   cloudEmail: '', cloudPassword: '', aiReady: false,
+  timezone: browserTimezone(), useCases: ['plan_day'],
 }
 
 /** Back-compat: setup completion is now an explicit state (see setupState). */
@@ -76,6 +85,9 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
   // Resolved from the backend (which knows the real deployment) with a default.
   const [cloudLoginUrl, setCloudLoginUrl] = useState(CLOUD_WEB_LOGIN_URL)
   const [cloudRegisterUrl, setCloudRegisterUrl] = useState(CLOUD_WEB_REGISTER_URL)
+  // The server owns completion + the profile revision. Local state is a
+  // draft-recovery cache only; the server is the source of truth.
+  const [serverRev, setServerRev] = useState(0)
 
   useEffect(() => {
     providersApi.status().then((r) => {
@@ -83,6 +95,24 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
         if (r.data.cloudLoginUrl) setCloudLoginUrl(r.data.cloudLoginUrl)
         if (r.data.cloudRegisterUrl) setCloudRegisterUrl(r.data.cloudRegisterUrl)
       }
+    })
+  }, [])
+
+  // Consult the server: completion follows the user across browsers, so a
+  // profile completed elsewhere must not reopen the wizard here. Prefill the
+  // timezone/use-cases from any existing server profile.
+  useEffect(() => {
+    void profileClient.getOnboarding().then((r) => {
+      if (!r.ok) return
+      setServerRev(r.data.profile.revision)
+      if (r.data.status === 'completed') { setOpen(false); return }
+      const prof = r.data.profile
+      setP((prev) => ({
+        ...prev,
+        timezone: prof.timezone || prev.timezone,
+        useCases: prof.useCases && prof.useCases.length ? prof.useCases : prev.useCases,
+        name: prev.name || prof.preferredName || '',
+      }))
     })
   }, [])
 
@@ -112,8 +142,19 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
     onFinish?.(p)
   }
 
-  /** The final, explicit finish — the only action that completes setup. */
-  function finish() {
+  /** The final, explicit finish — the only action that completes setup. Saves
+   *  the required minimum to the SERVER profile and marks onboarding complete
+   *  there (so it follows the user), then mirrors completion locally. Server
+   *  hiccups never trap the user in the wizard: local completion still happens. */
+  async function finish() {
+    try {
+      await profileClient.saveProfile(serverRev, {
+        timezone: p.timezone || browserTimezone(),
+        useCases: p.useCases.length ? p.useCases : (['plan_day'] as UseCase[]),
+        preferredName: p.name || undefined,
+      })
+      await profileClient.completeOnboarding()
+    } catch { /* server unreachable — fall through to local completion */ }
     completeSetup(
       { provider: p.aiReady, profile: Boolean(p.name || p.email), mailbox: Boolean(p.mailbox), knowledge: Boolean(p.source) },
       p.aiReady,
@@ -269,6 +310,27 @@ export function OnboardingWizard({ onFinish }: { onFinish?: (profile: Onboarding
               <span>Work email</span>
               <input type="email" value={p.email} onChange={(e) => set({ email: e.target.value, mailbox: prev(p.mailbox, e.target.value) })} placeholder="you@company.com" />
             </label>
+            <label className="dp-onb__field">
+              <span>Timezone</span>
+              <input value={p.timezone} onChange={(e) => set({ timezone: e.target.value })} placeholder="e.g. Europe/Paris" />
+              <span className="dp-onb__hint">Used so the assistant never schedules outside your day.</span>
+            </label>
+            <div className="dp-onb__field">
+              <span>What should DayPilot help with?</span>
+              <div className="dp-onb__uses">
+                {(Object.keys(USE_CASE_LABELS) as UseCase[]).map((u) => (
+                  <button
+                    key={u}
+                    type="button"
+                    className={'dp-onb__usebtn' + (p.useCases.includes(u) ? ' is-active' : '')}
+                    aria-pressed={p.useCases.includes(u)}
+                    onClick={() => set({ useCases: p.useCases.includes(u) ? p.useCases.filter((x) => x !== u) : [...p.useCases, u] })}
+                  >
+                    {USE_CASE_LABELS[u]}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,13 @@ router = APIRouter(prefix="/v1/email", tags=["email"])
 
 def _require_enabled() -> None:
     if not email_enabled():
-        raise HTTPException(status_code=404, detail="Email feature is disabled")
+        # Structured so the UI can show a clear "disabled for this deployment"
+        # state instead of treating it as a missing route. GET /status stays
+        # reachable and reports enabled:false, so the UI checks that first.
+        raise HTTPException(status_code=404, detail={
+            "error": "email_disabled",
+            "message": "Email is disabled for this deployment.",
+        })
 
 
 class WsBody(BaseModel):
@@ -157,7 +164,26 @@ def mailbox_oauth_start(provider: str, body: WsBody, session: Session = Depends(
     """Honest OAuth start: only available when the deployment configured client
     credentials; otherwise it tells the UI to use IMAP/SMTP instead."""
     _require_enabled()
-    return mail_setup.oauth_start(session, body.workspaceId, provider)
+    out = mail_setup.oauth_start(session, body.workspaceId, provider)
+    if out.get("reason") == "invalid_provider":
+        raise HTTPException(status_code=400, detail=out.get("message", "Unknown email provider."))
+    return out
+
+
+@router.get("/oauth/{provider}/callback")
+def mailbox_oauth_callback(provider: str, code: str = "", state: str = "",
+                           error: str = "", session: Session = Depends(get_session)) -> Response:
+    """OAuth redirect target: exchange the code, connect the mailbox, and send the
+    browser back to DayPilot settings with a success/error code. Tokens are stored
+    only server-side; nothing sensitive appears in the redirect URL."""
+    _require_enabled()
+    if error:
+        return RedirectResponse(url=f"/#/settings/mail?email=error&reason={error}", status_code=303)
+    out = mail_setup.oauth_callback(session, provider, code, state)
+    if out.get("ok"):
+        return RedirectResponse(url="/#/settings/mail?email=connected", status_code=303)
+    return RedirectResponse(url=f"/#/settings/mail?email=error&reason={out.get('error', 'failed')}",
+                            status_code=303)
 
 
 @router.get("/messages/{uid}")

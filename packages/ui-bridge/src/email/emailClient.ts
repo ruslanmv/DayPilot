@@ -66,11 +66,12 @@ export type DraftReply = { draftUid: string; body: string; approvalId: string; a
 const ws = () => workspaceId()
 
 export const emailApi = {
-  status: () => api.get<EmailStatus>('/v1/email/status'),
-  folders: () => api.get<{ folders: string[] }>('/v1/email/folders'),
+  status: () => api.get<EmailStatus>(`/v1/email/status?workspaceId=${ws()}`),
+  folders: () => api.get<{ folders: string[] }>(`/v1/email/folders?workspaceId=${ws()}`),
   messages: (q?: string) => api.get<{ items: EmailSummary[]; query?: string }>(
     `/v1/email/messages?workspaceId=${ws()}${q ? `&q=${encodeURIComponent(q)}` : ''}`),
-  message: (uid: string) => api.get<EmailDetail>(`/v1/email/messages/${encodeURIComponent(uid)}`),
+  message: (uid: string) => api.get<EmailDetail>(
+    `/v1/email/messages/${encodeURIComponent(uid)}?workspaceId=${ws()}`),
   draftReply: (uid: string, tone: string) => api.post<DraftReply>(
     `/v1/email/messages/${encodeURIComponent(uid)}/draft-reply`, { uid, tone, workspaceId: ws() }),
   revise: (uid: string, current: string, instruction: string, tone: string) => api.post<{ body: string }>(

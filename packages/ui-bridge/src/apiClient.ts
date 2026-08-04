@@ -58,13 +58,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
   }
 }
 
+type CallOpts = { headers?: Record<string, string> }
+
 export const api = {
-  get: <T>(path: string) => request<T>(path),
-  post: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }),
+  get: <T>(path: string, opts?: CallOpts) => request<T>(path, { headers: opts?.headers }),
+  post: <T>(path: string, body?: unknown, opts?: CallOpts) =>
+    request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body), headers: opts?.headers }),
+  put: <T>(path: string, body?: unknown, opts?: CallOpts) =>
+    request<T>(path, { method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body), headers: opts?.headers }),
   postForm: <T>(path: string, form: FormData) =>
     request<T>(path, { method: 'POST', body: form }),
-  patch: <T>(path: string, body?: unknown) =>
-    request<T>(path, { method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body) }),
-  del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  patch: <T>(path: string, body?: unknown, opts?: CallOpts) =>
+    request<T>(path, { method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body), headers: opts?.headers }),
+  del: <T>(path: string, opts?: CallOpts) => request<T>(path, { method: 'DELETE', headers: opts?.headers }),
 }

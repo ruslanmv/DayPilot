@@ -157,7 +157,11 @@ def test_oauth_start_returns_authorization_url_when_configured(monkeypatch):
     assert "client_id=goog-client-123" in out["authorizationUrl"]
     assert "response_type=code" in out["authorizationUrl"]
     assert "redirect_uri=" in out["authorizationUrl"]
-    assert out["state"].startswith(f"{ws}:")
+    # Authorization-code flow with PKCE; the workspace is bound to the state
+    # server-side (not embedded in the opaque state token).
+    assert "code_challenge=" in out["authorizationUrl"]
+    assert "code_challenge_method=S256" in out["authorizationUrl"]
+    assert out["state"]
 
 
 def test_discover_resolves_known_domain_and_flags_unknown(monkeypatch):

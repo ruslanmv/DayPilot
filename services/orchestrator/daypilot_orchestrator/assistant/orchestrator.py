@@ -15,6 +15,7 @@ Authority guarantees, enforced here rather than implied at call sites:
 """
 from __future__ import annotations
 
+import os
 from datetime import date
 from typing import Any
 
@@ -32,10 +33,23 @@ from daypilot_knowledge.db import (
 
 from ..approvals import center as approvals_center
 from ..integrations import service as integrations_service
+from ..integrations.credentials import credential_store
 from ..planner import service as planner_service
 from . import guard
 from .intents import classify_intent
 from .tools import TOOL_REGISTRY, is_invokable, risk_of
+
+# How many prior turns of this conversation to replay to the model.
+_HISTORY_TURNS = 8
+# The assistant's guardrails, sent as the system prompt. Read-only + never fake.
+_SYSTEM_PROMPT = (
+    "You are DayPilot's assistant for a senior AI/ML technical leader. Answer the "
+    "user's questions helpfully and concisely using general knowledge and the "
+    "read-only workspace context provided. You cannot send email, change "
+    "calendars, run code, or modify anything — DayPilot handles those through its "
+    "own approval-gated flows, so never claim to have performed such an action. "
+    "If you don't know something, say so plainly rather than inventing details."
+)
 
 
 # ---- run + event helpers ----------------------------------------------------
@@ -56,6 +70,96 @@ def provider_available(session: Session, workspace_id: str) -> bool:
         select(ProviderConnection).where(ProviderConnection.workspace_id == workspace_id)
     ).scalars()
     return any(r.state == "connected" for r in rows)
+
+
+def active_connector(session: Session, workspace_id: str):
+    """The OllabridgeConnector for the workspace's ACTIVE, connected provider —
+    the same URL/key/model the settings UI configured — or None. Used to answer
+    general questions with real inference instead of a canned reply.
+
+    Kept lazy-imported so the orchestrator has no hard dependency on the model
+    package when inference isn't used."""
+    row = session.execute(
+        select(ProviderConnection).where(
+            ProviderConnection.workspace_id == workspace_id,
+            ProviderConnection.active.is_(True),
+            ProviderConnection.state == "connected",
+        )
+    ).scalar_one_or_none()
+    if row is None or not row.base_url:
+        return None
+    from daypilot_models.ollabridge_client import OllabridgeConnector
+
+    secret = credential_store().get(row.secret_reference) if row.secret_reference else {}
+    key = (secret or {}).get("api_key") or (secret or {}).get("token")
+    return OllabridgeConnector(
+        base_url=row.base_url,
+        api_key=key,
+        model=row.default_model or "default",
+        mode="cloud" if row.kind == "ollabridge_cloud" else "local",
+    )
+
+
+def _workspace_context(session: Session, workspace_id: str) -> str:
+    """A small READ-ONLY snapshot the model may reference. Counts only — never a
+    user's content — so the model has grounding without leaking data it shouldn't."""
+    try:
+        pending = len(session.execute(
+            select(Approval.id).where(
+                Approval.workspace_id == workspace_id, Approval.status == "pending"
+            )
+        ).scalars().all())
+    except Exception:  # noqa: BLE001 - context is best-effort
+        pending = 0
+    return (
+        f"Workspace context (read-only): today is {_today()}; "
+        f"{pending} item(s) are waiting for your approval."
+    )
+
+
+def _profile_context(session: Session, workspace_id: str, purpose: str, run: AssistantRun) -> str:
+    """Project the user's AI profile for this purpose and render it as a
+    delimited, non-authoritative system section. Gated by a feature flag and by
+    per-category consent inside the builder; on any failure the turn proceeds
+    without personalization (never blocks the answer). Records the applied
+    revision + category NAMES on the run for reproducibility — never the values.
+    """
+    if os.getenv("DAYPILOT_PROFILE_CONTEXT_ENABLED", "true").lower() in ("0", "false", "no"):
+        return ""
+    try:
+        from ..profile.context_builder import build_projection, render_system_section
+        proj = build_projection(session, workspace_id=workspace_id, purpose=purpose)
+        section = render_system_section(proj)
+        if section:
+            _emit(session, run, "profile.context_applied",
+                  {"revision": proj.profile_revision, "categories": sorted(proj.included_categories)})
+        return section
+    except Exception:  # noqa: BLE001 - personalization is best-effort, never fatal
+        return ""
+
+
+def _history_messages(session: Session, workspace_id: str, session_id: str | None) -> list[dict[str, str]]:
+    """Prior turns of THIS conversation as chat messages, oldest first, so the
+    assistant has real multi-turn context (not just the latest prompt)."""
+    if not session_id:
+        return []
+    rows = session.execute(
+        select(AssistantRun)
+        .where(
+            AssistantRun.workspace_id == workspace_id,
+            AssistantRun.session_id == session_id,
+            AssistantRun.state == "succeeded",
+        )
+        .order_by(AssistantRun.created_at.desc())
+        .limit(_HISTORY_TURNS)
+    ).scalars().all()
+    msgs: list[dict[str, str]] = []
+    for run in reversed(rows):  # oldest → newest
+        if run.message:
+            msgs.append({"role": "user", "content": run.message})
+        if run.reply:
+            msgs.append({"role": "assistant", "content": run.reply})
+    return msgs
 
 
 # ---- capability handlers (deterministic, read-mostly) -----------------------
@@ -212,7 +316,40 @@ def _handle_unknown() -> dict[str, Any]:
     return {"reply": "I'm connected to your DayPilot workspace — I can tell you today's date, "
                      "generate or adjust your plan, check integration and AI-provider status, "
                      "see whether your email is connected, open the project wizard, or show what "
-                     "needs approval. I don't have information about that specific request."}
+                     "needs approval. Connect an AI provider in Settings to ask general questions."}
+
+
+def _handle_general(
+    session: Session, workspace_id: str, message: str, run: AssistantRun, session_id: str | None,
+) -> dict[str, Any]:
+    """Answer a general question with REAL inference through the active provider's
+    /v1/chat/completions. Falls back to the deterministic reply when no provider
+    is active or the call fails — never fabricates a provider answer."""
+    connector = active_connector(session, workspace_id)
+    if connector is None:
+        return _handle_unknown()
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "system", "content": _workspace_context(session, workspace_id)},
+    ]
+    profile_section = _profile_context(session, workspace_id, "assistant", run)
+    if profile_section:
+        messages.append({"role": "system", "content": profile_section})
+    messages += [
+        *_history_messages(session, workspace_id, session_id),
+        {"role": "user", "content": message},
+    ]
+    try:
+        result = connector.generate_messages(messages, task="assistant.general")
+    except Exception as exc:  # noqa: BLE001 - provider/transport failure → truthful fallback
+        _emit(session, run, "inference.failed", {"error": type(exc).__name__})
+        return {"reply": "I couldn't reach the connected AI provider just now, so I can't answer "
+                         "that in detail. Please check the provider in Settings and try again."}
+    _record_tool(run, "ai.generate")
+    _emit(session, run, "inference.completed",
+          {"model": result.get("model"), "backend": result.get("backend")})
+    text = (result.get("text") or "").strip()
+    return {"reply": text or "The AI provider returned an empty response. Please try rephrasing."}
 
 
 # ---- the run engine ---------------------------------------------------------
@@ -268,7 +405,9 @@ def run_turn(session: Session, workspace_id: str, message: str, session_id: str 
         elif intent == "coding":
             out = _handle_coding(session, workspace_id, message, run)
         else:
-            out = _handle_unknown()
+            # Not a security-sensitive intent → answer with real inference through
+            # the active provider (falls back to a deterministic reply if none).
+            out = _handle_general(session, workspace_id, message, run, session_id)
         if report.flagged:
             out["reply"] = out["reply"] + (
                 " (Note: your message contained text that looks like embedded instructions; "
@@ -277,6 +416,8 @@ def run_turn(session: Session, workspace_id: str, message: str, session_id: str 
     except Exception as exc:  # noqa: BLE001 - surface a truthful failure, never a fabricated answer
         run.state = "failed"
         run.error = type(exc).__name__
+        run.reply = ("Something went wrong while handling that request, so I stopped rather than "
+                     "guess. Please try again, or rephrase what you need.")
         _emit(session, run, "run.failed", {"error": type(exc).__name__})
         session.flush()
         return _public(run, session)

@@ -159,6 +159,116 @@ def test_sync_creates_refs_marks_shared_and_offline():
         assert scar.status == "offline"  # preserved, marked offline
 
 
+class _AliasDiscovery:
+    """Current HomePilot: /v1/models publishes personas as persona:<alias>--<short>
+    (short = project_id[:8]) with a homepilot_project_id, not persona:<uuid>."""
+
+    def __init__(self, projects, persona_models):
+        self._p, self._m = projects, persona_models
+
+    def list_projects(self):
+        return self._p
+
+    def list_persona_models(self):
+        return self._m
+
+    def list_models(self):
+        return [m["id"] for m in self._m]
+
+
+def test_sync_maps_aliased_persona_model_ids():
+    # Regression for the offline-agents bug: DayPilot must match the published
+    # aliased id to the project (by homepilot_project_id and/or the --<short>
+    # suffix) and store the PUBLISHED id, not persona:<full-project-id>.
+    ws = _ws()
+    projects = _fixture("projects.json")["projects"]
+    persona_models = [
+        # Scarlett: mapped via the homepilot_project_id hint (short here is "scarlett").
+        {"id": "persona:scarlett--scarlett", "homepilot_project_id": "scarlett-project-id",
+         "name": "Scarlett"},
+        # Atlas: NOT shared → stays offline when enabled.
+    ]
+    eng = create_engine_from_settings()
+    with session_scope(eng) as s:
+        sync_agents(s, ws, "conn-alias", _AliasDiscovery(projects, persona_models))
+    from daypilot_knowledge.db import HomePilotAgentLink
+    with session_scope(eng) as s:
+        links = {row.homepilot_project_id: row for row in
+                 s.query(HomePilotAgentLink).filter_by(workspace_id=ws, connection_id="conn-alias")}
+        scar = links["scarlett-project-id"]
+        assert scar.snapshot_json["shared"] is True
+        # The published (aliased) id is stored — chat routes to the exact model.
+        assert scar.homepilot_model_id == "persona:scarlett--scarlett"
+        assert links["atlas-project-id"].snapshot_json["shared"] is False
+
+
+class _FailingDiscovery:
+    """A client whose discovery read fails (transport error) → discover() None."""
+
+    def list_projects(self):
+        return []
+
+    def list_persona_models(self):
+        return []
+
+    def discover(self):
+        return None
+
+
+def test_sync_aborts_without_offlining_on_discovery_failure():
+    # A transient discovery failure must NOT mark existing agents offline.
+    ws = _ws()
+    projects = _fixture("projects.json")["projects"]
+    model_ids = [m["id"] for m in _fixture("models.json")["data"]]
+    eng = create_engine_from_settings()
+    with session_scope(eng) as s:
+        sync_agents(s, ws, "conn-x", _FakeDiscovery(projects, model_ids))
+    from daypilot_knowledge.db import HomePilotAgentLink
+    with session_scope(eng) as s:
+        for link in s.query(HomePilotAgentLink).filter_by(workspace_id=ws, connection_id="conn-x"):
+            link.enabled = True
+            link.status = "available"
+
+    with session_scope(eng) as s:
+        res = sync_agents(s, ws, "conn-x", _FailingDiscovery())
+    assert res["code"] == "discovery_failed" and res["offline"] == 0
+    with session_scope(eng) as s:
+        statuses = {link.status for link in
+                    s.query(HomePilotAgentLink).filter_by(workspace_id=ws, connection_id="conn-x")}
+        assert statuses == {"available"}  # untouched, not mass-offlined
+
+
+def test_sync_honors_new_agents_disabled_preference():
+    ws = _ws()
+    projects = _fixture("projects.json")["projects"]
+    model_ids = [m["id"] for m in _fixture("models.json")["data"]]
+    eng = create_engine_from_settings()
+    with session_scope(eng) as s:
+        sync_agents(s, ws, "conn-en", _FakeDiscovery(projects, model_ids), new_agents_disabled=False)
+    from daypilot_knowledge.db import HomePilotAgentLink
+    with session_scope(eng) as s:
+        links = list(s.query(HomePilotAgentLink).filter_by(workspace_id=ws, connection_id="conn-en"))
+        assert links and all(link.enabled for link in links)  # opted in → enabled on discovery
+
+
+def test_sync_maps_aliased_id_by_short_suffix_without_hint():
+    # Older HomePilot builds don't emit homepilot_project_id; the --<short>
+    # suffix (project_id[:8]) must still map the model to the project.
+    ws = _ws()
+    projects = _fixture("projects.json")["projects"]
+    persona_models = [{"id": "persona:atlas-bot--atlas-pr", "homepilot_project_id": None}]
+    #                                              ^ "atlas-project-id"[:8] == "atlas-pr"
+    eng = create_engine_from_settings()
+    with session_scope(eng) as s:
+        sync_agents(s, ws, "conn-suffix", _AliasDiscovery(projects, persona_models))
+    from daypilot_knowledge.db import HomePilotAgentLink
+    with session_scope(eng) as s:
+        atlas = s.query(HomePilotAgentLink).filter_by(
+            workspace_id=ws, connection_id="conn-suffix", homepilot_project_id="atlas-project-id").one()
+        assert atlas.snapshot_json["shared"] is True
+        assert atlas.homepilot_model_id == "persona:atlas-bot--atlas-pr"
+
+
 # --- gateway endpoints ------------------------------------------------------
 
 def test_endpoints_404_under_admin_lock(monkeypatch):

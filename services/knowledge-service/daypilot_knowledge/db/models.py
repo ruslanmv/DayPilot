@@ -174,6 +174,9 @@ class Project(TimestampMixin, Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
     workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
     name: Mapped[str] = mapped_column(String(300))
+    # The repository this project's work lands in. First-class so a coding run
+    # inherits it instead of the repo being retyped for every run.
+    repository: Mapped[str] = mapped_column(String(500), default="")
     progress: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(40), default="Active")
     risk: Mapped[str] = mapped_column(String(20), default="low")
@@ -812,3 +815,127 @@ class AgentDelegation(TimestampMixin, Base):
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (Index("ix_agent_delegations_ws_parent", "workspace_id", "parent_task_id"),)
+
+
+# ---------------------------------------------------------------------------
+# AI profile & first-run onboarding (Phase 1)
+#
+# DayPilot owns the signed-in person's editable AI profile — distinct from a
+# HomePilot persona (which describes an agent). The profile stores declared
+# preferences (never secrets, documents, or conversation history) so planning
+# and assistant responses can be tailored, while the ProfileContextBuilder
+# projects only a bounded, purpose-limited subset into any model request.
+# ---------------------------------------------------------------------------
+
+
+class UserAiProfile(TimestampMixin, Base):
+    """One editable AI profile per (user, workspace).
+
+    Work preferences may differ by workspace, so ownership is tenant-scoped.
+    Every category is a validated JSON document (Pydantic ``extra='forbid'``);
+    ``revision`` powers optimistic concurrency (If-Match) and ``reviewed_at``
+    records the last time the person confirmed the "What AI sees" review. This
+    table never stores provider credentials, mailbox secrets, raw documents, or
+    conversation history.
+    """
+
+    __tablename__ = "user_ai_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    schema_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    timezone: Mapped[str | None] = mapped_column(String(64), nullable=True)  # IANA
+    locale: Mapped[str | None] = mapped_column(String(35), nullable=True)    # BCP 47
+    preferred_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    pronouns: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    use_cases_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    schedule_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    planning_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    communication_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    accessibility_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    boundaries_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # Per-category AI-context inclusion consent (category -> bool).
+    category_consent_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_user_ai_profiles_owner", "user_id", "workspace_id", unique=True),
+    )
+
+
+class UserProfileGoal(TimestampMixin, Base):
+    """A profile-level outcome (not a project task). Stored separately from the
+    profile blob so a single goal can be archived or expired without rewriting
+    every category."""
+
+    __tablename__ = "user_profile_goals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    detail: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active|upcoming|archived
+    priority: Mapped[int] = mapped_column(Integer, default=1)
+    review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_user_profile_goals_owner", "user_id", "workspace_id", "status"),
+    )
+
+
+class OnboardingProgress(TimestampMixin, Base):
+    """Server-owned first-run progress (one row per user/workspace).
+
+    Replaces device-scoped ``localStorage`` completion so setup follows the
+    person across browsers. The stored step map is *presentation* progress;
+    provider/integration completion is always recomputed from authoritative
+    resource state, never trusted from this row for a security decision.
+    """
+
+    __tablename__ = "onboarding_progress"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    flow_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    status: Mapped[str] = mapped_column(String(20), default="not_started")  # not_started|in_progress|completed
+    current_step: Mapped[str] = mapped_column(String(40), default="welcome")
+    completed_steps_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_onboarding_progress_owner", "user_id", "workspace_id", unique=True),
+    )
+
+
+class UserProfileObservation(TimestampMixin, Base):
+    """A learned preference suggestion (consented-learning, Phase 4).
+
+    Silent learning is never durable: an observation starts ``suggested`` and
+    only a user ``confirmed`` one may enter model context. ``rejected`` ones
+    suppress repeated suggestions (they are not sent to the model), and expired
+    or non-confirmed observations are ignored by the context builder. Declared
+    profile values always take precedence over a confirmed observation.
+    """
+
+    __tablename__ = "user_profile_observations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    category: Mapped[str] = mapped_column(String(40))  # a consent category
+    value_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)  # normalized partial doc
+    source_type: Mapped[str] = mapped_column(String(40), default="inferred")
+    source_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    confidence: Mapped[float] = mapped_column(default=0.5, server_default="0.5")
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    state: Mapped[str] = mapped_column(String(20), default="suggested")  # suggested|confirmed|rejected|expired
+
+    __table_args__ = (
+        Index("ix_user_profile_obs_owner", "user_id", "workspace_id", "state"),
+    )

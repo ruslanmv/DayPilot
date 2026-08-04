@@ -10,6 +10,8 @@ import { SettingsPanel } from './shell/SettingsPanel'
 import { CommandPalette, type PaletteAction } from './shell/CommandPalette'
 import { FocusMode } from './shell/FocusMode'
 import { PatchReview } from './coding/PatchReview'
+import { StartCodingRun } from './coding/StartCodingRun'
+import { PlanFromIdea } from './design/PlanFromIdea'
 import { DesignReview } from './design/DesignReview'
 import { EmailWorkspace } from './email/EmailWorkspace'
 import { ApprovalCenter } from './approvals/ApprovalCenter'
@@ -372,6 +374,7 @@ function newProjectFrom(np: NewProject): DayPilotProject {
   return {
     id: `proj-${Date.now()}`,
     name: np.name,
+    repository: np.repo || '',
     progress: 0,
     status: 'Active',
     aiActivity: 'Ready to start',
@@ -559,7 +562,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
   const setView = navigate
   const [messages, setMessages] = useState<DayPilotMessage[]>(seedMessages)
   const [tasks, setTasks] = useState<DayPilotTask[]>(seedTasks)
-  const { projects, setProjects, createProject } = useProjects(seedProjects)
+  const { projects, setProjects, reload: reloadProjects, createProject } = useProjects(seedProjects)
   const documents = useMemo(seedDocuments, [])
   const documentSources = useMemo(seedDocumentSources, [])
   const agents = useMemo(seedAgents, [])
@@ -569,6 +572,8 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [focusTask, setFocusTask] = useState<DayPilotTask | undefined>()
   const [patchReviewOpen, setPatchReviewOpen] = useState(false)
+  const [startRunOpen, setStartRunOpen] = useState(false)
+  const [planFromIdeaOpen, setPlanFromIdeaOpen] = useState(false)
   const [designOpen, setDesignOpen] = useState(false)
   const [approvalsOpen, setApprovalsOpen] = useState(false)
   const selectedTaskId = selected?.kind === 'task' ? selected.item.id : undefined
@@ -621,6 +626,8 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
       { id: 'focus', label: 'Start Focus Mode', hint: 'F', keywords: 'focus deep work', run: startFocusMode },
       { id: 'review-ai', label: 'Review AI Work', keywords: 'agents approvals', run: () => setView('agents') },
       { id: 'approvals', label: 'Approval Center', hint: 'approvals', keywords: 'approve reject sensitive actions queue', run: () => setApprovalsOpen(true) },
+      { id: 'plan-from-idea', label: 'Plan a new build from an idea', hint: 'design', keywords: 'matrix designer idea plan blueprint batches new project build', run: () => setPlanFromIdeaOpen(true) },
+      { id: 'start-coding-run', label: 'Start a coding run', hint: 'coding', keywords: 'gitpilot claude code codex build repo agent write', run: () => setStartRunOpen(true) },
       { id: 'patch-review', label: 'Review AI Patches · GitPilot', hint: 'coding', keywords: 'gitpilot diff patch code', run: () => setPatchReviewOpen(true) },
       { id: 'matrix-designer', label: 'Matrix Designer · Batch Roadmap', hint: 'design', keywords: 'design bundle review planner batches', run: () => setDesignOpen(true) },
       { id: 'settings', label: 'Open Settings', hint: '⌘,', keywords: 'preferences', run: () => setSettingsSection('profile') },
@@ -746,7 +753,21 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
       )}
       {focusTask && <FocusMode task={focusTask} onExit={exitFocus} />}
       {patchReviewOpen && <PatchReview onClose={() => setPatchReviewOpen(false)} />}
+      {startRunOpen && (
+        <StartCodingRun
+          projectId={selected?.kind === 'project' ? selected.item.id : null}
+          projectRepository={selected?.kind === 'project' ? selected.item.repository : ''}
+          onClose={() => setStartRunOpen(false)}
+          onStarted={() => { setStartRunOpen(false); setPatchReviewOpen(true) }}
+        />
+      )}
       {designOpen && <DesignReview onClose={() => setDesignOpen(false)} />}
+      {planFromIdeaOpen && (
+        <PlanFromIdea
+          onClose={() => setPlanFromIdeaOpen(false)}
+          onScheduled={() => { setPlanFromIdeaOpen(false); setView('projects'); reloadProjects() }}
+        />
+      )}
       {approvalsOpen && <ApprovalCenter onClose={() => setApprovalsOpen(false)} />}
       <ProjectWizard
         open={projectWizardOpen}

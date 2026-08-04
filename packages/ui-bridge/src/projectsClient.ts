@@ -12,7 +12,7 @@ import type { DayPilotProject, DayPilotProjectStatus, DayPilotRiskLevel } from '
 import type { NewProject } from './projects/ProjectWizard'
 
 type ServerProject = {
-  id: string; name: string; progress: number; status: string; risk: string
+  id: string; name: string; repository?: string; progress: number; status: string; risk: string
   aiActivity: string; nextHumanAction: string; continueAction: string
   aiActions?: unknown[]; designerInput?: unknown[]; recentSignals?: unknown[]
   linkedSources?: unknown[]; yesterday?: unknown[]; today?: unknown[]; blocked?: unknown[]
@@ -26,6 +26,7 @@ export function toDayPilotProject(p: ServerProject): DayPilotProject {
   return {
     id: p.id,
     name: p.name,
+    repository: p.repository || '',
     progress: p.progress ?? 0,
     status: (p.status as DayPilotProjectStatus) || 'Active',
     risk: (p.risk as DayPilotRiskLevel) || 'low',

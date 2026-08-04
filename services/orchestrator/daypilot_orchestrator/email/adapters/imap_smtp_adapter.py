@@ -11,6 +11,7 @@ a live server.
 """
 from __future__ import annotations
 
+import base64
 import email as email_lib
 import imaplib
 import smtplib
@@ -31,11 +32,24 @@ class ImapSmtpConfig:
     username: str
     password: str
     use_tls: bool = True
+    # "password" (app password / LOGIN) or "xoauth2" (Gmail / Microsoft OAuth).
+    # For xoauth2, ``password`` carries the OAuth access token.
+    auth: str = "password"
+
+
+def xoauth2_string(user: str, access_token: str) -> str:
+    """SASL XOAUTH2 initial client response (pre-base64), per the Google /
+    Microsoft spec: ``user=<email>^Aauth=Bearer <token>^A^A``. Gmail and
+    Microsoft 365 reject a plain LOGIN with a token as the password."""
+    return f"user={user}\x01auth=Bearer {access_token}\x01\x01"
 
 
 def _default_imap(cfg: ImapSmtpConfig) -> imaplib.IMAP4:
     client = imaplib.IMAP4_SSL(cfg.imap_host, cfg.imap_port) if cfg.use_tls else imaplib.IMAP4(cfg.imap_host, cfg.imap_port)
-    client.login(cfg.username, cfg.password)
+    if cfg.auth == "xoauth2":
+        client.authenticate("XOAUTH2", lambda _: xoauth2_string(cfg.username, cfg.password).encode())
+    else:
+        client.login(cfg.username, cfg.password)
     return client
 
 
@@ -43,7 +57,12 @@ def _default_smtp(cfg: ImapSmtpConfig) -> smtplib.SMTP:
     client = smtplib.SMTP(cfg.smtp_host, cfg.smtp_port)
     if cfg.use_tls:
         client.starttls()
-    client.login(cfg.username, cfg.password)
+    if cfg.auth == "xoauth2":
+        client.ehlo()
+        b64 = base64.b64encode(xoauth2_string(cfg.username, cfg.password).encode()).decode()
+        client.docmd("AUTH", "XOAUTH2 " + b64)
+    else:
+        client.login(cfg.username, cfg.password)
     return client
 
 

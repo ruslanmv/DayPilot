@@ -8,10 +8,11 @@ export const DESIGN_BUNDLE: DayPilotDesignBundle = {
   visualTarget: 'HomePilot Family — calm obsidian, accent-as-telemetry',
   architecture: 'Command-first shell with bottom-tab navigation',
   acceptanceCriteria: ['Installable PWA', 'Now/Blocked/Approvals cards', 'Offline last snapshot'],
+  validationStatus: 'approved',
   batches: [
-    { id: '1', title: 'PWA shell + manifest', description: 'Installable app shell and service worker.', dependsOn: [], acceptance: ['Lighthouse installable'], estimateHours: 6 },
-    { id: '2', title: 'Today cards', description: 'Now / Next / Blocked / AI Running / Approvals.', dependsOn: ['1'], acceptance: ['Cards render from /v1/today'], estimateHours: 8 },
-    { id: '3', title: 'Push approvals', description: 'Web Push → approval card deep link.', dependsOn: ['2'], acceptance: ['Approve on phone reflects on desktop'], estimateHours: 10 },
+    { id: '1', title: 'PWA shell + manifest', description: 'Installable app shell and service worker.', dependsOn: [], acceptance: ['Lighthouse installable'], estimateHours: 6, allowedFiles: [], mustNotChange: [] },
+    { id: '2', title: 'Today cards', description: 'Now / Next / Blocked / AI Running / Approvals.', dependsOn: ['1'], acceptance: ['Cards render from /v1/today'], estimateHours: 8, allowedFiles: [], mustNotChange: [] },
+    { id: '3', title: 'Push approvals', description: 'Web Push → approval card deep link.', dependsOn: ['2'], acceptance: ['Approve on phone reflects on desktop'], estimateHours: 10, allowedFiles: [], mustNotChange: [] },
   ],
 }
 

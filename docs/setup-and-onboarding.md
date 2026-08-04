@@ -8,6 +8,14 @@ simulation you can run to verify the whole loop.
 
 ## 1. First-run onboarding
 
+> **Server-owned AI profile:** DayPilot now owns an editable, per-workspace AI
+> profile and server-side onboarding progress (distinct from a HomePilot
+> persona). Settings → **Your profile** is the complete editor, and the
+> assistant receives only a bounded, consent-gated projection of it. The full
+> design — data model, API, context-minimization contract, and the six-stage
+> first-run journey — is in
+> [AI profile and first-run onboarding design](./ai-profile-onboarding-design.md).
+
 On first launch DayPilot shows a **minimalist three-step wizard**. It captures
 only the essentials and stores them in the local profile
 (`localStorage['daypilot.profile']`); a completion flag

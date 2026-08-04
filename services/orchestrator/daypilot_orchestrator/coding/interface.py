@@ -39,6 +39,25 @@ class RunStatus(StrEnum):
 
 
 @dataclass(frozen=True)
+class CoderSpec:
+    """Which AI writes the patch, inside the chosen executor.
+
+    Orthogonal to the executor: the executor owns the governed pipeline (the
+    throwaway workspace, the path policy, the sandbox, the risk score, the draft
+    PR), while the coder is only the author of the diff. Empty means "whatever
+    the executor's deployment defaults to".
+    """
+
+    provider: str = ""
+    model: str = ""
+
+    def as_payload(self) -> dict[str, str] | None:
+        if not self.provider and not self.model:
+            return None
+        return {"provider": self.provider, "model": self.model}
+
+
+@dataclass(frozen=True)
 class CodingRunSpec:
     """What DayPilot asks an executor to do."""
 
@@ -50,6 +69,7 @@ class CodingRunSpec:
     workspace_id: str = "default"
     project_id: str | None = None
     task_id: str | None = None
+    coder: CoderSpec = field(default_factory=CoderSpec)
 
 
 @dataclass
@@ -81,6 +101,10 @@ class TestResults:
     passed: int | None = None
     total: int | None = None
     failed_names: list[str] = field(default_factory=list)
+    # Categorical outcome for executors that report a verdict without counts
+    # ("passed" | "failed" | "skipped" | "not_run"). Kept separate from the
+    # counts so a verdict is never rendered as a fabricated pass total.
+    status: str = ""
 
     @property
     def pass_rate(self) -> float | None:

@@ -31,6 +31,7 @@ from .routers import (
     notifications,
     plan,
     planner,
+    profile,
     projects,
     providers,
     tasks,
@@ -85,6 +86,8 @@ for _router in (
     auth_identity.router,
     assistant.router,
     knowledge.router,
+    profile.router,
+    profile.onboarding_router,
 ):
     app.include_router(_router)
 

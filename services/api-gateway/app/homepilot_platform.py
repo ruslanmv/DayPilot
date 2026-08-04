@@ -489,9 +489,18 @@ def sync(session: Session, workspace_id: str, connection_id: str) -> dict[str, A
     # Re-resolve the bound account each sync so a key/account change re-scopes
     # agents to the current account instead of blending with the previous one.
     account = _store_account(row)
-    result = sync_agents(session, workspace_id, connection_id, client, account_ref=account["account_ref"])
+    result = sync_agents(
+        session, workspace_id, connection_id, client,
+        account_ref=account["account_ref"],
+        new_agents_disabled=bool(_prefs(connection_id)["newAgentsDisabled"]),
+    )
     row.last_activity_at = utcnow()
     session.flush()
+    # A discovery failure left agents untouched — report it truthfully instead of
+    # pretending a successful (empty) sync.
+    if result.get("code") == "discovery_failed":
+        row.detail = "Couldn't read personas from HomePilot; agents left unchanged."
+        return {"code": "discovery_failed", **result}
     return {"code": "synced", **result}
 
 

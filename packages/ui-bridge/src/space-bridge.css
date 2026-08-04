@@ -1426,6 +1426,11 @@
 .dp-tag--healthy { color: var(--hp-accent-green); background: color-mix(in srgb, var(--hp-accent-green) 14%, transparent); }
 .dp-tag--degraded { color: var(--hp-accent-orange); background: color-mix(in srgb, var(--hp-accent-orange) 14%, transparent); }
 .dp-tag--offline { color: var(--hp-accent-red); background: color-mix(in srgb, var(--hp-accent-red) 14%, transparent); }
+.dp-tag--muted { color: var(--text-secondary); background: color-mix(in srgb, var(--text-secondary) 12%, transparent); }
+/* AI-profile editor (Your profile) helpers */
+.dp-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.dp-error-text { color: var(--hp-accent-red); }
+.dp-chip.is-active { background: color-mix(in srgb, var(--hp-accent-green) 16%, transparent); color: var(--text-primary); border-color: var(--hp-accent-green); }
 .dp-kbd { font-family: var(--hp-font-mono); font-size: var(--hp-text-2xs); padding: 0.12rem 0.45rem; border: 1px solid var(--hp-border-strong); border-radius: var(--hp-radius-sm); background: var(--hp-bg); }
 .dp-swatches { display: flex; flex-wrap: wrap; gap: var(--hp-space-3); }
 .dp-swatch { display: flex; align-items: center; gap: var(--hp-space-2); font-size: var(--hp-text-sm); }
@@ -2027,6 +2032,9 @@
 .dp-onb__seg { display: flex; gap: 8px; }
 .dp-onb__segbtn { flex: 1 1 auto; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-subtle); color: var(--text-secondary); font: inherit; font-size: 13px; cursor: pointer; }
 .dp-onb__segbtn.is-active { border-color: var(--accent); color: var(--text-primary); background: var(--accent-subtle); }
+.dp-onb__uses { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.dp-onb__usebtn { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-subtle); color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.dp-onb__usebtn.is-active { border-color: var(--accent); color: var(--text-primary); background: var(--accent-subtle); }
 .dp-onb__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dp-onb__back { background: transparent; border: 0; color: var(--text-secondary); font: inherit; font-size: 14px; cursor: pointer; padding: 8px 4px; }
 .dp-onb__next { margin-left: auto; padding: 11px 20px; background: var(--accent); color: #fff; border: 0; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
@@ -2737,3 +2745,40 @@
 .dp-switch.is-on { background: var(--accent, #3b82f6); }
 .dp-switch__knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s; }
 .dp-switch.is-on .dp-switch__knob { transform: translateX(16px); }
+
+/* --- Start a coding run: repo, mode, executor, coder --- */
+.dp-start-run { width: min(600px, 100%); max-height: 88vh; }
+.dp-start-run .dp-pw__body { overflow-y: auto; }
+.dp-start-run fieldset.dp-onb__field { border: 0; margin: 0; padding: 0; }
+.dp-start-run legend { padding: 0; font-size: 13px; color: var(--text-secondary); }
+.dp-start-run__modes { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.dp-start-run__mode { flex: 1 1 6rem; min-height: 40px; padding: 9px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-subtle); color: var(--text-secondary); font: inherit; font-size: 14px; cursor: pointer; }
+.dp-start-run__mode:hover { border-color: var(--hp-border-strong); color: var(--text-primary); }
+.dp-start-run__mode.is-active { border-color: var(--accent); color: var(--text-primary); background: var(--surface); }
+.dp-start-run textarea,
+.dp-start-run select { padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-subtle); color: var(--text-primary); font: inherit; font-size: 14px; outline: none; }
+.dp-start-run textarea { resize: vertical; min-height: 4.5rem; }
+.dp-start-run textarea:focus, .dp-start-run select:focus { border-color: var(--accent); }
+.dp-start-run select:disabled { opacity: 0.55; cursor: default; }
+.dp-start-run__error { margin: 0; font-size: 13px; color: var(--hp-accent-red, #e5484d); }
+
+/* --- Plan from an idea: propose, choose, schedule --- */
+.dp-plan { width: min(680px, 100%); }
+.dp-plan__idea { padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-subtle); color: var(--text-primary); font: inherit; font-size: 14px; outline: none; resize: vertical; }
+.dp-plan__idea:focus { border-color: var(--accent); }
+.dp-plan__cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--hp-space-3); }
+.dp-plan__card { display: flex; flex-direction: column; gap: 8px; width: 100%; height: 100%; text-align: left; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-subtle); color: var(--text-primary); font: inherit; cursor: pointer; }
+.dp-plan__card:hover { border-color: var(--hp-border-strong); }
+.dp-plan__card.is-active { border-color: var(--accent); background: var(--surface); }
+.dp-plan__card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dp-plan__summary { font-size: 13px; color: var(--text-secondary); line-height: 1.45; }
+.dp-plan__facts { display: flex; flex-wrap: wrap; gap: 4px 10px; font-family: var(--hp-font-mono); font-size: var(--hp-text-2xs); color: var(--text-tertiary); }
+.dp-plan__stack { font-size: 12px; color: var(--text-tertiary); }
+.dp-plan__roadmap summary { cursor: pointer; font-size: 13px; color: var(--text-secondary); padding: 4px 0; }
+.dp-plan__roadmap .dp-design__batches { margin-top: var(--hp-space-3); }
+.dp-plan__adjust { display: flex; gap: 8px; }
+.dp-plan__adjust input { flex: 1 1 auto; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-subtle); color: var(--text-primary); font: inherit; font-size: 14px; outline: none; }
+.dp-plan__adjust input:focus { border-color: var(--accent); }
+.dp-plan__check { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dp-plan__error { margin: 0; font-size: 13px; color: var(--hp-accent-red, #e5484d); }
+@media (max-width: 640px) { .dp-plan__cards { grid-template-columns: 1fr; } }

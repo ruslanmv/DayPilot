@@ -15,12 +15,10 @@ from __future__ import annotations
 
 import imaplib
 import os
-import secrets
 import smtplib
 import socket
 import ssl
 from typing import Any
-from urllib.parse import urlencode
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -408,7 +406,31 @@ def adapter_for_workspace(session: Session, workspace_id: str):
     row = _get(session, workspace_id)
     if row is None or row.status not in ("connected", "degraded") or not row.secret_reference:
         return UnconfiguredMailAdapter()
-    secret = credential_store().get(row.secret_reference)
+    secret = credential_store().get(row.secret_reference) or {}
+
+    # OAuth (Gmail / Microsoft 365): authenticate the live IMAP/SMTP session with
+    # SASL XOAUTH2 using a FRESH access token (refreshed if expired), never a
+    # password. Fall back to Unconfigured if the token can't be produced.
+    if secret.get("auth") == "xoauth2":
+        from . import mail_oauth
+
+        creds = mail_oauth.xoauth2_credentials(session, row)
+        if creds is None:
+            return UnconfiguredMailAdapter()
+        email, access_token = creds
+        return ImapSmtpAdapter(
+            ImapSmtpConfig(
+                imap_host=row.imap_host or "",
+                imap_port=row.imap_port,
+                smtp_host=row.smtp_host or row.imap_host or "",
+                smtp_port=row.smtp_port,
+                username=email or row.email_address or "",
+                password=access_token,   # the OAuth access token (XOAUTH2)
+                use_tls=(row.imap_security in ("ssl", "starttls")),
+                auth="xoauth2",
+            )
+        )
+
     return ImapSmtpAdapter(
         ImapSmtpConfig(
             imap_host=row.imap_host or "",
@@ -442,11 +464,14 @@ def oauth_start(session: Session, workspace_id: str, provider: str) -> dict[str,
     provider authorization URL the browser redirects to (authorization-code flow,
     with a CSRF ``state`` bound to the workspace). Otherwise the UI falls back to
     an app password over IMAP/SMTP rather than pretending a flow exists."""
-    provider = provider.lower()
-    key = "google" if provider in ("google", "gmail") else "microsoft"
-    env_prefix = "GOOGLE" if key == "google" else "MICROSOFT"
-    client_id = os.getenv(f"{env_prefix}_OAUTH_CLIENT_ID", "")
-    if not client_id:
+    from . import mail_oauth
+
+    key = mail_oauth.normalize_provider(provider)
+    if key is None:
+        # Don't silently treat an unknown provider as Microsoft.
+        return {"available": False, "reason": "invalid_provider",
+                "message": f"Unknown email provider '{provider}'."}
+    if not mail_oauth.is_configured(key):
         return {
             "available": False,
             "reason": "oauth_not_configured",
@@ -456,22 +481,12 @@ def oauth_start(session: Session, workspace_id: str, provider: str) -> dict[str,
                 "Connect using an app password instead."
             ),
         }
-    authorize_base, scope = _OAUTH_AUTHORIZE[key]
-    state = f"{workspace_id}:{secrets.token_urlsafe(16)}"
-    params = {
-        "response_type": "code",
-        "client_id": client_id,
-        "scope": scope,
-        "state": state,
-        "access_type": "offline",   # Google: return a refresh token
-        "prompt": "select_account consent",
-    }
-    redirect_uri = os.getenv(f"{env_prefix}_OAUTH_REDIRECT_URI", "").strip()
-    if redirect_uri:
-        params["redirect_uri"] = redirect_uri
-    return {
-        "available": True,
-        "provider": key,
-        "authorizationUrl": f"{authorize_base}?{urlencode(params)}",
-        "state": state,
-    }
+    # Full authorization-code flow with PKCE + a one-time, server-stored state.
+    return mail_oauth.build_authorization(workspace_id, key)
+
+
+def oauth_callback(session: Session, provider: str, code: str, state: str) -> dict[str, Any]:
+    """Complete the OAuth flow: exchange the code and connect the mailbox."""
+    from . import mail_oauth
+
+    return mail_oauth.handle_callback(session, provider, code, state)
