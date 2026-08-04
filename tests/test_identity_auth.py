@@ -30,13 +30,18 @@ def test_password_hashing_roundtrips_and_hides_plaintext():
 
 def test_bootstrap_creates_single_owner_then_refuses():
     email = _email()
+    # Order-independent: on a clean DB this test bootstraps the first owner; if
+    # another test already created a local account, the "refuses a second"
+    # invariant still holds and is what we assert.
     with session_scope(ENGINE) as s:
-        was_required = identity.bootstrap_required(s)
-        out = identity.bootstrap(s, email, "a-strong-password", "Owner One")
-        assert out["workspaceId"] == "default"
+        created = identity.bootstrap_required(s)
+        if created:
+            out = identity.bootstrap(s, email, "a-strong-password", "Owner One")
+            assert out["workspaceId"] == "default"
     with session_scope(ENGINE) as s:
-        user = s.query(User).filter_by(email=email).one()
-        assert user.role == "owner" and user.password_hash and user.password_hash != "a-strong-password"
+        if created:
+            user = s.query(User).filter_by(email=email).one()
+            assert user.role == "owner" and user.password_hash and user.password_hash != "a-strong-password"
         # Bootstrap is refused now that a local account exists.
         assert identity.bootstrap_required(s) is False
         try:
@@ -44,7 +49,6 @@ def test_bootstrap_creates_single_owner_then_refuses():
             assert False, "expected refusal"
         except PermissionError:
             pass
-    assert was_required in (True, False)  # sanity: callable ran
 
 
 def test_weak_password_rejected():

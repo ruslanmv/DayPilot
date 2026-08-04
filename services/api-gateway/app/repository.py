@@ -215,6 +215,7 @@ def create_project(
     project = _Project(
         workspace_id=workspace_id,
         name=name.strip(),
+        repository=repository.strip(),
         status=status,
         risk=risk,
         progress=0,

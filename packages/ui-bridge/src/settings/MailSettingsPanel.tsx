@@ -36,6 +36,17 @@ export function MailSettingsPanel() {
     )
   }
 
+  // Email disabled for this deployment → explain it, never offer setup buttons
+  // that call endpoints the backend has deliberately turned off (404).
+  if (status && status.enabled === false) {
+    return (
+      <div className="dp-settings-list">
+        <h3 className="dp-hp__h">Email is disabled</h3>
+        <p className="dp-muted">Email is turned off for this deployment. An administrator can enable it, then you can connect a mailbox here.</p>
+      </div>
+    )
+  }
+
   if (wizard || !status?.connected) {
     return (
       <div className="dp-settings-list">

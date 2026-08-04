@@ -44,6 +44,7 @@ def serialize_project(p: Any) -> dict[str, Any]:
         "id": p.id,
         "workspaceId": p.workspace_id,
         "name": p.name,
+        "repository": getattr(p, "repository", "") or "",
         "progress": p.progress,
         "status": p.status,
         "risk": p.risk,

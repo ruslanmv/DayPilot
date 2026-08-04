@@ -5,17 +5,11 @@ import { AiProvidersPanel } from '../settings/AiProvidersPanel'
 import { MailSettingsPanel } from '../settings/MailSettingsPanel'
 import { KnowledgeSourcesPanel } from '../settings/KnowledgeSourcesPanel'
 import { HomePilotConnectionPanel } from '../settings/HomePilotConnectionPanel'
-import { resetSetup } from '../onboarding/setupState'
+import { YourProfilePanel } from '../settings/YourProfilePanel'
 import { getTheme, setTheme, type ThemeMode } from '../theme'
 import {
-  KNOWLEDGE_SOURCES,
-  MAIL_SETTINGS,
-  OLLABRIDGE_PAIRING,
   PERMISSION_DEFAULTS,
-  PROFILE,
-  SOURCES_SUMMARY,
   SHORTCUTS,
-  type ConfigField,
   type SettingsSectionId,
 } from '../settings/settingsData'
 
@@ -25,7 +19,7 @@ type SettingsPanelProps = {
 }
 
 const SECTION_TITLES: Record<SettingsSectionId, string> = {
-  profile: 'Profile & workspace',
+  profile: 'Your profile',
   integrations: 'Integrations',
   providers: 'AI providers',
   mail: 'Mail settings',
@@ -59,19 +53,6 @@ function ConnBadge({ status }: { status: string }) {
   return <span className={'dp-tag ' + cls}>{status}</span>
 }
 
-function FieldRows({ fields }: { fields: ConfigField[] }) {
-  return (
-    <div className="dp-settings-fields">
-      {fields.map((f) => (
-        <div key={f.label} className="dp-settings-field">
-          <span className="dp-settings-field__label">{f.label}</span>
-          <span className={'dp-settings-field__value' + (f.secret ? ' dp-settings-field__value--secret' : '')}>{f.value}</span>
-          {f.hint && <span className="dp-settings-field__hint">{f.hint}</span>}
-        </div>
-      ))}
-    </div>
-  )
-}
 
 function AppearanceSection() {
   const [theme, setThemeState] = useState<ThemeMode>(() => getTheme())
@@ -150,43 +131,9 @@ function SectionBody({ section, onClose }: { section: SettingsSectionId; onClose
   if (section === 'appearance') {
     return <AppearanceSection />
   }
-  return (
-    <div className="dp-settings-list">
-      <div className="dp-settings-row">
-        <div className="dp-settings-row__head">
-          <strong>{PROFILE.name}</strong>
-          <span className="dp-pill dp-pill--muted">{PROFILE.role}</span>
-        </div>
-        <FieldRows
-          fields={[
-            { label: 'Email', value: PROFILE.email },
-            { label: 'Workspace', value: PROFILE.workspace },
-            { label: 'Mode', value: PROFILE.mode },
-          ]}
-        />
-      </div>
-      <p className="dp-muted">Connected essentials</p>
-      <div className="dp-settings-row dp-settings-row--split">
-        <span>Mailbox</span>
-        <span className="dp-tag dp-tag--healthy">{MAIL_SETTINGS.fields[2].value}</span>
-      </div>
-      <div className="dp-settings-row dp-settings-row--split">
-        <span>Knowledge sources</span>
-        <span className="dp-tag dp-tag--healthy">{KNOWLEDGE_SOURCES.length} granted</span>
-      </div>
-      <div className="dp-settings-row dp-settings-row--split">
-        <span>AI provider</span>
-        <span className="dp-tag dp-tag--healthy">{OLLABRIDGE_PAIRING.modes.find((m) => m.id === OLLABRIDGE_PAIRING.activeMode)?.label}</span>
-      </div>
-      <p className="dp-muted">Setup</p>
-      <div className="dp-settings-row">
-        <p>Re-run the first-run setup wizard to reconnect your AI provider, mailbox, and knowledge sources.</p>
-        <div className="dp-settings-actions">
-          <button className="dp-ghost-button" type="button" onClick={() => { resetSetup(); onClose() }}>Restart setup</button>
-        </div>
-      </div>
-    </div>
-  )
+  // 'profile' → the live, backend-owned AI-profile editor (identity, work style,
+  // goals, communication, AI context & privacy, and the setup checklist).
+  return <YourProfilePanel onClose={onClose} />
 }
 
 /**

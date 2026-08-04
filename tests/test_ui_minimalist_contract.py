@@ -145,7 +145,7 @@ def test_sidebar_nav_and_settings_menu_contract():
 
     # Every advanced section lives (only) in the full Settings modal's rail.
     panel = (ui / 'shell' / 'SettingsPanel.tsx').read_text(encoding='utf-8')
-    for label in ('Profile & workspace', 'Integrations', 'AI providers', 'Mail settings',
+    for label in ('Your profile', 'Integrations', 'AI providers', 'Mail settings',
                   'Knowledge sources', 'Appearance', 'Permissions & approvals',
                   'Keyboard shortcuts'):
         assert label in panel
@@ -274,3 +274,69 @@ def test_standalone_demo_is_available_without_build_tooling():
     assert '<title>DayPilot Premium Minimalist Portal</title>' in text
     assert 'Calendar Core' in text
     assert 'Task Ledger' in text
+
+
+def test_starting_a_coding_run_offers_repo_mode_executor_and_coder():
+    """The coding surface can start work, not only review it.
+
+    Repo, mode, executor and coder are four separate decisions; the panel must
+    expose all four, inherit the project's repository rather than demanding it
+    be retyped, and never present an unavailable coder as a working choice.
+    """
+    ui = ROOT / 'packages' / 'ui-bridge' / 'src' / 'coding'
+    panel = (ui / 'StartCodingRun.tsx').read_text(encoding='utf-8')
+    assert 'Repository' in panel and 'Executor' in panel and 'AI coder' in panel
+    assert 'Ask' in panel and 'Plan' in panel and 'Auto' in panel
+    # The project's repository is inherited, and its absence is explained.
+    assert 'projectRepository' in panel
+    assert 'no repository yet' in panel
+    # An unavailable coder is shown disabled with its reason, never hidden.
+    assert 'disabled={!c.available}' in panel
+    assert 'c.reason' in panel
+    # Unreachable executor: say so instead of showing an empty picker.
+    assert 'catalog.reachable' in panel
+
+    client = (ui / 'codingClient.ts').read_text(encoding='utf-8')
+    assert '/v1/coding/coders' in client
+    assert '/v1/coding/executors' in client
+    assert '/v1/coding/runs' in client
+
+    shell = (ROOT / 'packages' / 'ui-bridge' / 'src' / 'minimalPortal.tsx').read_text(encoding='utf-8')
+    assert 'StartCodingRun' in shell
+    assert 'Start a coding run' in shell  # reachable from the command palette
+
+
+def test_an_idea_can_be_turned_into_a_chosen_plan_and_scheduled_work():
+    """Path B is reachable from the UI, not only from the API.
+
+    The whole value of three candidate plans is the choice, so the surface must
+    render them, show what each one costs, let the plan be adjusted in words and
+    checked before anything is built, and only then schedule it.
+    """
+    design = ROOT / 'packages' / 'ui-bridge' / 'src' / 'design'
+    panel = (design / 'PlanFromIdea.tsx').read_text(encoding='utf-8')
+    # Propose → choose → adjust → check → schedule.
+    assert 'Propose plans' in panel
+    assert 'Choose a plan' in panel
+    assert 'Adjust' in panel
+    assert 'Check this plan' in panel
+    assert 'Schedule this plan' in panel
+    # Each candidate is comparable: effort, difficulty, batch count, stack.
+    assert 'c.estimate' in panel and 'c.difficulty' in panel
+    assert 'c.batches.length' in panel and 'c.stack' in panel
+    assert 'recommended' in panel
+    # The roadmap preview shows dependency order, so the choice is informed.
+    assert 'dependsOn' in panel
+    # The repository is asked for here — it is where the batches get built.
+    assert 'Repository to build in' in panel
+    # Nothing is created until the last step, and that promise is stated.
+    assert 'Nothing is created until you choose one' in panel
+
+    client = (design / 'designClient.ts').read_text(encoding='utf-8')
+    for path in ('/v1/design/blueprints', '/v1/design/refine',
+                 '/v1/design/review', '/v1/design/bundles'):
+        assert path in client, path
+
+    shell = (ROOT / 'packages' / 'ui-bridge' / 'src' / 'minimalPortal.tsx').read_text(encoding='utf-8')
+    assert 'PlanFromIdea' in shell
+    assert 'Plan a new build from an idea' in shell  # reachable from the palette

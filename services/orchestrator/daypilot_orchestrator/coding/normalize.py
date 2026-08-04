@@ -23,6 +23,18 @@ STATUS_ALIASES = {
     "needs_review": RunStatus.NEEDS_REVIEW,
     "review": RunStatus.NEEDS_REVIEW,
     "awaiting_review": RunStatus.NEEDS_REVIEW,
+    # An executor reporting "completed"/"needs_approval" means it finished
+    # PRODUCING work — never that the work was written. It maps to NEEDS_REVIEW
+    # so the approval gate still stands; mapping it to MERGED would claim a
+    # repository write that never happened.
+    "completed": RunStatus.NEEDS_REVIEW,
+    "complete": RunStatus.NEEDS_REVIEW,
+    "succeeded": RunStatus.NEEDS_REVIEW,
+    "needs_approval": RunStatus.NEEDS_REVIEW,
+    # Refused by the executor's own guardrails (e.g. a forbidden path).
+    "blocked": RunStatus.FAILED,
+    "cancelled": RunStatus.FAILED,
+    "canceled": RunStatus.FAILED,
     "approved": RunStatus.APPROVED,
     "rejected": RunStatus.REJECTED,
     "merged": RunStatus.MERGED,
@@ -70,10 +82,14 @@ def normalize_tests(data: dict) -> TestResults:
                 passed, total = int(p), int(t)
             except ValueError:
                 pass
+    # Executors that report a verdict instead of counts (GitPilot's
+    # `test_status`) keep it categorical — never invented as a pass total.
+    status = str(tests_raw.get("status") or data.get("test_status") or "")
     return TestResults(
         passed=passed,
         total=total,
         failed_names=[str(f) for f in failed] if isinstance(failed, list) else [],
+        status=status,
     )
 
 

@@ -61,18 +61,39 @@ class GitPilotAdapter:
     # --- CodingWorkflowAdapter surface -------------------------------------
 
     def create_run(self, spec: CodingRunSpec) -> NormalizedRun:
-        payload = {
+        payload: dict = {
             "task": spec.task,
             "repo": spec.repo,
             "mode": spec.mode.value,
             "branch": spec.branch,
             "baseBranch": spec.base_branch,
         }
+        # Only sent when the run asks for a specific coder, so a GitPilot that
+        # predates per-run coder selection keeps receiving the payload it knows.
+        coder = spec.coder.as_payload()
+        if coder:
+            payload["coder"] = coder
         with self._client() as client:
             response = client.post("/api/v1/gitpilot/runs", json=payload)
             response.raise_for_status()
             data = response.json()
         return self._normalize(data, spec.repo, spec.mode)
+
+    def available_coders(self) -> list[dict]:
+        """Which AI coders this GitPilot deployment can actually run.
+
+        Asked, not assumed: GitPilot probes its own host for each agent's CLI and
+        credential. A GitPilot too old to answer returns nothing, so a picker
+        shows the deployment default rather than options that would fail.
+        """
+        with self._client() as client:
+            response = client.get("/api/v1/gitpilot/coders")
+            if response.status_code == 404:
+                return []
+            response.raise_for_status()
+            data = response.json()
+        coders = data.get("coders") if isinstance(data, dict) else data
+        return list(coders or [])
 
     def get_run(self, run_id: str) -> NormalizedRun:
         with self._client() as client:

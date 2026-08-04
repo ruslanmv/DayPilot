@@ -76,10 +76,24 @@ class OllabridgeConnector:
         )
 
     def generate(self, prompt: str, task: str = "general", model: str | None = None) -> dict:
+        return self.generate_messages(
+            [{"role": "user", "content": prompt}], task=task, model=model
+        )
+
+    def generate_messages(
+        self,
+        messages: list[dict[str, str]],
+        task: str = "general",
+        model: str | None = None,
+        temperature: float = 0.2,
+    ) -> dict:
+        """Run a full chat (system + history + user) through the provider's
+        OpenAI-compatible ``/v1/chat/completions``. Raises on transport/HTTP error
+        so the caller can fall back rather than fabricate an answer."""
         payload = {
             "model": model or self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2,
+            "messages": list(messages),
+            "temperature": temperature,
         }
         with self._client() as client:
             response = client.post("/v1/chat/completions", json=payload)

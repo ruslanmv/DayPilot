@@ -89,6 +89,34 @@ def test_email_disabled_returns_onboarding_state(monkeypatch):
     assert client.get("/v1/email/messages").status_code == 404
 
 
+def test_oauth_start_rejects_unknown_provider(monkeypatch):
+    monkeypatch.setenv("DAYPILOT_EMAIL_ENABLED", "true")
+    r = client.post("/v1/email/oauth/yahoo/start", json={"workspaceId": _ws()})
+    assert r.status_code == 400  # not silently treated as Microsoft
+
+
+def test_microsoft_oauth_uses_ms_graph_env_names(monkeypatch):
+    monkeypatch.setenv("DAYPILOT_EMAIL_ENABLED", "true")
+    # The documented MS_GRAPH_* names must configure Microsoft OAuth.
+    monkeypatch.delenv("MICROSOFT_OAUTH_CLIENT_ID", raising=False)
+    monkeypatch.setenv("MS_GRAPH_CLIENT_ID", "ms-client-123")
+    monkeypatch.setenv("MS_GRAPH_REDIRECT_URI", "https://app.example.com/cb")
+    out = client.post("/v1/email/oauth/microsoft/start", json={"workspaceId": _ws()}).json()
+    assert out["available"] is True and out["provider"] == "microsoft"
+    assert "ms-client-123" in out["authorizationUrl"]
+    assert "app.example.com" in out["authorizationUrl"]
+
+
+def test_email_status_endpoint_is_workspace_scoped():
+    # Regression: the client passes workspaceId to status/folders/message.
+    from pathlib import Path
+    client_ts = (Path(__file__).resolve().parents[1] / "packages" / "ui-bridge" / "src"
+                 / "email" / "emailClient.ts").read_text(encoding="utf-8")
+    assert "'/v1/email/status?workspaceId=" in client_ts.replace('`', "'")
+    assert "/v1/email/folders?workspaceId=" in client_ts
+    assert "/v1/email/messages/${encodeURIComponent(uid)}?workspaceId=" in client_ts
+
+
 def test_status_returns_account_and_capabilities_when_connected(monkeypatch):
     monkeypatch.setenv("DAYPILOT_EMAIL_ENABLED", "true")
     monkeypatch.setenv("DAYPILOT_EMAIL_PROVIDER", "mock")

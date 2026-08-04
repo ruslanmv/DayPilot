@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from daypilot_knowledge.db import HomePilotAgentLink
 from daypilot_knowledge.db.models import utcnow
 
-from .normalizer import normalize_project, shared_model_ids
+from .normalizer import is_persona_project, normalize_project, published_model_map
 
 
 class _Discovery(Protocol):
@@ -54,6 +54,7 @@ def sync_agents(
     client: _Discovery,
     *,
     account_ref: str = "",
+    new_agents_disabled: bool = True,
 ) -> dict[str, Any]:
     """One sync pass. Returns {synced, offline, total, agents:[project_id,...]}.
 
@@ -61,9 +62,29 @@ def sync_agents(
     to. Every synced link is stamped with it, and any existing link from a
     DIFFERENT account is marked offline (never surfaced, never deleted) — so a
     key/account change on the connection can never blend two users' agents.
+
+    If discovery FAILS (transport/HTTP/parse), the pass aborts WITHOUT changing
+    any agent state — a transient error must never be read as "all personas were
+    deleted" and mark every agent offline. ``new_agents_disabled`` controls
+    whether newly discovered agents start disabled (the connection preference).
     """
-    projects = client.list_projects()
-    shared = shared_model_ids(client.list_models())
+    # One consistent discovery read; None means a call failed → abort untouched.
+    discover = getattr(client, "discover", None)
+    if callable(discover):
+        disc = discover()
+        if disc is None:
+            return {"code": "discovery_failed", "synced": 0, "offline": 0, "total": 0, "agents": []}
+        projects = disc["projects"]
+        models: list[Any] = disc["models"]
+    else:  # older client without discover(): fall back to the individual calls
+        projects = client.list_projects()
+        get_models = getattr(client, "list_persona_models", None)
+        models = get_models() if callable(get_models) else client.list_models()
+
+    persona_project_ids = [
+        str(p.get("id") or "") for p in projects if is_persona_project(p) and p.get("id")
+    ]
+    published = published_model_map(models, persona_project_ids)
 
     by_project = {
         link.homepilot_project_id: link
@@ -74,7 +95,7 @@ def sync_agents(
     synced = 0
     now = utcnow()
     for project in projects:
-        norm = normalize_project(project, shared)
+        norm = normalize_project(project, published)
         if norm is None:
             continue
         pid = norm["homepilot_project_id"]
@@ -85,7 +106,9 @@ def sync_agents(
                 workspace_id=workspace_id,
                 connection_id=connection_id,
                 homepilot_project_id=pid,
-                enabled=False,  # disabled until the user enables it in DayPilot
+                # Disabled by default (the safe choice); the connection can opt new
+                # agents in via the "New agents start disabled = off" preference.
+                enabled=not new_agents_disabled,
             )
             session.add(link)
         # Refresh safe display metadata (never the prompt/memory).

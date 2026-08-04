@@ -75,35 +75,78 @@ class HomePilotClient:
             payload = {}
         return HealthResult(reachable=r.status_code < 500, status_code=r.status_code, payload=payload)
 
-    def list_projects(self) -> list[dict[str, Any]]:
-        """Return HomePilot projects (unfiltered). Empty list on any failure."""
+    def _projects_raw(self) -> list[dict[str, Any]] | None:
+        """Projects from ``/projects``, or ``None`` on a discovery FAILURE
+        (transport/HTTP/parse) so a transient error is never read as "all
+        personas were deleted"."""
         try:
             with self._client() as c:
                 r = c.get("/projects")
                 r.raise_for_status()
                 data = r.json()
         except (httpx.HTTPError, ValueError):
-            return []
-        if isinstance(data, dict):
-            projects = data.get("projects") or data.get("data") or []
-        else:
-            projects = data
+            return None
+        projects = (data.get("projects") or data.get("data") or []) if isinstance(data, dict) else data
         return [p for p in projects if isinstance(p, dict)]
 
-    def list_models(self) -> list[str]:
-        """Return model ids from HomePilot's OpenAI-compatible ``/v1/models``.
+    def list_projects(self) -> list[dict[str, Any]]:
+        """Return HomePilot projects (unfiltered). Empty list on any failure."""
+        return self._projects_raw() or []
 
-        Persona projects with the shared API enabled appear as
-        ``persona:<project_id>``. Empty list on any failure.
-        """
+    def discover(self) -> dict[str, Any] | None:
+        """One consistent discovery read for a sync pass: projects + persona
+        models. Returns ``None`` if EITHER call failed, so sync can abort without
+        touching agent state instead of marking everything offline."""
+        projects = self._projects_raw()
+        models = self._models_raw()
+        if projects is None or models is None:
+            return None
+        return {"projects": projects, "models": self.list_persona_models()}
+
+    def _models_raw(self) -> list[dict[str, Any]] | None:
+        """Raw model objects from ``/v1/models``. ``None`` signals a discovery
+        FAILURE (transport/HTTP/parse) so callers can distinguish "no models" from
+        "couldn't ask" and never mass-offline agents on a transient error."""
         try:
             with self._client() as c:
                 r = c.get("/v1/models")
                 r.raise_for_status()
                 data = r.json()
         except (httpx.HTTPError, ValueError):
+            return None
+        return [m for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+
+    def list_models(self) -> list[str]:
+        """Return model ids from HomePilot's OpenAI-compatible ``/v1/models``.
+
+        Persona projects with the shared API enabled appear as
+        ``persona:<alias>--<short>`` (or, on older builds, ``persona:<project_id>``).
+        Empty list on any failure.
+        """
+        raw = self._models_raw()
+        return [m["id"] for m in raw] if raw else []
+
+    def list_persona_models(self) -> list[dict[str, Any]]:
+        """Persona model objects, each ``{id, homepilot_project_id, name}``.
+
+        ``homepilot_project_id`` (published by current HomePilot) lets DayPilot map
+        the aliased model id back to the project without re-deriving HomePilot's
+        id rules; it is ``None`` on older builds and the caller falls back to the
+        ``--<short>`` suffix. Empty list on any failure."""
+        raw = self._models_raw()
+        if not raw:
             return []
-        return [m.get("id") for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+        out: list[dict[str, Any]] = []
+        for m in raw:
+            mid = str(m.get("id") or "")
+            if not mid.startswith("persona:"):
+                continue
+            out.append({
+                "id": mid,
+                "homepilot_project_id": m.get("homepilot_project_id") or None,
+                "name": m.get("name") or None,
+            })
+        return out
 
     def capabilities(self) -> dict[str, Any] | None:
         """Optional bridge-capability advertisement (Phase 12). None if absent →

@@ -28,21 +28,34 @@ def intake_bundle(
     workspace_id: str,
     bundle: DesignBundle,
     project_id: str | None = None,
+    repository: str = "",
 ) -> dict[str, Any]:
-    """Create a project (if needed) and one scheduled task per batch, in order."""
+    """Create a project (if needed) and one scheduled task per batch, in order.
+
+    ``repository`` is where the batches will be built. Recorded on the project so
+    every coding run inherits it; an existing project keeps the repo it has
+    unless one is supplied.
+    """
     project = session.get(Project, project_id) if project_id else None
     if project is None:
         project = Project(
             workspace_id=workspace_id,
             name=bundle.title,
+            repository=repository.strip(),
             status="Active",
             risk="low",
             ai_activity="Design bundle intake",
-            next_human_action="Review the batch roadmap and approve the first batch.",
+            next_human_action=(
+                "Review the batch roadmap and approve the first batch."
+                if repository.strip()
+                else "Add the repository to build in, then approve the first batch."
+            ),
             recent_signals=[f"Matrix Designer bundle: {len(bundle.batches)} batches"],
         )
         session.add(project)
         session.flush()
+    elif repository.strip():
+        project.repository = repository.strip()
 
     created_tasks: list[str] = []
     for order, batch in enumerate(bundle.batches):
@@ -72,6 +85,7 @@ def intake_bundle(
     return {
         "projectId": project.id,
         "projectName": project.name,
+        "repository": project.repository or "",
         "taskIds": created_tasks,
         "batches": len(bundle.batches),
     }

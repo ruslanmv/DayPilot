@@ -116,6 +116,7 @@ export const initialProjects: DayPilotProject[] = [
   {
     id: 'daypilot-portal',
     name: 'DayPilot Portal',
+    repository: '',
     progress: 72,
     status: 'On Track',
     aiActivity: '3 AI tasks',
@@ -133,6 +134,7 @@ export const initialProjects: DayPilotProject[] = [
   {
     id: 'gitpilot-connector',
     name: 'GitPilot Connector',
+    repository: '',
     progress: 48,
     status: 'At Risk',
     aiActivity: '2 blockers',
@@ -150,6 +152,7 @@ export const initialProjects: DayPilotProject[] = [
   {
     id: 'matrix-designer',
     name: 'Matrix Designer',
+    repository: '',
     progress: 64,
     status: 'Review',
     aiActivity: '5 suggestions',
@@ -167,6 +170,7 @@ export const initialProjects: DayPilotProject[] = [
   {
     id: 'homepilot-bridge',
     name: 'HomePilot Bridge',
+    repository: '',
     progress: 86,
     status: 'Stable',
     aiActivity: '1 pending',
@@ -184,6 +188,7 @@ export const initialProjects: DayPilotProject[] = [
   {
     id: 'client-alpha',
     name: 'Client Alpha',
+    repository: '',
     progress: 68,
     status: 'On Track',
     aiActivity: '2 AI tasks',
@@ -201,6 +206,7 @@ export const initialProjects: DayPilotProject[] = [
   {
     id: 'internal-automation',
     name: 'Internal Automation',
+    repository: '',
     progress: 36,
     status: 'At Risk',
     aiActivity: 'Needs plan',

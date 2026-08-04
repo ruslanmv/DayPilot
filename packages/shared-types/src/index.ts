@@ -59,6 +59,8 @@ export type DayPilotProjectStatus = 'On Track' | 'Active' | 'At Risk' | 'Review'
 export type DayPilotProject = {
   id: string
   name: string
+  /** The repository this project's work lands in; coding runs inherit it. */
+  repository: string
   progress: number
   status: DayPilotProjectStatus
   aiActivity: string
@@ -370,6 +372,23 @@ export type DayPilotCodingRun = {
 
 export type DayPilotCodingReviewDecision = 'approve' | 'request_changes' | 'reject'
 
+/** Which AI writes the patch, inside the chosen executor. Empty = the deployment default. */
+export type DayPilotCoderSpec = {
+  provider: string
+  model: string
+}
+
+/** A coder the executor reports it can (or cannot) actually run. */
+export type DayPilotCoderOption = {
+  id: string
+  label: string
+  kind: 'model' | 'agent'
+  available: boolean
+  /** Why it is unavailable — a missing CLI or credential on the executor's host. */
+  reason: string
+  default: boolean
+}
+
 /** One ordered batch in a Matrix Designer Design Bundle. */
 export type DayPilotDesignBatch = {
   id: string
@@ -378,6 +397,33 @@ export type DayPilotDesignBatch = {
   dependsOn: string[]
   acceptance: string[]
   estimateHours: number | null
+  /** The batch's own guardrails, so a build can be scoped to exactly these. */
+  allowedFiles: string[]
+  mustNotChange: string[]
+}
+
+/** One of the plans offered for an idea, before any of it is designed in full. */
+export type DayPilotDesignCandidate = {
+  id: string
+  tier: string
+  title: string
+  summary: string
+  difficulty: string
+  estimate: string
+  fileCount: number
+  stack: string[]
+  recommended: boolean
+  /** A preview of the roadmap, so the choice is informed. */
+  batches: DayPilotDesignBatch[]
+}
+
+/** The candidate plans for an idea (POST /v1/design/blueprints, /refine). */
+export type DayPilotDesignProposal = {
+  candidates: DayPilotDesignCandidate[]
+  recommendedId: string
+  matrixRules: string[]
+  violations: Array<{ ruleId?: string; severity?: string; message?: string }>
+  reply: string
 }
 
 /** A Matrix Designer Design Bundle: the plan before the build. */
@@ -388,6 +434,8 @@ export type DayPilotDesignBundle = {
   visualTarget: string
   architecture: string
   acceptanceCriteria: string[]
+  /** The designer's own verdict: approved | needs-repair | rejected. */
+  validationStatus: string
   batches: DayPilotDesignBatch[]
 }
 
