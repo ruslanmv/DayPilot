@@ -939,3 +939,195 @@ class UserProfileObservation(TimestampMixin, Base):
     __table_args__ = (
         Index("ix_user_profile_obs_owner", "user_id", "workspace_id", "state"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Daily Standup Copilot
+#
+# DayPilot watches the workday, drafts the standup update before the user
+# leaves, takes one review, and replies inside the right Slack thread the next
+# morning. Three tables carry that: the recurring configuration, the raw
+# evidence the draft is built from, and the draft itself with its immutable
+# approved snapshot.
+#
+# Evidence is stored separately from prose on purpose. A bullet the user cannot
+# trace back to a commit, a task or a plan block is a bullet DayPilot invented,
+# and the review surface has to be able to say which is which.
+# ---------------------------------------------------------------------------
+
+
+class StandupWorkflow(TimestampMixin, Base):
+    """One user's recurring standup, and how it finds its Slack thread.
+
+    ``delivery_mode`` decides what "Yesterday" means:
+
+    * ``next_workday`` (default) — tonight's work is reported into tomorrow's
+      thread, matching the Slack template's wording literally.
+    * ``same_day`` — posted at review time into the thread opened this morning;
+      the first section then means "completed since the last standup".
+
+    ``reminder_signature`` + ``reminder_bot_id`` + ``reminder_time`` are matched
+    together when adopting a reminder posted by somebody else's Slack workflow.
+    Text alone is too weak to bet a daily post on.
+    """
+
+    __tablename__ = "standup_workflows"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    user_id: Mapped[str] = mapped_column(String(36), default="", index=True)
+    name: Mapped[str] = mapped_column(String(200), default="Daily Standup")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC")
+    working_days: Mapped[list[Any]] = mapped_column(JSON, default=list)  # ISO weekdays, 1=Mon
+    review_time: Mapped[str] = mapped_column(String(5), default="18:00")     # local HH:MM
+    reminder_time: Mapped[str] = mapped_column(String(5), default="09:00")   # local HH:MM
+    delivery_mode: Mapped[str] = mapped_column(String(20), default="next_workday")
+
+    slack_connection_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    slack_channel_id: Mapped[str] = mapped_column(String(64), default="")
+    slack_channel_name: Mapped[str] = mapped_column(String(200), default="")
+    reminder_signature: Mapped[str] = mapped_column(String(300), default="Daily Standup Reminder")
+    reminder_bot_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    thread_resolution_mode: Mapped[str] = mapped_column(String(20), default="adopt")  # adopt|own
+
+    evidence_source_config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    approval_policy: Mapped[str] = mapped_column(String(20), default="always")
+    empty_day_policy: Mapped[str] = mapped_column(String(20), default="honest")  # honest|skip
+
+    next_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+    __table_args__ = (
+        Index("ix_standup_workflows_ws_enabled", "workspace_id", "enabled"),
+    )
+
+
+class StandupEvidence(Base):
+    """One observed signal of work. Never prose — always something traceable.
+
+    ``included`` is the user's call, kept per item so excluding a personal
+    commit at 17:50 survives a regenerate. ``dedupe_key`` makes collection
+    idempotent: re-running the collector must not double-count a commit.
+    """
+
+    __tablename__ = "standup_evidence"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    workflow_id: Mapped[str] = mapped_column(String(36), index=True)
+    reporting_date: Mapped[str] = mapped_column(String(10), index=True)  # local YYYY-MM-DD
+
+    source: Mapped[str] = mapped_column(String(40))        # daypilot|github|calendar|agents|manual
+    source_ref: Mapped[str] = mapped_column(String(300), default="")
+    activity_type: Mapped[str] = mapped_column(String(40))  # completed|progress|blocked|planned|meeting
+    summary: Mapped[str] = mapped_column(Text, default="")
+    project_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    project_name: Mapped[str] = mapped_column(String(200), default="")
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    confidence: Mapped[float] = mapped_column(default=1.0, server_default="1.0")
+    included: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    dedupe_key: Mapped[str] = mapped_column(String(300), default="", index=True)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_standup_evidence_day", "workflow_id", "reporting_date", "included"),
+    )
+
+
+class StandupDraft(TimestampMixin, Base):
+    """The update for one reporting day, and the audit trail of its delivery.
+
+    Approval freezes ``approved_yesterday/today/blockers`` and ``content_hash``.
+    Delivery may only send the frozen copy — the editable fields can keep
+    changing without ever changing what was consented to. Any edit after
+    approval clears the snapshot and returns the draft to NEEDS_REVIEW.
+
+    ``delivery_key`` is the idempotency token sent to Slack, so a retry after a
+    timeout cannot produce a second reply in the thread.
+    """
+
+    __tablename__ = "standup_drafts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), default=DEFAULT_WORKSPACE, index=True)
+    workflow_id: Mapped[str] = mapped_column(String(36), index=True)
+    reporting_date: Mapped[str] = mapped_column(String(10), index=True)   # the day worked
+    target_standup_date: Mapped[str] = mapped_column(String(10))          # the day posted
+
+    yesterday_text: Mapped[str] = mapped_column(Text, default="")
+    today_text: Mapped[str] = mapped_column(Text, default="")
+    blockers_text: Mapped[str] = mapped_column(Text, default="")
+    # Per-bullet provenance so the review surface can mark an unsupported line
+    # "Manual statement" instead of implying DayPilot observed it.
+    provenance_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+
+    status: Mapped[str] = mapped_column(String(30), default="COLLECTING", index=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+
+    approved_yesterday: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_today: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_blockers: Mapped[str | None] = mapped_column(Text, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+    delivery_job_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    delivery_key: Mapped[str] = mapped_column(String(200), default="", index=True)
+    slack_thread_ts: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    slack_message_ts: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    __table_args__ = (
+        Index("ix_standup_drafts_workflow_day", "workflow_id", "reporting_date"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Meeting Intelligence — calendar behaviour and context policy
+# ---------------------------------------------------------------------------
+
+
+class CalendarSettings(TimestampMixin, Base):
+    """How DayPilot behaves with a workspace's connected calendars.
+
+    Two of these columns are policy, not preference, and are enforced server
+    side rather than trusted from the browser: ``context_sources`` is the *only*
+    set of places a meeting brief may draw from, and ``private_events`` decides
+    whether a calendar entry marked private contributes anything beyond its
+    metadata. A brief is assembled from this row before a model sees anything.
+
+    ``ai_may_change_calendar`` is deliberately absent: an external calendar
+    write always goes through the Approval Center, so there is no setting that
+    could turn that off.
+    """
+
+    __tablename__ = "calendar_settings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(
+        String(36), default=DEFAULT_WORKSPACE, unique=True, index=True
+    )
+
+    # --- meeting preparation -------------------------------------------------
+    prepare_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: external | important | every
+    prepare_scope: Mapped[str] = mapped_column(String(20), default="important")
+    prep_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    auto_prep_blocks: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # --- meeting context (the allow-list a brief may read) --------------------
+    context_sources: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    #: metadata_only | full | skip
+    private_events: Mapped[str] = mapped_column(String(20), default="metadata_only")
+
+    # --- planning ------------------------------------------------------------
+    accepted_are_fixed: Mapped[bool] = mapped_column(Boolean, default=True)
+    ignore_declined: Mapped[bool] = mapped_column(Boolean, default=True)
+    tentative_blocks: Mapped[bool] = mapped_column(Boolean, default=True)
+    buffer_before_minutes: Mapped[int] = mapped_column(Integer, default=5)
+    buffer_after_minutes: Mapped[int] = mapped_column(Integer, default=10)

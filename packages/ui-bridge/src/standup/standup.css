@@ -1,0 +1,336 @@
+/*
+ * Daily Standup Copilot.
+ *
+ * Two surfaces: a compact Home card, and the full-height 18:00 review. Both
+ * compose HomePilot Family tokens — no palette values are hard-coded here.
+ *
+ * The review is a two-column reading task (claims on the left, the evidence
+ * behind them on the right) that collapses to one column on a phone, because
+ * approving a standup from a phone at 18:05 is the common case, not the edge.
+ */
+
+/* ── Home card ─────────────────────────────────────────────────────────── */
+
+.dp-standupcard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--dp-border);
+  border-radius: 16px;
+  background: var(--dp-surface, rgba(255, 255, 255, 0.03));
+}
+.dp-standupcard--loading { min-height: 168px; opacity: 0.5; }
+.dp-standupcard__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dp-standupcard__title { margin: 0; font-size: 0.98rem; font-weight: 650; color: var(--dp-text); }
+.dp-standupcard__badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(139, 151, 167, 0.14);
+  color: var(--dp-text-dim);
+  white-space: nowrap;
+}
+.dp-standupcard__badge--needs_review,
+.dp-standupcard__badge--draft { background: rgba(53, 198, 122, 0.14); color: #35c67a; }
+.dp-standupcard__badge--waiting_for_thread,
+.dp-standupcard__badge--approved { background: rgba(47, 128, 237, 0.16); color: #2f80ed; }
+.dp-standupcard__badge--sent { background: rgba(53, 198, 122, 0.14); color: #35c67a; }
+.dp-standupcard__badge--thread_not_found,
+.dp-standupcard__badge--send_failed { background: rgba(242, 96, 122, 0.16); color: #f2607a; }
+
+.dp-standupcard__body { margin: 0; font-size: 0.86rem; color: var(--dp-text-dim); line-height: 1.5; }
+.dp-standupcard__facts { margin: 2px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.dp-standupcard__facts li {
+  font-size: 0.82rem;
+  color: var(--dp-text-dim);
+  padding-left: 18px;
+  position: relative;
+}
+.dp-standupcard__facts li::before {
+  content: "";
+  position: absolute; left: 4px; top: 0.52em;
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--dp-text-muted);
+}
+.dp-standupcard__fact--warn { color: #e6a23c; }
+.dp-standupcard__fact--warn::before { background: #e6a23c; }
+.dp-standupcard__meta { margin: 4px 0 0; font-size: 0.76rem; color: var(--dp-text-muted); }
+.dp-standupcard__error { margin: 0; font-size: 0.84rem; color: #f2607a; }
+.dp-standupcard__actions { display: flex; gap: 8px; margin-top: 4px; }
+.dp-standupcard__primary {
+  flex: 1 1 auto;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--dp-accent, #2f80ed);
+  color: #fff;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dp-standupcard__primary:hover { filter: brightness(1.08); }
+.dp-standupcard__primary:disabled { opacity: 0.6; cursor: default; }
+.dp-standupcard__primary:focus-visible { outline: 2px solid var(--dp-accent, #2f80ed); outline-offset: 2px; }
+
+/* ── The 18:00 review ──────────────────────────────────────────────────── */
+
+.dp-standup {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 14px;
+  color: var(--dp-text);
+}
+.dp-standup__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.dp-standup__title { margin: 0; font-size: 1.24rem; font-weight: 650; }
+.dp-standup__subtitle { margin: 4px 0 0; font-size: 0.84rem; color: var(--dp-text-dim); }
+.dp-standup__head-right { display: flex; align-items: center; gap: 10px; }
+.dp-standup__status {
+  padding: 4px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+  background: rgba(139, 151, 167, 0.14); color: var(--dp-text-dim); white-space: nowrap;
+}
+.dp-standup__status--needs_review, .dp-standup__status--draft { background: rgba(53, 198, 122, 0.14); color: #35c67a; }
+.dp-standup__status--waiting_for_thread { background: rgba(47, 128, 237, 0.16); color: #2f80ed; }
+.dp-standup__status--sent { background: rgba(53, 198, 122, 0.14); color: #35c67a; }
+.dp-standup__status--thread_not_found, .dp-standup__status--send_failed { background: rgba(242, 96, 122, 0.16); color: #f2607a; }
+.dp-standup__close {
+  width: 32px; height: 32px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--dp-text-muted); font-size: 1rem; cursor: pointer;
+}
+.dp-standup__close:hover { background: var(--dp-surface-elevated, rgba(255, 255, 255, 0.05)); }
+
+.dp-standup__alert,
+.dp-standup__notice {
+  margin: 0; padding: 10px 14px; border-radius: 10px; font-size: 0.84rem; line-height: 1.5;
+}
+.dp-standup__alert { background: rgba(242, 96, 122, 0.12); color: #f2607a; }
+.dp-standup__notice { background: rgba(47, 128, 237, 0.12); color: #2f80ed; }
+
+.dp-standup__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+  min-height: 0;
+}
+.dp-standup__main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dp-standup__preview-label {
+  margin: 0; font-size: 0.76rem; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--dp-text-muted);
+}
+
+.dp-standup__section {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 14px; border: 1px solid var(--dp-border); border-radius: 14px;
+  background: var(--dp-surface, rgba(255, 255, 255, 0.02));
+}
+.dp-standup__section-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dp-standup__section-num {
+  width: 22px; height: 22px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(47, 128, 237, 0.16); color: #2f80ed;
+  font-size: 0.76rem; font-weight: 700;
+}
+.dp-standup__section-label { font-size: 0.92rem; font-weight: 650; }
+.dp-standup__section-q { font-size: 0.78rem; color: var(--dp-text-muted); }
+/* Reading and editing are exclusive, so the toggle sits with the heading
+   rather than competing with the approve action at the bottom. */
+.dp-standup__section-edit {
+  margin-left: auto; min-height: 28px; padding: 3px 12px;
+  border: 1px solid var(--dp-border); border-radius: 999px;
+  background: transparent; color: var(--dp-text-dim);
+  font: inherit; font-size: 0.75rem; cursor: pointer;
+}
+.dp-standup__section-edit:hover { background: var(--dp-surface-elevated, rgba(255,255,255,0.05)); color: var(--dp-text); }
+.dp-standup__section-edit[aria-pressed="true"] { border-color: var(--dp-accent, #2f80ed); color: var(--dp-accent, #2f80ed); }
+.dp-standup__section-edit:focus-visible { outline: 2px solid var(--dp-accent, #2f80ed); outline-offset: 2px; }
+/* Hand-typed text has no bullet provenance to render, so it shows as-is. */
+.dp-standup__plain {
+  margin: 0; padding: 6px 10px;
+  font: inherit; font-size: 0.84rem; line-height: 1.55;
+  color: var(--dp-text-dim); white-space: pre-wrap;
+}
+
+.dp-standup__bullets { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.dp-standup__bullet {
+  width: 100%; text-align: left; display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 10px; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--dp-text-dim);
+  font: inherit; font-size: 0.84rem; line-height: 1.5; cursor: pointer;
+}
+.dp-standup__bullet:hover:not(:disabled) { background: var(--dp-surface-elevated, rgba(255, 255, 255, 0.04)); }
+.dp-standup__bullet:disabled { cursor: default; }
+.dp-standup__bullet.is-selected { border-color: rgba(47, 128, 237, 0.5); background: rgba(47, 128, 237, 0.10); color: var(--dp-text); }
+.dp-standup__bullet:focus-visible { outline: 2px solid var(--dp-accent, #2f80ed); outline-offset: 1px; }
+.dp-standup__bullet-text { flex: 1 1 auto; min-width: 0; }
+/* A line without evidence is flagged, never blended in with observed work. */
+.dp-standup__bullet-flag {
+  flex: 0 0 auto; padding: 2px 8px; border-radius: 999px;
+  background: rgba(230, 162, 60, 0.16); color: #e6a23c;
+  font-size: 0.68rem; font-weight: 600; white-space: nowrap;
+}
+
+.dp-standup__textarea {
+  width: 100%; min-height: 82px; padding: 10px 12px;
+  border: 1px solid var(--dp-border); border-radius: 10px;
+  background: var(--dp-bg, #0b111b); color: var(--dp-text);
+  font: inherit; font-size: 0.86rem; line-height: 1.6; resize: vertical;
+}
+.dp-standup__textarea:focus-visible { outline: 2px solid var(--dp-accent, #2f80ed); outline-offset: 1px; }
+.dp-standup__textarea[readonly] { opacity: 0.75; }
+.dp-standup__warn { margin: 0; font-size: 0.78rem; color: #e6a23c; }
+.dp-standup__locked { margin: 0; font-size: 0.8rem; color: var(--dp-text-muted); }
+
+/* ── Evidence drawer ───────────────────────────────────────────────────── */
+
+.dp-standup__evidence {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px; border: 1px solid var(--dp-border); border-radius: 14px;
+  background: var(--dp-surface, rgba(255, 255, 255, 0.02));
+  position: sticky; top: 0;
+}
+.dp-standup__evidence-title { margin: 0; font-size: 0.92rem; font-weight: 650; }
+.dp-standup__evidence-hint,
+.dp-standup__evidence-empty { margin: 0; font-size: 0.78rem; color: var(--dp-text-muted); line-height: 1.5; }
+.dp-standup__evidence-list {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 420px; overflow-y: auto;
+}
+.dp-standup__evidence-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 10px; border: 1px solid var(--dp-border); border-radius: 10px;
+  background: var(--dp-surface-elevated, rgba(255, 255, 255, 0.03));
+}
+.dp-standup__evidence-item.is-highlighted { border-color: rgba(47, 128, 237, 0.5); }
+.dp-standup__evidence-item.is-excluded { opacity: 0.5; }
+.dp-standup__evidence-item.is-excluded .dp-standup__evidence-summary { text-decoration: line-through; }
+.dp-standup__evidence-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.dp-standup__evidence-summary { font-size: 0.82rem; color: var(--dp-text); line-height: 1.4; }
+.dp-standup__evidence-meta { font-size: 0.72rem; color: var(--dp-text-muted); }
+.dp-standup__evidence-toggle {
+  flex: 0 0 auto; min-height: 28px; padding: 3px 10px;
+  border: 1px solid var(--dp-border); border-radius: 8px;
+  background: transparent; color: var(--dp-text-dim);
+  font: inherit; font-size: 0.74rem; cursor: pointer;
+}
+.dp-standup__evidence-toggle:hover:not(:disabled) { background: var(--dp-surface-elevated, rgba(255, 255, 255, 0.06)); color: var(--dp-text); }
+
+.dp-standup__note { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px solid var(--dp-border); }
+.dp-standup__note-label { font-size: 0.78rem; font-weight: 600; color: var(--dp-text-dim); }
+.dp-standup__note-input {
+  width: 100%; padding: 8px 10px;
+  border: 1px solid var(--dp-border); border-radius: 10px;
+  background: var(--dp-bg, #0b111b); color: var(--dp-text);
+  font: inherit; font-size: 0.82rem; resize: vertical;
+}
+.dp-standup__note-add {
+  align-self: flex-start; min-height: 32px; padding: 5px 14px;
+  border: 1px solid var(--dp-border); border-radius: 999px;
+  background: transparent; color: var(--dp-text-dim); font: inherit; font-size: 0.78rem; cursor: pointer;
+}
+.dp-standup__note-add:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Actions ───────────────────────────────────────────────────────────── */
+
+.dp-standup__actions {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-top: 12px; border-top: 1px solid var(--dp-border);
+}
+.dp-standup__actions-spacer { flex: 1 1 auto; }
+.dp-standup__secondary {
+  min-height: 40px; padding: 8px 16px;
+  border: 1px solid var(--dp-border); border-radius: 10px;
+  background: transparent; color: var(--dp-text-dim);
+  font: inherit; font-size: 0.84rem; cursor: pointer;
+}
+.dp-standup__secondary:hover:not(:disabled) { background: var(--dp-surface-elevated, rgba(255, 255, 255, 0.05)); color: var(--dp-text); }
+.dp-standup__secondary:disabled { opacity: 0.5; cursor: default; }
+/* The one emphasised action on the screen — approving is the decision. */
+.dp-standup__primary {
+  min-height: 40px; padding: 8px 22px;
+  border: 0; border-radius: 10px;
+  background: var(--dp-accent, #2f80ed); color: #fff;
+  font: inherit; font-size: 0.88rem; font-weight: 650; cursor: pointer;
+}
+.dp-standup__primary:hover:not(:disabled) { filter: brightness(1.08); }
+.dp-standup__primary:disabled { opacity: 0.5; cursor: default; }
+.dp-standup__primary:focus-visible,
+.dp-standup__secondary:focus-visible { outline: 2px solid var(--dp-accent, #2f80ed); outline-offset: 2px; }
+
+/* ── Setup ─────────────────────────────────────────────────────────────── */
+
+.dp-standupsetup { display: flex; flex-direction: column; gap: 16px; color: var(--dp-text); }
+.dp-standupsetup__title { margin: 0; font-size: 1.05rem; font-weight: 650; }
+.dp-standupsetup__intro { margin: 0; font-size: 0.86rem; color: var(--dp-text-dim); line-height: 1.55; max-width: 62ch; }
+.dp-standupsetup__grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;
+}
+.dp-standupsetup__field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.dp-standupsetup__field--wide { grid-column: 1 / -1; }
+.dp-standupsetup__field label { font-size: 0.8rem; font-weight: 600; color: var(--dp-text-dim); }
+.dp-standupsetup__field input {
+  min-height: 40px; padding: 8px 12px; box-sizing: border-box;
+  border: 1px solid var(--dp-border); border-radius: 10px;
+  background: var(--dp-bg, #0b111b); color: var(--dp-text); font: inherit; font-size: 0.86rem;
+}
+.dp-standupsetup__field input:focus-visible { outline: 2px solid var(--dp-accent, #2f80ed); outline-offset: 1px; }
+.dp-standupsetup__hint { margin: 0; font-size: 0.75rem; color: var(--dp-text-muted); line-height: 1.45; }
+
+.dp-standupsetup__fieldset {
+  margin: 0; padding: 12px 14px;
+  border: 1px solid var(--dp-border); border-radius: 12px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+.dp-standupsetup__fieldset legend { padding: 0 6px; font-size: 0.8rem; font-weight: 650; color: var(--dp-text-dim); }
+.dp-standupsetup__days { display: flex; flex-wrap: wrap; gap: 10px; }
+.dp-standupsetup__day { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--dp-text-dim); }
+.dp-standupsetup__radio {
+  display: flex; align-items: flex-start; gap: 9px;
+  font-size: 0.84rem; color: var(--dp-text-dim); line-height: 1.5;
+}
+.dp-standupsetup__radio strong { color: var(--dp-text); }
+.dp-standupsetup__radio input { margin-top: 3px; flex: 0 0 auto; }
+
+.dp-standupsetup__alert { margin: 0; font-size: 0.84rem; color: #f2607a; }
+.dp-standupsetup__probe {
+  padding: 12px 14px; border-radius: 12px; font-size: 0.84rem; line-height: 1.55;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.dp-standupsetup__probe p { margin: 0; }
+.dp-standupsetup__probe.is-found { background: rgba(53, 198, 122, 0.12); color: #35c67a; }
+.dp-standupsetup__probe.is-missing { background: rgba(230, 162, 60, 0.12); color: #e6a23c; }
+.dp-standupsetup__probe-preview { font-style: italic; opacity: 0.9; }
+
+.dp-standupsetup__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.dp-standupsetup__primary {
+  min-height: 40px; padding: 8px 20px; border: 0; border-radius: 10px;
+  background: var(--dp-accent, #2f80ed); color: #fff;
+  font: inherit; font-size: 0.86rem; font-weight: 650; cursor: pointer;
+}
+.dp-standupsetup__secondary {
+  min-height: 40px; padding: 8px 20px;
+  border: 1px solid var(--dp-border); border-radius: 10px;
+  background: transparent; color: var(--dp-text-dim); font: inherit; font-size: 0.86rem; cursor: pointer;
+}
+.dp-standupsetup__primary:disabled,
+.dp-standupsetup__secondary:disabled { opacity: 0.5; cursor: default; }
+.dp-standupsetup__primary:focus-visible,
+.dp-standupsetup__secondary:focus-visible { outline: 2px solid var(--dp-accent, #2f80ed); outline-offset: 2px; }
+
+/* ── Phone ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  /* Evidence moves under the claims rather than squeezing beside them —
+     approving from a phone at 18:05 is the common case, not the edge. */
+  .dp-standup__body { grid-template-columns: minmax(0, 1fr); }
+  .dp-standup__evidence { position: static; }
+  .dp-standup__evidence-list { max-height: 300px; }
+  .dp-standup__actions > .dp-standup__primary { flex: 1 1 100%; order: -1; }
+  .dp-standup__actions-spacer { display: none; }
+  .dp-standup__secondary { flex: 1 1 auto; }
+}

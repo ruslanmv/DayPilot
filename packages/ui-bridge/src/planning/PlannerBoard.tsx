@@ -21,23 +21,30 @@ export type PlannerNav = 'email' | 'tasks' | 'new-project' | 'settings-profile'
  */
 type Experience = 'loading' | 'initial_setup_required' | 'ready_to_create' | 'creating' | 'plan_ready' | 'failed'
 
+// The colour buckets are semantic (see space-bridge.css), so a type must map to
+// the bucket that means the same thing. This used to shift by one — meetings
+// were drawn in the review colour and admin in the meeting colour — which made
+// the day's shape unreadable at a glance, the one thing the timeline is for.
 const TYPE_CAT: Record<string, string> = {
-  focus: 'deep', calendar_event: 'calendar', task: 'calendar', meeting: 'review',
-  admin: 'meeting', break: 'personal', buffer: 'personal',
+  focus: 'deep', review: 'review', meeting: 'meeting',
+  calendar_event: 'calendar', task: 'calendar', admin: 'calendar',
+  break: 'personal', buffer: 'personal',
 }
 const TYPE_ICON: Record<string, string> = {
-  focus: '🧠', calendar_event: '🗓', task: '✅', meeting: '👥', admin: '🗂', break: '☕', buffer: '⏳',
+  focus: '🧠', calendar_event: '🗓', task: '✅', meeting: '👥', review: '👁', admin: '🗂', break: '☕', buffer: '⏳',
 }
 const TYPE_LABEL: Record<string, string> = {
   focus: 'Focus', calendar_event: 'Fixed event', task: 'Task', meeting: 'Meeting',
-  admin: 'Admin', break: 'Break', buffer: 'Buffer',
+  review: 'Review', admin: 'Admin', break: 'Break', buffer: 'Buffer',
 }
 
 function typeOf(b: PlannerBlock): string {
   if (b.type) return b.type
   if (b.kind === 'deep') return 'focus'
   if (b.kind === 'meeting') return 'meeting'
-  if (b.kind === 'review') return 'meeting'
+  // A patch review is not a meeting. Collapsing the two labelled focused
+  // review work as time spent with other people.
+  if (b.kind === 'review') return 'review'
   if (b.kind === 'admin') return 'admin'
   if (b.kind === 'break') return 'break'
   return 'task'

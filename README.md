@@ -9,14 +9,14 @@ Governed multi-agent orchestration · HomePilot persona portability · MCP tool 
 
 <p>
   <img src="https://img.shields.io/badge/status-production--ready-2f80ff?style=for-the-badge" alt="Status" />
-  <img src="https://img.shields.io/badge/tests-163%20passing-2e9e57?style=for-the-badge" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-564%20passing-2e9e57?style=for-the-badge" alt="Tests" />
   <img src="https://img.shields.io/badge/e2e-week%20simulation-2e9e57?style=for-the-badge" alt="End-to-end simulation" />
   <img src="https://img.shields.io/badge/stack-Tauri%20·%20React%20·%20FastAPI-8A63D2?style=for-the-badge" alt="Stack" />
   <img src="https://img.shields.io/badge/license-Apache%202.0-3ddc97?style=for-the-badge" alt="License" />
   <img src="https://img.shields.io/badge/domain-daypilot.ruslanmv.com-00bcd4?style=for-the-badge" alt="Domain" />
 </p>
 
-<img src="docs/screenshots/command-center.png" alt="DayPilot Home — your day at a glance" width="100%" />
+<img src="docs/assets/screenshots/tour/home.png" alt="DayPilot Home — your day at a glance" width="100%" />
 
 </div>
 
@@ -54,7 +54,7 @@ On first launch a **three-step onboarding** (identity → mailbox → one knowle
 gets you productive in under a minute. It stays deliberately minimal — **Skip for now** is always
 there, and everything advanced lives in Settings.
 
-<img src="docs/screenshots/onboarding.png" alt="First-run onboarding wizard" width="60%" />
+<img src="docs/assets/screenshots/tour/onboarding.png" alt="First-run onboarding wizard" width="60%" />
 
 ### Home — your day at a glance
 
@@ -64,8 +64,8 @@ AI Assistant** on the right. There is one place to talk to AI (the assistant pan
 navigate (the **⌘K** command palette). Clean **DayPilot** branding, and a **ChatGPT-style settings
 drop-up** pinned bottom-left. (See the hero image above.)
 
-<img src="docs/screenshots/command-palette.png" alt="Command palette (⌘K)" width="49%" />
-<img src="docs/screenshots/focus-mode.png" alt="Focus Mode" width="49%" />
+<img src="docs/assets/screenshots/tour/command-palette.png" alt="Command palette (⌘K)" width="49%" />
+<img src="docs/assets/screenshots/tour/focus-mode.png" alt="Focus Mode" width="49%" />
 
 **Focus Mode** hides everything except the current block, its context, and the allowed
 actions (done / blocked / hand to AI) — the "what do I do now?" mental mode made real.
@@ -83,7 +83,7 @@ planner itself improves through time via a governed loop: plan metrics → perio
 config proposal → **Approval Center** → new config version. See
 [`docs/planner-multi-agent.md`](docs/planner-multi-agent.md).
 
-<img src="docs/screenshots/planning.png" alt="Planning — multi-agent optimized day with clickable blocks, replan, and chat" width="100%" />
+<img src="docs/assets/screenshots/tour/planning.png" alt="Planning — multi-agent optimized day with clickable blocks, replan, and chat" width="100%" />
 
 ### Create a project in seconds
 
@@ -91,7 +91,17 @@ A small, essentials-only **project wizard** (name, goal, stack, repository, firs
 opens from the command palette, the Projects view, or the mobile drawer — so a senior technical leader
 can spin up a project without a form marathon.
 
-<img src="docs/screenshots/project-wizard.png" alt="Project creation wizard" width="60%" />
+<img src="docs/assets/screenshots/tour/project-wizard.png" alt="Project creation wizard" width="60%" />
+
+### Projects & documents — continuity, and the memory behind it
+
+**Projects** is where a day that ended mid-thought resumes: progress, what AI is
+doing, what is blocking, and the one action that is yours. **Documents** is the RAG
+surface — granted sources, indexing state, and the assistant that answers over them
+with citations.
+
+<img src="docs/assets/screenshots/tour/projects.png" alt="Projects — continuity across four live projects" width="49%" />
+<img src="docs/assets/screenshots/tour/documents.png" alt="Documents — granted sources and indexing state" width="49%" />
 
 ### Pair with Ollabridge — local or cloud
 
@@ -100,7 +110,7 @@ OpenAI-compatible endpoint, so pairing works the same way (one base URL + a Bear
 private-by-default; Cloud adds relay, premium routing, and TV-style device pairing. Per-agent
 routing, health, latency, and fallback are shown alongside.
 
-<img src="docs/screenshots/ai-providers.png" alt="Ollabridge local + cloud pairing and routing" width="100%" />
+<img src="docs/assets/screenshots/tour/ai-providers.png" alt="Ollabridge local + cloud pairing and routing" width="100%" />
 
 ### Knowledge sources & mail — the RAG and inbox essentials
 
@@ -108,8 +118,8 @@ Grant **local folders or Box** so the AI can answer over your projects (read + i
 and connect an **IMAP/SMTP mailbox** whose send policy stays approval-gated. Every section is
 reachable from an in-panel nav so phones get the full settings surface too.
 
-<img src="docs/screenshots/knowledge-sources.png" alt="Knowledge sources for RAG over projects" width="49%" />
-<img src="docs/screenshots/mail-settings.png" alt="Mail settings (IMAP/SMTP)" width="49%" />
+<img src="docs/assets/screenshots/tour/knowledge-sources.png" alt="Knowledge sources for RAG over projects" width="49%" />
+<img src="docs/assets/screenshots/tour/mail-settings.png" alt="Mail settings (IMAP/SMTP)" width="49%" />
 
 ### Email — an optional, non-destructive workspace
 
@@ -119,12 +129,12 @@ The AI never sends and never edits the mailbox — a Copilot-style **Add to emai
 draft into the editable composer with **Undo**, and Send stays in the composer. Works in both
 dark and light themes.
 
-<img src="docs/screenshots/email-dark.png" alt="Email workspace (dark)" width="100%" />
+<img src="docs/assets/screenshots/tour/email.png" alt="Email workspace (dark)" width="100%" />
 
 <details>
 <summary>Light theme</summary>
 
-<img src="docs/screenshots/email-light.png" alt="Email workspace (light)" width="100%" />
+<img src="docs/assets/screenshots/tour/email-light.png" alt="Email workspace (light)" width="100%" />
 
 </details>
 
@@ -132,8 +142,8 @@ dark and light themes.
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/patch-review.png" alt="GitPilot patch review" /></td>
-<td width="50%"><img src="docs/screenshots/matrix-designer.png" alt="Matrix Designer batch roadmap" /></td>
+<td width="50%"><img src="docs/assets/screenshots/tour/patch-review.png" alt="GitPilot patch review" /></td>
+<td width="50%"><img src="docs/assets/screenshots/tour/matrix-designer.png" alt="Matrix Designer batch roadmap" /></td>
 </tr>
 <tr>
 <td align="center"><b>GitPilot</b> — approval-gated patch review with risk scoring; writes never happen without sign-off.</td>
@@ -168,7 +178,7 @@ agents → Complete**. See [`docs/homepilot-onboarding.md`](docs/homepilot-onboa
 Every sensitive action — email sends, calendar writes, repo writes/PRs, file generation,
 persona enablement — flows through one governed **Approval Center**.
 
-<img src="docs/screenshots/approval-center.png" alt="Approval Center" width="80%" />
+<img src="docs/assets/screenshots/tour/approval-center.png" alt="Approval Center" width="80%" />
 
 ### Integrations — one governed gateway
 
@@ -193,6 +203,8 @@ Credentials live in the secrets backend (never the database, logs, or prompts), 
 disconnect revokes them. See [`docs/integrations.md`](docs/integrations.md) and the
 [integration platform plan](docs/integration-platform-plan.md).
 
+<img src="docs/assets/screenshots/tour/integrations.png" alt="Integrations — one governed gateway for providers and MCP servers" width="100%" />
+
 ### On the phone — a ChatGPT-style mobile shell
 
 Below 768px the full console becomes a dedicated mobile shell: a top app bar (hamburger · title ·
@@ -201,10 +213,77 @@ Home, and a **full-screen AI chat** with a fixed composer. The installable **mob
 gives a fast offline Today check-in with push-ready approvals.
 
 <p>
-<img src="docs/screenshots/mobile-home.png" alt="Mobile Home" width="30%" />
-<img src="docs/screenshots/mobile-ai.png" alt="Mobile full-screen AI chat" width="30%" />
-<img src="docs/screenshots/mobile-drawer.png" alt="Mobile navigation drawer" width="30%" />
+<img src="docs/assets/screenshots/tour/mobile-home.png" alt="Mobile Home" width="30%" />
+<img src="docs/assets/screenshots/tour/mobile-ai.png" alt="Mobile full-screen AI chat" width="30%" />
+<img src="docs/assets/screenshots/tour/mobile-drawer.png" alt="Mobile navigation drawer" width="30%" />
 </p>
+
+The 6:00 PM standup review works the same on a phone — the one place the day's outward
+commitment gets approved, wherever you are.
+
+<p>
+<img src="docs/assets/screenshots/tour/mobile-standup.png" alt="Daily standup review on a phone" width="30%" />
+<img src="docs/assets/screenshots/agents/agent-workspace-mobile.png" alt="Agent workspace on a phone" width="30%" />
+</p>
+
+### Calendar — show up prepared for every meeting
+
+Connect **Outlook** or **Google Calendar** and DayPilot plans around your real
+meetings instead of guessing at them. The header carries the connection itself —
+which account, how long ago it synced — so the plan below it can never quietly
+disagree with your calendar.
+
+<img src="docs/assets/screenshots/tour/calendar.png" alt="Calendar — meetings and AI-planned work in one place, with the Outlook connection chip" width="100%" />
+
+Connecting is one click from the Calendar page; you never have to find Settings
+first. The **first consent is read-only** (`Calendars.Read` / `calendar.readonly`) —
+enough to import meetings, plan around them and prepare briefs. Calendar *changes*
+are a separate, later consent, and every one of them is decided by you in the
+Approval Center.
+
+**Settings → Calendar** is where the behaviour lives: connections, how much
+preparation you want, and — the part that matters most — exactly what DayPilot
+may read when it prepares you.
+
+<img src="docs/assets/screenshots/tour/calendar-settings.png" alt="Settings → Calendar: connections and meeting preparation" width="100%" />
+
+Meeting context is a **permission, not a preference**. Nothing outside the list
+below reaches the model, a source whose integration is not connected is shown
+disabled rather than pretending to be available, and events marked private
+contribute metadata only until you say otherwise. Every brief names the sources
+it actually used.
+
+<img src="docs/assets/screenshots/tour/calendar-settings-context.png" alt="Meeting context allow-list and planning rules" width="100%" />
+
+The planner is honest about what it knows: **“No calendar conflicts” appears only
+when a calendar is connected, freshly synced, and genuinely had no overlaps that
+day** — otherwise it says so. See [`docs/meeting-intelligence.md`](docs/meeting-intelligence.md).
+
+### Daily Standup — answers the three questions for you
+
+Every workday at **18:00** DayPilot opens a review of what you actually did, you approve it once,
+and the next morning it replies inside the real Slack standup thread — answering *Yesterday*,
+*Today* and *Blockers* in the reminder's own format.
+
+<img src="docs/assets/screenshots/standup/standup-review.png" alt="The 6:00 PM standup review" width="100%" />
+
+The draft is compiled from **evidence, not prose**: completed tasks, plan blocks, coding and agent
+runs, pending approvals, meetings. Select any line to see exactly what it is based on. A line
+DayPilot could not trace is labelled *Manual statement*, never blended in with observed work — and
+a day with no tracked activity says so rather than inventing any.
+
+<p>
+<img src="docs/assets/screenshots/standup/standup-evidence.png" alt="Evidence behind one bullet" width="49%" />
+<img src="docs/assets/screenshots/standup/standup-setup.png" alt="Daily Standup setup" width="49%" />
+</p>
+
+Approval freezes the exact text and its hash; delivery may send nothing else, and an edit
+afterwards asks for a fresh approval. If the standup thread cannot be found, **nothing is posted
+at all** — DayPilot never falls back to the channel root.
+
+It runs unattended: `make standup-worker` drafts at 18:00 and replies the next morning, arming
+the following day before it can fail on anything else and re-arming a schedule that lapsed while
+the deployment was down. Full design: [`docs/daily-standup.md`](docs/daily-standup.md).
 
 ### Verified end to end
 
@@ -276,17 +355,19 @@ Operator UI (web · desktop · mobile PWA)
 | Desktop shell | `apps/operator-desktop` | Tauri desktop wrapper. |
 | Mobile PWA | `apps/mobile-pwa` | Installable phone companion (offline Today, push approvals). |
 | HomePilot Family theme | `packages/homepilot-theme` | Shared design tokens, state language, light/dark semantics. |
-| UI bridge | `packages/ui-bridge` | Home, mobile shell, Email workspace, Focus Mode, palette, settings, onboarding + project wizards. |
+| UI bridge | `packages/ui-bridge` | Home, mobile shell, Email workspace, agents directory, **standup review**, Focus Mode, palette, settings, onboarding + project wizards. |
 | Shared contracts | `packages/shared-types` | TypeScript domain + API contracts. |
 | MCP contracts | `packages/mcp-contracts` | Typed tool contracts incl. the coding-workflow contract. |
 | API gateway | `services/api-gateway` | Ingress: domain APIs, auth/RBAC, tracing, SSE, providers, coding, email, calendar, documents, jobs, integrations, MCP, notifications, catalog. |
-| Orchestrator | `services/orchestrator` | Plan lifecycle, coding/email/design agents, approvals, jobs, security, **integration platform** (`integrations/`: gateway, providers, MCP, notifications, workflows, manifests, SDK). |
+| Orchestrator | `services/orchestrator` | Plan lifecycle, coding/email/design agents, approvals, jobs, security, **integration platform** (`integrations/`), **daily standup** (`standup/`), **calendar** (`calendar/`: connections, behaviour + meeting-context policy, conflicts). |
 | MCP host | `services/mcp-host` | Tool registry and HomePilot `.hpersona` bridge. |
 | Knowledge service | `services/knowledge-service` | Parsers, permissions, hybrid retrieval, Document AI, RAG eval. |
 | Model serving | `services/model-serving` | Ollabridge client, per-role routing, provider health. |
 | Observability | `services/observability` | Traces, metrics, structured logging. |
 | Infrastructure | `infra` | Docker, Kubernetes, Terraform, Prometheus alerts + Grafana dashboard. |
+| Standup worker | `scripts/standup_worker.py` | Claims and runs the standup's durable jobs (`make standup-worker`). |
 | E2E simulation | `scripts/e2e_week_simulation.py` · `scripts/sim/` | Real 5-day week run: pairing + inference + governed workflow (`make sim`). |
+| Doc screenshots | `scripts/screenshots/` | Seed a realistic workspace and capture every documentation screenshot from the running app (`make shots`). |
 
 ### Integration roles
 
@@ -298,6 +379,8 @@ Operator UI (web · desktop · mobile PWA)
 | Ollabridge | AI provider layer for local/hybrid/cloud model execution |
 | Integration Gateway | One governed entry for external providers and MCP servers (permission model + approvals + audit) |
 | Slack / GitHub / Google Calendar | External providers behind the shared `IntegrationProvider` interface |
+| Daily Standup Copilot | Evidence collection → 18:00 review → approval-locked, thread-aware Slack reply |
+| Outlook / Google Calendar | Read-only meeting import behind the same gateway; calendar writes approval-gated |
 | MCP servers | Remote (Streamable HTTP) / local (STDIO) tool servers, classified and policy-governed |
 | DayPilot | Daily planning, scheduling, monitoring, approvals, continuity |
 
@@ -312,19 +395,21 @@ batch landed as a reviewed changeset with tests and browser-verified UI.
 | Area | What's implemented |
 |---|---|
 | **Foundation** | Reproducible toolchain, pinned deps, CI matrix (Python, TS build/typecheck/lint, `docker compose config`, Alembic migration validity, gitleaks secret scan). |
-| **Data & APIs** | Persistent domain model (6 migrations), **cursor pagination** that stays flat at thousands of rows, filters/sort, and an SSE **Today Context** event stream. |
+| **Data & APIs** | Persistent domain model (21 migrations), **cursor pagination** that stays flat at thousands of rows, filters/sort, and an SSE **Today Context** event stream. |
 | **Design system** | Shared HomePilot Family token package, state language, brand guide, and light/dark semantic themes. |
-| **Command experience** | Daily plan state machine (DRAFT→PROPOSED→APPROVED→ACTIVE→WRAPPED), Today engine, Focus Mode, end-of-day wrap-up, continue-from-yesterday. |
+| **Command experience** | Daily plan state machine (DRAFT→PROPOSED→APPROVED→ACTIVE→WRAPPED), Today engine, Focus Mode, end-of-day wrap-up, continue-from-yesterday — every one of them reading the workspace's real day, not sample content. |
 | **Providers** | Ollabridge as the default LLM layer — pairs with the local gateway **or** Ollabridge Cloud — with per-role routing, health/latency, device pairing, and graceful mock fallback. |
 | **Coding** | Shared coding-workflow interface; GitPilot default bridge (retro-compatible), Claude Code + Codex adapters, risk scoring, **approval-gated writes**, patch review UI. |
 | **Planner** | Matrix Designer bundle intake → scheduled coding tasks; design-quality reviews feed projects. |
-| **Email & calendar** | Optional, non-destructive Email module (Mailu/IMAP/SMTP), Email Sentinel triage, **draft-and-approve** (never auto-sends), calendar conflict detection. |
+| **Email & calendar** | Optional, non-destructive Email module (Mailu/IMAP/SMTP), Email Sentinel triage, **draft-and-approve** (never auto-sends); Outlook/Google calendar connections with read-only first consent, a server-enforced meeting-context allow-list, and day-scoped conflict detection the plan has to earn before it claims a clean check. |
 | **Documents & RAG** | Source permissions, parsers, hybrid retrieval with citations, Document AI chat, **version-safe generated outputs**, project status rules. |
 | **Integrations** | Governed Integration Gateway (Slack/GitHub/Calendar + MCP servers) with one permission model — reads immediate, writes/destructive approval-gated; unified notifications, opt-in cross-integration workflows, and a curated catalog + conformance/certification + SDK for out-of-core integrations. |
-| **Trust** | Auth + RBAC, central Approval Center, prompt-injection defense, secrets abstraction + redaction, audit export. |
+| **Trust** | Auth + RBAC, central Approval Center backed by the server's own queue (RBAC on every decision, one audit record per decision), prompt-injection defense, secrets abstraction + redaction, audit export. |
 | **Scale** | Durable job queue (retries/backoff/dead-letter), rate limiting/backpressure, retention sweeps, load tests. |
+| **Daily standup** | Evidence collector, deterministic draft compiler (no model call), timezone-aware scheduler with a **runnable worker** (self-arming, lapse-healing), thread resolution that refuses to post outside the thread, approval-locked snapshot, exactly-once delivery. |
 | **Mobile** | Installable PWA (manifest, service worker, offline snapshot, update flow), push-ready approvals, desktop↔mobile continuity. |
 | **Observability** | Request tracing (X-Request-ID, structured JSON logs, latency metrics), Prometheus alerts + Grafana dashboard, RAG quality gate, UI smoke tests, release + rollback docs. |
+| **Documentation** | Every screenshot in this README captured from the running app against a seeded workspace in one reproducible pass (`make shots`) — see [`docs/screenshots.md`](docs/screenshots.md). |
 
 ### Production deployment checklist
 
@@ -400,8 +485,11 @@ curl http://localhost:8080/health     # {"ok": true, "service": "daypilot-api-ga
 
 ### Clean data vs. demo mode
 
-The web shell starts **clean and connected to real data** — no fabricated
-tasks, projects, or assistant chatter. To explore with sample content, set
+The web shell starts **clean and connected to real data**: Home's next priority,
+today's plan and continue-from-yesterday come from `/v1/today`, `/v1/plans/{date}`
+and `/v1/continuity`; the Approval Center is the server's own queue; Calendar,
+Tasks and Focus Mode read `/v1/tasks`. An empty workspace therefore shows honest
+empty states rather than fabricated tasks, projects, or assistant chatter. To explore with sample content, set
 `VITE_DAYPILOT_DEMO_MODE=true`; a visible **Demo mode** badge then appears so
 sample data is never mistaken for real data. First-run onboarding requires
 connecting an AI provider (Ollabridge local by default, Ollabridge Cloud
@@ -413,6 +501,18 @@ optional) with a **Test connection** check before AI features report as ready.
 make migrate        # apply Alembic migrations
 make seed           # 5,000 tasks / 40 projects / 200 docs / 100 agent runs
 ```
+
+### Capture the documentation screenshots
+
+```bash
+make shots          # seed a realistic day, run the app, capture docs/assets/screenshots/
+```
+
+Every image in this README is captured by that one command, from the running app
+against a seeded throwaway workspace — no mockups, no edited exports. The seeders
+drive the *real* engines and the shooter drives the *real* UI, so the screenshots
+show what the product produces rather than hand-written copy. If a bullet in the
+docs looks wrong, the code is wrong. See [`docs/screenshots.md`](docs/screenshots.md).
 
 ### Run the end-to-end week simulation
 
@@ -434,6 +534,7 @@ docker compose --profile runtime --profile observability up --build
 
 ```bash
 make help           # list all targets
+make standup-worker # run the Daily Standup on schedule (18:00 draft, morning reply)
 make typecheck      # TypeScript typechecks across the workspace
 make lint           # Ruff + workspace lint
 make ui-smoke       # build + Playwright UI smoke test
@@ -476,11 +577,15 @@ The [`docs/`](docs/) folder is the production knowledge base.
 |---|---|---|
 | [`production-plan.md`](docs/production-plan.md) | Everyone | The batch roadmap (B0–B14) that took DayPilot from scaffold to production. |
 | [`planner-multi-agent.md`](docs/planner-multi-agent.md) | Product & engineers | The multi-agent day planner: design review, agent graph, critic loop, chat/replan API, and the governed self-optimization loop. |
+| [`daily-standup.md`](docs/daily-standup.md) | Everyone | The Daily Standup Copilot: evidence collection, the 18:00 review, approval-locked delivery, and thread-aware Slack replies. |
+| [`meeting-intelligence.md`](docs/meeting-intelligence.md) | Everyone | Connecting Outlook / Google Calendar: how to set it up, what each setting does, the meeting-context allow-list, and the design for calendar-aware planning. |
+| [`agents-ui.md`](docs/agents-ui.md) | Product & design | The agents directory, agent workspace, portraits and the add-agent flow. |
 | [`integrations.md`](docs/integrations.md) | Platform & integrators | Using the Integration Gateway: connect providers, attach MCP servers, notifications, workflows, catalog/SDK, and the full API. |
 | [`integration-platform-plan.md`](docs/integration-platform-plan.md) | Platform & integrators | Additive, non-destructive batch roadmap (I0–I10) for the Integration Gateway, Slack, MCP, unified notifications, and the private integration platform. |
 | [`setup-and-onboarding.md`](docs/setup-and-onboarding.md) | New users & integrators | First-run wizard, project wizard, Ollabridge pairing (local **and** cloud), and the week simulation. |
 | [`simulation/week_report.md`](docs/simulation/week_report.md) | Everyone | The end-to-end 5-day week simulation report (pairing, inference, governance). |
 | [`homepilot-family-brand-guide.md`](docs/homepilot-family-brand-guide.md) | Design & frontend | Token package, state language, breakpoints, do/don't. |
+| [`screenshots.md`](docs/screenshots.md) | Docs & design | How every screenshot is produced from the running app, and how to add one. |
 | [`operations-runbook.md`](docs/operations-runbook.md) | Platform & on-call | Observability, SLO alerts, incident runbooks, backup/restore, release/rollback. |
 | [`architecture.md`](docs/architecture.md) | Engineers | Service boundaries, request flow, and the backend-owned model (identity, providers, mail, assistant). |
 | [`assistant-orchestrator.md`](docs/assistant-orchestrator.md) | Engineers & security | Backend assistant: `/v1/assistant` API, intents, tool risk classes, approval/job linkage, injection controls, limited mode. |

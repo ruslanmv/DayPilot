@@ -135,7 +135,7 @@ def generate_plan(
         "summary": narrative,
         "score": critique.get("score", 0),
         "critique": critique,
-        "quality": _quality_explanation(critique),
+        "quality": _quality_explanation(critique, _calendar_quality(session, workspace_id, plan_date)),
         "iterations": result.get("iterations", 0),
         "configVersion": cfg.version,
         "path": result.get("__path__", []),
@@ -143,8 +143,31 @@ def generate_plan(
     }
 
 
-def _quality_explanation(critique: dict[str, Any]) -> dict[str, Any]:
-    """Turn the critic's real metrics into a labelled score + strengths/warnings."""
+def _calendar_quality(session: Session, workspace_id: str, plan_date: str) -> dict[str, Any]:
+    """What the plan actually knows about the day's calendar."""
+    from ..calendar.connections import status as calendar_status
+    from ..calendar.service import conflicts_on
+
+    cal = calendar_status(session, workspace_id)
+    return {
+        "connected": cal["connected"],
+        "freshness": cal["freshness"],
+        "conflicts": len(conflicts_on(session, workspace_id, plan_date)) if cal["connected"] else 0,
+    }
+
+
+def _quality_explanation(
+    critique: dict[str, Any], calendar: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Turn the critic's real metrics into a labelled score + strengths/warnings.
+
+    The calendar line is the one the plan has to earn. It used to read "No
+    calendar conflicts" whenever the critic had no complaints — but the critic
+    scores focus share, context switches and priority coverage, and has never
+    read a calendar event. The claim was a rename of "nothing else to say".
+    Now it is made only when a calendar was actually connected, actually synced
+    recently, and actually had no overlapping events on the day.
+    """
     score = int(critique.get("score", 0))
     label = "Strong" if score >= 80 else "Balanced" if score >= 60 else "Needs work"
     focus = critique.get("focusMinutes", 0)
@@ -154,8 +177,22 @@ def _quality_explanation(critique: dict[str, Any]) -> dict[str, Any]:
         strengths.append(f"{focus // 60}h {focus % 60:02d}m of focus time is protected")
     if critique.get("coverage", 0) >= 1.0:
         strengths.append("All critical tasks are scheduled")
-    if not critique.get("issues"):
+
+    cal = calendar or {}
+    conflicts = int(cal.get("conflicts", 0))
+    if not cal.get("connected"):
+        warnings.append("No calendar connected — this plan does not know about your meetings")
+    elif cal.get("freshness") == "never":
+        warnings.append("Calendar connected but never synced — meetings may be missing")
+    elif conflicts:
+        warnings.append(
+            f"{conflicts} overlapping meeting{'' if conflicts == 1 else 's'} on your calendar"
+        )
+    elif cal.get("freshness") == "stale":
+        warnings.append("Calendar has not synced recently — conflicts may be out of date")
+    else:
         strengths.append("No calendar conflicts")
+
     for issue in critique.get("issues", []):
         warnings.append(issue)
     return {"score": score, "label": label, "strengths": strengths, "warnings": warnings}
@@ -197,10 +234,14 @@ def planner_readiness(session: Session, workspace_id: str, plan_date: str) -> di
     working_hours_configured = True
     focus_prefs_configured = cfg.version > 1
 
-    # Calendar connectivity is reported by the email/calendar plane; treat email
-    # enablement as the proxy the same way the rest of the app does.
-    from ..email.policy import email_enabled
-    calendar_connected = email_enabled()
+    # Calendar connectivity is a real question with a real answer: does this
+    # workspace have a connected calendar provider? It used to be inferred from
+    # `email_enabled()` — the *email* feature flag — which meant the Planning
+    # surface could report a connected calendar in a workspace that had never
+    # seen one.
+    from ..calendar.connections import status as calendar_status
+    cal = calendar_status(session, workspace_id)
+    calendar_connected = bool(cal["connected"])
 
     sufficient = open_tasks > 0 or calendar_connected
     return {
@@ -208,6 +249,9 @@ def planner_readiness(session: Session, workspace_id: str, plan_date: str) -> di
         "hasPlan": has_plan,
         "workingHoursConfigured": working_hours_configured,
         "calendarConnected": calendar_connected,
+        "calendarProviders": cal["providers"],
+        "lastCalendarSyncAt": cal["lastSyncAt"],
+        "calendarFreshness": cal["freshness"],
         "tasksOpen": int(open_tasks),
         "tasksDueToday": int(due_today),
         "projectsActive": int(active_projects),
@@ -225,8 +269,10 @@ def _kind_of(title: str, source: str) -> str:
 
 
 # Kind (scheduler category) -> UI block type shown on the planner timeline.
+# "review" is its own type: a patch review is focused work, and showing it as a
+# meeting made the day look like it was spent with other people.
 _TYPE_OF_KIND = {
-    "deep": "focus", "meeting": "meeting", "review": "meeting",
+    "deep": "focus", "meeting": "meeting", "review": "review",
     "admin": "admin", "break": "break",
 }
 
@@ -244,6 +290,8 @@ def _block_reason(kind: str, start: str | None, priority: str | None, due_today:
         parts.append("placed in the morning focus window" if hour < 12 else "scheduled as protected focus time")
     elif kind == "meeting":
         parts.append("a fixed meeting on your calendar")
+    elif kind == "review":
+        parts.append("review work placed next to the change it covers")
     elif kind == "admin":
         parts.append("batched with other admin at the low-energy end of the day")
     elif kind == "break":

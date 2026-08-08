@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { STATE_LANGUAGE } from '@daypilot/homepilot-theme'
 import { IntegrationsPanel } from '../integrations/IntegrationsPanel'
 import { AiProvidersPanel } from '../settings/AiProvidersPanel'
+import { CalendarPanel } from '../settings/CalendarPanel'
 import { MailSettingsPanel } from '../settings/MailSettingsPanel'
 import { KnowledgeSourcesPanel } from '../settings/KnowledgeSourcesPanel'
 import { HomePilotConnectionPanel } from '../settings/HomePilotConnectionPanel'
@@ -21,6 +22,7 @@ type SettingsPanelProps = {
 const SECTION_TITLES: Record<SettingsSectionId, string> = {
   profile: 'Your profile',
   integrations: 'Integrations',
+  calendar: 'Calendar',
   providers: 'AI providers',
   mail: 'Mail settings',
   sources: 'Knowledge sources',
@@ -33,7 +35,10 @@ const SECTION_TITLES: Record<SettingsSectionId, string> = {
 // Order shown in the in-panel navigation rail — the ONLY place these sections
 // are listed; the account dropdown never duplicates them.
 const SECTION_ORDER: SettingsSectionId[] = [
-  'profile', 'integrations', 'providers', 'mail', 'sources', 'homepilot', 'appearance', 'permissions', 'shortcuts',
+  // Calendar sits next to Mail: both are "how DayPilot behaves with a connected
+  // account", as opposed to Integrations, which is "what is connected at all".
+  'profile', 'integrations', 'calendar', 'mail', 'providers', 'sources', 'homepilot',
+  'appearance', 'permissions', 'shortcuts',
 ]
 
 function StateDot({ tone }: { tone: 'connected' | 'default' | 'available' | 'disabled' }) {
@@ -93,6 +98,9 @@ function SectionBody({ section, onClose }: { section: SettingsSectionId; onClose
   }
   if (section === 'providers') {
     return <AiProvidersPanel />
+  }
+  if (section === 'calendar') {
+    return <CalendarPanel />
   }
   if (section === 'mail') {
     return <MailSettingsPanel />

@@ -74,9 +74,18 @@ _ADMIN = ("email", "inbox", "expense", "report", "admin", "timesheet", "invoice"
 _REVIEW = ("review", "approve", "patch", "pr ", "feedback")
 
 
+#: Titles that say outright what the block *is*, which must beat what it is
+#: *about*. "Deep work — standup delivery" is focused work on the standup
+#: feature, not a standup; without this it matched _MEETING on its subject and
+#: was scheduled — and labelled — as a meeting.
+_EXPLICIT_DEEP = ("deep work", "focus block", "focus time", "deep focus")
+
+
 def classify_kind(title: str) -> str:
     """deep | meeting | admin | review — drives where a task lands in the day."""
     t = title.lower()
+    if any(k in t for k in _EXPLICIT_DEEP):
+        return "deep"
     if any(k in t for k in _MEETING):
         return "meeting"
     if any(k in t for k in _ADMIN):

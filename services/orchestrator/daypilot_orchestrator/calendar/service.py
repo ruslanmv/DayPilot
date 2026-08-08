@@ -74,6 +74,16 @@ def _serialize(ev: CalendarEvent) -> dict[str, Any]:
     }
 
 
+def list_events(session: Session, workspace_id: str = "default") -> list[dict[str, Any]]:
+    """Read the local store. No provider call, no write — this is a read path."""
+    rows = session.execute(
+        select(CalendarEvent).where(
+            CalendarEvent.workspace_id == workspace_id,
+        ).order_by(CalendarEvent.start_at.asc())
+    ).scalars()
+    return [_serialize(r) for r in rows]
+
+
 def detect_conflicts(session: Session, workspace_id: str = "default") -> list[dict[str, Any]]:
     """Return overlapping event pairs so Command can surface schedule pressure."""
     events = list(
@@ -94,6 +104,42 @@ def detect_conflicts(session: Session, workspace_id: str = "default") -> list[di
                     {"a": a.id, "b": b.id, "aTitle": a.title, "bTitle": b.title}
                 )
     return conflicts
+
+
+def conflicts_on(
+    session: Session, workspace_id: str, plan_date: str
+) -> list[dict[str, Any]]:
+    """Overlapping events on one day.
+
+    The planner needs a day-scoped answer: "no conflicts" across all of history
+    is not a claim about today, and today is what the plan is about.
+    """
+    from datetime import date as _date, time as _time
+
+    try:
+        day = _date.fromisoformat(plan_date)
+    except ValueError:
+        return []
+    start = datetime.combine(day, _time.min)
+    end = datetime.combine(day, _time.max)
+    events = list(
+        session.execute(
+            select(CalendarEvent).where(
+                CalendarEvent.workspace_id == workspace_id,
+                CalendarEvent.start_at.isnot(None),
+                CalendarEvent.start_at >= start,
+                CalendarEvent.start_at <= end,
+                CalendarEvent.status != "cancelled",
+            ).order_by(CalendarEvent.start_at.asc())
+        ).scalars()
+    )
+    out: list[dict[str, Any]] = []
+    for i in range(len(events)):
+        for j in range(i + 1, len(events)):
+            a, b = events[i], events[j]
+            if a.end_at and b.start_at and b.start_at < a.end_at:
+                out.append({"a": a.id, "b": b.id, "aTitle": a.title, "bTitle": b.title})
+    return out
 
 
 def propose_event_draft(

@@ -23,7 +23,15 @@ Portraits come from the persona itself. For a live HomePilot connection DayPilot
 proxies the avatar server-side (the browser never calls HomePilot). For an
 offline `.hpersona` import the bundled thumbnail is extracted and stored with the
 agent, so the photo shows even with no HomePilot reachable. When a persona has no
-avatar the card falls back to the agent's initials.
+avatar — or the portrait fails to load — the card falls back to the agent's
+initials, never an empty circle. The proxy fetches from HomePilot's asset
+origin (`/files/...` sits at the app root, not under the `/api` prefix) and
+the response is cacheable, so a directory of dozens of agents is dozens of
+cache hits rather than dozens of round trips.
+
+Synced agents arrive **disabled** on purpose — adding an agent to DayPilot is
+a deliberate act, never a side effect of connecting HomePilot. Each card
+carries the **Turn on / Turn off** button that performs it.
 
 ![Agents directory](./assets/screenshots/agents/agents-directory.png)
 

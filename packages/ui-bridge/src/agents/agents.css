@@ -67,6 +67,15 @@
 .dp-agentcard__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 14px; }
 .dp-agentcard__chip { display: inline-flex; align-items: center; gap: 5px; font-size: 0.74rem; padding: 4px 9px; border: 1px solid var(--dp-border); border-radius: 8px; background: var(--dp-surface-elevated, rgba(255,255,255,0.04)); color: var(--dp-text-dim); }
 .dp-agentcard__chip-icon { display: inline-flex; color: var(--dp-text-muted); }
+/* Turn on / Turn off. `margin-top: auto` on the chips row already pushes
+   content down, so this sits under it without fighting for the same space. */
+.dp-agentcard__actions { display: flex; justify-content: flex-end; padding-top: 12px; }
+.dp-agentcard__enable { min-height: 32px; padding: 5px 14px; border: 1px solid var(--dp-accent, #2f80ed); border-radius: 999px; background: var(--dp-accent, #2f80ed); color: #fff; font: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; }
+.dp-agentcard__enable:hover { filter: brightness(1.08); }
+.dp-agentcard__enable:focus-visible { outline: 2px solid var(--dp-accent, #2f80ed); outline-offset: 2px; }
+/* Once on, the button steps back — turning an agent off is the rarer action. */
+.dp-agentcard__enable.is-on { border-color: var(--dp-border); background: transparent; color: var(--dp-text-dim); font-weight: 500; }
+.dp-agentcard__enable.is-on:hover { background: var(--dp-surface-elevated, rgba(255,255,255,0.05)); color: var(--dp-text); }
 
 .dp-agentcard--skeleton { pointer-events: none; }
 .dp-agentcard--skeleton::after { content: ""; position: absolute; inset: 0; border-radius: 16px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent); animation: dp-skel 1.2s ease-in-out infinite; }

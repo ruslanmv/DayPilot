@@ -50,6 +50,39 @@ scorecard; treat a `passed: false` as a release blocker.
 2. Decide via `POST /v1/approvals/{id}/decide` (RBAC-gated). No write executes
    without an approved approval.
 
+### Daily standup did not post
+The standup runs as a chain of durable jobs (`standup.review_due` →
+`standup.deliver`) drained by `scripts/standup_worker.py`. Work down this list —
+the first check catches the majority of reports.
+
+1. **Is a worker running?** Without one, jobs sit queued forever: the draft only
+   appears when somebody opens `#/standup`, and the morning reply never happens.
+   `GET /v1/jobs?state=queued` and look for `standup.*`. Start it with
+   `make standup-worker` (or `python scripts/standup_worker.py --once` from cron).
+2. **Was it a lapse?** If the deployment was down across a review window, the
+   chain has no link left to fire — it is self-perpetuating, so one missed
+   occurrence stops it for good. The worker re-arms lapsed workflows at startup
+   (`bootstrap_schedules`) and logs `re-armed N standup schedule(s)`; a restart
+   is the fix. Confirm with `GET /v1/standup/status` → `workflow.nextReviewAt` in
+   the future.
+3. **`THREAD_NOT_FOUND`.** Delivery refuses to post outside the standup thread
+   rather than guess: the reminder was not found in `conversations.history`
+   within the search window, or fewer than two of the three match signals
+   (time window, bot identity, text signature) agreed. Verify the bot is in the
+   channel and can read history, check `slackChannelId`/`reminderTime` on the
+   workflow, then retry the draft from the review page.
+4. **`SEND_FAILED`.** Slack rejected the post — usually a revoked token or a
+   missing `chat:write`. The job retries with backoff and dead-letters after
+   `max_attempts`; the draft stays visible in a failed state with a Retry
+   button, so nothing is lost. Fix the connection, then retry.
+5. **Nothing was posted but the draft says SENT.** That is the duplicate guard
+   working: delivery is keyed on `standup:<workflow>:<date>`, so a re-run
+   reports the original message rather than posting twice (`duplicate: true`).
+   The draft's `slackThreadTs`/`slackMessageTs` identify what was actually sent.
+
+Never re-send by editing the DB: the approved snapshot is content-hashed and
+re-checked at send time precisely so an unapproved body cannot reach Slack.
+
 ### Backup & restore
 - **Database:** run Alembic to the target revision (`alembic upgrade head`);
   restore Postgres from your backup. Migrations 0001–0004 are the schema of

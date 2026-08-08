@@ -249,3 +249,23 @@ def test_planner_api_endpoints():
     assert cfg["config"]["version"] >= 1
     rev = client.post("/v1/planner/review", json={"workspaceId": ws})
     assert rev.status_code == 200
+
+
+def test_an_explicit_deep_work_title_is_not_reclassified_by_its_subject():
+    # "Deep work — standup delivery" is focused work *on* the standup feature.
+    # Matching _MEETING on the word "standup" scheduled it as a meeting and
+    # labelled it one in the planner timeline.
+    assert classify_kind("Deep work — standup delivery") == "deep"
+    assert classify_kind("Focus block: interview scoring rubric") == "deep"
+    # A real meeting about the same subject still classifies as a meeting.
+    assert classify_kind("Standup with the platform team") == "meeting"
+
+
+def test_a_review_block_is_not_typed_as_a_meeting():
+    from daypilot_orchestrator.planner.service import _block_type
+
+    # Focused review work shown as a meeting made the planner timeline read as
+    # a day spent with other people.
+    assert _block_type("review") == "review"
+    assert _block_type("meeting") == "meeting"
+    assert _block_type("deep") == "focus"

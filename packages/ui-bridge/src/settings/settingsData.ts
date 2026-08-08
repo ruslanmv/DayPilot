@@ -8,6 +8,7 @@
 export type SettingsSectionId =
   | 'profile'
   | 'integrations'
+  | 'calendar'
   | 'providers'
   | 'mail'
   | 'sources'

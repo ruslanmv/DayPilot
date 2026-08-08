@@ -31,7 +31,7 @@ export function AgentsLandingPage({
   openAgentId?: string | null
   onOpenAgent?: (agentId: string | null) => void
 }) {
-  const { load, visible, agents, filter, search, setFilter, setSearch, reload, toggleFavorite, filterCounts } = useAgents()
+  const { load, visible, agents, filter, search, setFilter, setSearch, reload, toggleFavorite, toggleEnabled, filterCounts } = useAgents()
   const liveRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<number>(0)
   const [bannerOpen, setBannerOpen] = useState(true)
@@ -144,6 +144,7 @@ export function AgentsLandingPage({
               agent={a}
               onOpen={(agent) => { scrollRef.current = window.scrollY; open(agent.id) }}
               onToggleFavorite={toggleFavorite}
+              onToggleEnabled={toggleEnabled}
             />
           ))}
         </div>
