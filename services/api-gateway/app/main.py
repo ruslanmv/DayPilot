@@ -34,6 +34,7 @@ from .routers import (
     profile,
     projects,
     providers,
+    standup,
     tasks,
 )
 
@@ -88,6 +89,7 @@ for _router in (
     knowledge.router,
     profile.router,
     profile.onboarding_router,
+    standup.router,
 ):
     app.include_router(_router)
 

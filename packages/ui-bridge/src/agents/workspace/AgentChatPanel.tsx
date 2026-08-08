@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 
 import { homepilotApi, type AgentProfile, type AgentTurnMessage } from '../../settings/homepilotClient'
+import { AgentPortrait } from '../AgentPortrait'
 import type { AgentMessage } from './types'
 
 /**
@@ -130,9 +131,13 @@ export function AgentChatPanel({ agent, onTurn }: { agent: AgentProfile; onTurn?
   }
 
   const avatar = (
-    <span className="dp-chat__avatar" aria-hidden="true">
-      {agent.avatarUrl ? <img src={agent.avatarUrl} alt="" /> : <span>{agent.name.slice(0, 1).toUpperCase()}</span>}
-    </span>
+    <AgentPortrait
+      name={agent.name}
+      avatarUrl={agent.avatarUrl}
+      className="dp-chat__avatar"
+      initialsClassName=""
+      maxInitials={1}
+    />
   )
 
   return (

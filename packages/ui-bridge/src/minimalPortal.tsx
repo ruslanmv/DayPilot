@@ -18,21 +18,21 @@ import { ApprovalCenter } from './approvals/ApprovalCenter'
 import { HomeWorkspace } from './home/HomeWorkspace'
 import { PlanningWorkspace } from './planning/PlanningWorkspace'
 import { AgentsLandingPage } from './agents/AgentsLandingPage'
+import { StandupWorkspace } from './standup/StandupWorkspace'
 import { useRoute, type PortalView } from './shell/route'
 import { OnboardingWizard } from './onboarding/OnboardingWizard'
 import { ProjectWizard, type NewProject } from './projects/ProjectWizard'
+import { fetchTasks, focusCandidate } from './tasksClient'
 import { useProjects } from './useProjects'
 import {
   AI_PLAN_BULLETS,
   AI_SEED,
   AI_WELCOME,
-  CONTINUE_ITEMS,
   HOME_SUGGESTIONS,
-  NEXT_PRIORITY,
-  TODAY_PLAN,
   aiReply,
   type HomeTurn,
 } from './home/homeData'
+import { useHomeDay } from './home/homeLive'
 import type { SettingsSectionId } from './settings/settingsData'
 
 type NavItem = { id: PortalView; label: string; icon: NavIconName }
@@ -414,8 +414,15 @@ function ProjectsCore({ projects, documents, onSelect, onNew }: {
               <span className={cx('dp-tag', riskClass(project.risk))}>{project.status}</span>
             </div>
             <div className="dp-progress"><span style={{ width: `${project.progress}%` }} /></div>
-            <div className="dp-meta-row"><span>{project.progress}%</span><span>{project.aiActivity}</span><span>{project.continueAction}</span></div>
-            <p>{project.nextHumanAction}</p>
+            {/* Only the parts that exist, each in its own cell — rendering the
+                empty ones ran the AI activity and the continue action together
+                into one unreadable sentence. */}
+            <div className="dp-meta-row">
+              <span>{project.progress}%</span>
+              {project.aiActivity && <span className="dp-project-card__ai">✦ {project.aiActivity}</span>}
+              {project.continueAction && <span>{project.continueAction}</span>}
+            </div>
+            {project.nextHumanAction && <p><strong>Next:</strong> {project.nextHumanAction}</p>}
             <div className="dp-project-documents">
               {documents.filter((document) => document.projectId === project.id).slice(0, 3).map((document) => <span key={document.id}>{document.name}</span>)}
             </div>
@@ -562,6 +569,15 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
   const setView = navigate
   const [messages, setMessages] = useState<DayPilotMessage[]>(seedMessages)
   const [tasks, setTasks] = useState<DayPilotTask[]>(seedTasks)
+  // Calendar, Tasks and Focus Mode all read this list. Outside demo mode it
+  // seeds empty, so without this the three views are blank and Home's
+  // "Start focus" button has nothing to open.
+  useEffect(() => {
+    if (isDemoMode()) return
+    let cancelled = false
+    fetchTasks().then((rows) => { if (!cancelled && rows.length) setTasks(rows) })
+    return () => { cancelled = true }
+  }, [])
   const { projects, setProjects, reload: reloadProjects, createProject } = useProjects(seedProjects)
   const documents = useMemo(seedDocuments, [])
   const documentSources = useMemo(seedDocumentSources, [])
@@ -598,7 +614,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
   }
 
   function startFocusMode() {
-    const target = tasks.find((task) => task.title.includes('Deep Coding')) ?? tasks[0]
+    const target = focusCandidate(tasks)
     if (target) setFocusTask(target)
   }
 
@@ -715,7 +731,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
           <>
             <header className="dp-topbar">
               <div>
-                <h2>{view === 'planning' ? 'Day Planner' : view === 'calendar' ? 'Minute Plan' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : view === 'email' ? 'Email' : 'Agents'}</h2>
+                <h2>{view === 'planning' ? 'Day Planner' : view === 'calendar' ? 'Minute Plan' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : view === 'email' ? 'Email' : view === 'standup' ? 'Daily Standup' : 'Agents'}</h2>
                 <p>DayPilot = Calendar + Tasks + Projects + Agents + Documents + Natural Tools.</p>
               </div>
               <span className="dp-pill">NOW · DOCUMENTS · AI RUNNING · APPROVALS</span>
@@ -740,6 +756,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
                 />
               )}
               {view === 'email' && <EmailWorkspace />}
+              {view === 'standup' && <StandupWorkspace />}
             </div>
           </>
         )}
@@ -810,6 +827,7 @@ const MOBILE_TITLES: Record<PortalView, string> = {
   email: 'Email',
   documents: 'Documents',
   agents: 'Agents',
+  standup: 'Standup',
 }
 
 const RECENT_AI = isDemoMode() ? ['Email workspace status', 'Prepare Client Alpha meeting', "Today's plan"] : []
@@ -827,7 +845,13 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiSeed, setAiSeed] = useState<string | undefined>()
-  const [tasks] = useState<DayPilotTask[]>(seedTasks)
+  const [tasks, setTasks] = useState<DayPilotTask[]>(seedTasks)
+  useEffect(() => {
+    if (isDemoMode()) return
+    let cancelled = false
+    fetchTasks().then((rows) => { if (!cancelled && rows.length) setTasks(rows) })
+    return () => { cancelled = true }
+  }, [])
   const { projects, setProjects, createProject } = useProjects(seedProjects)
   const documents = useMemo(seedDocuments, [])
   const documentSources = useMemo(seedDocumentSources, [])
@@ -868,7 +892,7 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
     setDrawerOpen(false)
   }
   function startFocus() {
-    const target = tasks.find((t) => t.title.includes('Deep Coding')) ?? tasks[0]
+    const target = focusCandidate(tasks)
     if (target) setFocusTask(target)
   }
 
@@ -906,6 +930,7 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
           />
         )}
         {view === 'email' && <EmailWorkspace />}
+        {view === 'standup' && <StandupWorkspace />}
       </main>
 
       {/* Off-canvas navigation drawer */}
@@ -986,24 +1011,32 @@ function MobileHome({ onStartFocus, onNavigate, onAsk }: {
   onNavigate: (view: PortalView) => void
   onAsk: (seed?: string) => void
 }) {
+  // Same day as the desktop Home, from the same endpoints — a phone that
+  // disagreed with the laptop about what is next would be worse than useless.
+  const day = useHomeDay()
+  const priority = day.priority
   return (
     <div className="dp-m__page">
       <section className="dp-m__ready">
-        <h2 className="dp-m__ready-title"><span className="dp-m__ready-icon" aria-hidden="true">☼</span> {NEXT_PRIORITY ? 'Your day is ready' : 'Ready when you are'}</h2>
-        <p className="dp-m__ready-sub">{NEXT_PRIORITY ? 'Focus on your top priority and keep the momentum.' : 'No plan yet for today. Ask the assistant to generate one.'}</p>
+        <h2 className="dp-m__ready-title"><span className="dp-m__ready-icon" aria-hidden="true">☼</span> {priority ? 'Your day is ready' : 'Ready when you are'}</h2>
+        <p className="dp-m__ready-sub">{priority ? 'Focus on your top priority and keep the momentum.' : 'No plan yet for today. Ask the assistant to generate one.'}</p>
       </section>
 
-      {NEXT_PRIORITY && (
+      {priority && (
         <section className="dp-m__card">
           <div className="dp-m__label">Next priority</div>
           <div className="dp-m__np">
             <span className="dp-m__np-icon" aria-hidden="true">🖥</span>
             <div className="dp-m__np-body">
-              <div className="dp-m__np-title">{NEXT_PRIORITY.title}</div>
-              <div className="dp-m__np-meta"><span>🗓 {NEXT_PRIORITY.time}</span><span className="dp-m__dot">·</span><span className="dp-chip">{NEXT_PRIORITY.project}</span></div>
+              <div className="dp-m__np-title">{priority.title}</div>
+              <div className="dp-m__np-meta">
+                {priority.time && <span>🗓 {priority.time}</span>}
+                {priority.time && priority.project && <span className="dp-m__dot">·</span>}
+                {priority.project && <span className="dp-chip">{priority.project}</span>}
+              </div>
             </div>
           </div>
-          <p className="dp-m__np-support">{NEXT_PRIORITY.support}</p>
+          {priority.support && <p className="dp-m__np-support">{priority.support}</p>}
           <button className="dp-m__cta" onClick={onStartFocus}>▶ Start focus</button>
           <button className="dp-m__ghostlink" onClick={() => onNavigate('projects')}>View project ↗</button>
         </section>
@@ -1011,10 +1044,10 @@ function MobileHome({ onStartFocus, onNavigate, onAsk }: {
 
       <section className="dp-m__card">
         <h3 className="dp-m__card-title"><span aria-hidden="true">🗓</span> Today's plan</h3>
-        {TODAY_PLAN.length > 0 ? (
+        {day.agenda.length > 0 ? (
           <ul className="dp-m__agenda">
-            {TODAY_PLAN.map((item) => (
-              <li key={item.time} className="dp-m__agenda-row" onClick={() => onNavigate('planning')}>
+            {day.agenda.map((item, i) => (
+              <li key={`${item.time}-${i}`} className="dp-m__agenda-row" onClick={() => onNavigate('planning')}>
                 <span className="dp-m__agenda-dot" aria-hidden="true" />
                 <span className="dp-m__agenda-time">{item.time}</span>
                 <span className="dp-m__agenda-title">{item.title}</span>
@@ -1032,8 +1065,8 @@ function MobileHome({ onStartFocus, onNavigate, onAsk }: {
       <section className="dp-m__card">
         <h3 className="dp-m__card-title"><span aria-hidden="true">⟳</span> Continue from yesterday</h3>
         <div className="dp-m__continue">
-          {CONTINUE_ITEMS.length === 0 && <p className="dp-m__card-empty">Nothing carried over yet.</p>}
-          {CONTINUE_ITEMS.map((c) => (
+          {day.continues.length === 0 && <p className="dp-m__card-empty">Nothing carried over yet.</p>}
+          {day.continues.map((c) => (
             <button key={c.id} className="dp-m__cont" onClick={() => onNavigate('projects')}>
               <span className={'dp-m__cont-icon dp-continue__icon--' + c.accent} aria-hidden="true">{c.icon}</span>
               <span className="dp-m__cont-body">

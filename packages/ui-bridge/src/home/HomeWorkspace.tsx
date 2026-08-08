@@ -11,6 +11,7 @@ import {
   type ChatSessionSummary,
 } from '../chatSessions'
 import { isDemoMode, workspaceId } from '../env'
+import { StandupStatusCard } from '../standup/StandupStatusCard'
 import { api } from '../apiClient'
 import { openSetupWizard, readSetup } from '../onboarding/setupState'
 import {
@@ -18,10 +19,7 @@ import {
   AI_SEED,
   AI_WELCOME,
   ATTENTION_ITEMS,
-  CONTINUE_ITEMS,
   HOME_SUGGESTIONS,
-  NEXT_PRIORITY,
-  TODAY_PLAN,
   WORKING_AGENTS,
   aiReply,
   clockTime,
@@ -31,11 +29,12 @@ import {
   type HomeTurn,
   type WorkingAgent,
 } from './homeData'
+import { useHomeDay } from './homeLive'
 
 type HomeWorkspaceProps = {
   userName?: string
   onStartFocus: () => void
-  onNavigate: (view: 'calendar' | 'projects' | 'planning' | 'agents') => void
+  onNavigate: (view: 'calendar' | 'projects' | 'planning' | 'agents' | 'standup') => void
   onOpenPalette: () => void
   onOpenProjectWizard?: () => void
   onOpenApprovals?: () => void
@@ -99,6 +98,12 @@ export function HomeWorkspace({ userName, onStartFocus, onNavigate, onOpenPalett
       })))
     })
   }, [])
+
+  // The day itself: next priority, today's blocks, and what carried over.
+  // Home is the first screen of a product that claims to be connected to real
+  // data, so it reads the real day rather than rendering constants.
+  const day = useHomeDay()
+
   // Persistent conversation history (ChatGPT/Claude-style), off in demo mode.
   const persistent = !isDemoMode()
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -264,7 +269,7 @@ export function HomeWorkspace({ userName, onStartFocus, onNavigate, onOpenPalett
           {/* Now (top priority) + Needs your attention (decision queue) */}
           <div className="dp-home__top">
           <section className="dp-home__ready dp-home__now">
-            {NEXT_PRIORITY ? (
+            {day.priority ? (
               <>
                 <h2 className="dp-home__ready-title"><span className="dp-home__ready-icon" aria-hidden="true">☼</span> Your day is ready</h2>
                 <p className="dp-home__ready-sub">Focus on your top priority and keep the momentum.</p>
@@ -273,11 +278,11 @@ export function HomeWorkspace({ userName, onStartFocus, onNavigate, onOpenPalett
                   <div className="dp-home__priority-row">
                     <span className="dp-home__priority-icon" aria-hidden="true">🖥</span>
                     <div className="dp-home__priority-body">
-                      <div className="dp-home__priority-title">{NEXT_PRIORITY.title}</div>
+                      <div className="dp-home__priority-title">{day.priority.title}</div>
                       <div className="dp-home__priority-meta">
-                        <span>🗓 {NEXT_PRIORITY.time}</span>
-                        <span className="dp-home__dot-sep">·</span>
-                        <span className="dp-chip">{NEXT_PRIORITY.project}</span>
+                        {day.priority.time && <span>🗓 {day.priority.time}</span>}
+                        {day.priority.time && day.priority.project && <span className="dp-home__dot-sep">·</span>}
+                        {day.priority.project && <span className="dp-chip">{day.priority.project}</span>}
                       </div>
                     </div>
                     <div className="dp-home__priority-actions">
@@ -285,7 +290,7 @@ export function HomeWorkspace({ userName, onStartFocus, onNavigate, onOpenPalett
                       <button className="dp-home__ghost" onClick={() => onNavigate('projects')}>View project ↗</button>
                     </div>
                   </div>
-                  <p className="dp-home__priority-support">{NEXT_PRIORITY.support}</p>
+                  {day.priority.support && <p className="dp-home__priority-support">{day.priority.support}</p>}
                 </div>
               </>
             ) : (
@@ -328,14 +333,18 @@ export function HomeWorkspace({ userName, onStartFocus, onNavigate, onOpenPalett
           </aside>
           </div>
 
+          {/* Daily standup — the day's one outward-facing commitment, so it
+              sits above the plan rather than below it. */}
+          <StandupStatusCard onReview={() => onNavigate('standup')} />
+
           {/* Today's plan + Continue from yesterday */}
           <div className="dp-home__grid">
             <section className="dp-home__card">
               <h3 className="dp-home__card-title"><span className="dp-home__card-icon" aria-hidden="true">🗓</span> Today's plan</h3>
-              {TODAY_PLAN.length > 0 ? (
+              {day.agenda.length > 0 ? (
                 <ul className="dp-agenda">
-                  {TODAY_PLAN.map((item) => (
-                    <li key={item.time} className="dp-agenda__row">
+                  {day.agenda.map((item, i) => (
+                    <li key={`${item.time}-${i}`} className="dp-agenda__row">
                       <span className="dp-agenda__bullet" aria-hidden="true" />
                       <span className="dp-agenda__time">{item.time}</span>
                       <span className="dp-agenda__title">{item.title}</span>
@@ -353,8 +362,8 @@ export function HomeWorkspace({ userName, onStartFocus, onNavigate, onOpenPalett
             <section className="dp-home__card">
               <h3 className="dp-home__card-title"><span className="dp-home__card-icon" aria-hidden="true">⟳</span> Continue from yesterday</h3>
               <div className="dp-continue">
-                {CONTINUE_ITEMS.length === 0 && <p className="dp-home__card-empty">Nothing carried over. New projects will show up here.</p>}
-                {CONTINUE_ITEMS.map((c) => (
+                {day.continues.length === 0 && <p className="dp-home__card-empty">Nothing carried over. New projects will show up here.</p>}
+                {day.continues.map((c) => (
                   <button key={c.id} className="dp-continue__item" onClick={() => onNavigate('projects')}>
                     <span className={'dp-continue__icon dp-continue__icon--' + c.accent} aria-hidden="true">{c.icon}</span>
                     <span className="dp-continue__body">

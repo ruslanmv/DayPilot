@@ -225,8 +225,10 @@ def _kind_of(title: str, source: str) -> str:
 
 
 # Kind (scheduler category) -> UI block type shown on the planner timeline.
+# "review" is its own type: a patch review is focused work, and showing it as a
+# meeting made the day look like it was spent with other people.
 _TYPE_OF_KIND = {
-    "deep": "focus", "meeting": "meeting", "review": "meeting",
+    "deep": "focus", "meeting": "meeting", "review": "review",
     "admin": "admin", "break": "break",
 }
 
@@ -244,6 +246,8 @@ def _block_reason(kind: str, start: str | None, priority: str | None, due_today:
         parts.append("placed in the morning focus window" if hour < 12 else "scheduled as protected focus time")
     elif kind == "meeting":
         parts.append("a fixed meeting on your calendar")
+    elif kind == "review":
+        parts.append("review work placed next to the change it covers")
     elif kind == "admin":
         parts.append("batched with other admin at the low-energy end of the day")
     elif kind == "break":

@@ -179,6 +179,15 @@ seed-reset: ## Reset seeded rows and reseed the default workspace.
 sim: ## Run the end-to-end 5-day week simulation (real pairing + inference).
 	$(UV) run python scripts/e2e_week_simulation.py
 
+standup-worker: ## Run the Daily Standup on schedule (drafts at 18:00, replies next morning).
+	$(UV) run python scripts/standup_worker.py
+
+standup-once: ## Run one standup pass and exit (for cron / systemd timers).
+	$(UV) run python scripts/standup_worker.py --once
+
+shots: ## Capture documentation screenshots from the running app (throwaway DB).
+	@bash scripts/screenshots/capture.sh
+
 ui-smoke: ## Build operator-web and run the Playwright UI smoke test.
 	$(PNPM) --filter @daypilot/operator-web build
 	@echo "Serve dist and run: node tests/ui/smoke.mjs http://localhost:8890"
