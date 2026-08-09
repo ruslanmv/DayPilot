@@ -7,6 +7,8 @@
  */
 @import "../../homepilot-theme/src/tokens.css";
 @import "./agents/agents.css";
+@import "./standup/standup.css";
+@import "./slack/slack.css";
 
 * { box-sizing: border-box; }
 
@@ -1320,8 +1322,11 @@
 
 /* --- Settings panel --- */
 .dp-settings-panel {
-  width: min(720px, 100%);
-  max-height: 80vh;
+  /* Wide enough that a connection row — provider, account, sync age and two
+     actions — fits on one line. At 720px "Microsoft Outlook" wrapped and the
+     card grew a third taller than it needed to be. */
+  width: min(880px, 100%);
+  max-height: 86vh;
   display: flex;
   flex-direction: column;
   background: var(--hp-surface);
@@ -1554,7 +1559,12 @@
   height: 100%;
   min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(295px, 340px) minmax(540px, 2fr) minmax(340px, 380px);
+  /* The reading pane is the column that may shrink. Giving it a 540px
+     minimum made the five regions demand ~1400px of their own — more than
+     a 1440px laptop has once the shell's nav is subtracted — so the AI
+     assistant was clipped off the right edge on the most common display
+     this product is used on. */
+  grid-template-columns: 220px minmax(280px, 330px) minmax(0, 2fr) minmax(320px, 370px);
   background: var(--background);
   color: var(--text-primary);
   font-size: 14px;
@@ -1682,13 +1692,16 @@
 .dp-ai .dp-icon-button, .dp-read .dp-icon-button, .dp-composer .dp-icon-button { background: transparent; border: 1px solid transparent; }
 .dp-ai .dp-icon-button:hover, .dp-read .dp-icon-button:hover, .dp-composer .dp-icon-button:hover { background: var(--hover); color: var(--text-primary); }
 
-/* Responsive: collapse mailboxes, then message list; AI becomes a drawer. */
-@media (max-width: 1280px) {
-  .dp-mail { grid-template-columns: minmax(280px, 320px) minmax(520px, 2fr) minmax(320px, 360px); }
+/* Responsive: collapse mailboxes, then message list; AI becomes a drawer.
+   The widths below are viewport widths, but this workspace renders inside the
+   shell's content area — about 288px narrower. The breakpoints include that
+   offset so the collapse happens when the *workspace* runs out of room. */
+@media (max-width: 1568px) {
+  .dp-mail { grid-template-columns: minmax(280px, 320px) minmax(0, 2fr) minmax(320px, 360px); }
   .dp-mbx { display: none; }
 }
-@media (max-width: 980px) {
-  .dp-mail { grid-template-columns: minmax(280px, 340px) minmax(420px, 1fr); }
+@media (max-width: 1268px) {
+  .dp-mail { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
   .dp-ai { position: fixed; top: 0; right: 0; bottom: 0; width: min(360px, 92vw); border-left: 1px solid var(--border-strong); box-shadow: var(--hp-shadow-lg); z-index: 70; }
 }
 
@@ -2782,3 +2795,152 @@
 .dp-plan__check { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .dp-plan__error { margin: 0; font-size: 13px; color: var(--hp-accent-red, #e5484d); }
 @media (max-width: 640px) { .dp-plan__cards { grid-template-columns: 1fr; } }
+
+/* AI activity reads as AI activity, not as another fact about the project. */
+.dp-project-card__ai { color: var(--dp-accent, #2f80ff); }
+.dp-project-card .dp-meta-row > span + span::before { content: '· '; opacity: 0.5; }
+
+/* --- Calendar: connection chip, connect state, and Settings → Calendar ------ */
+
+.dp-calendar-controls__right { display: flex; align-items: center; gap: 12px; }
+
+/* Connection chip — "Outlook · Synced 2m ago ✓" */
+.dp-syncchip { position: relative; }
+.dp-syncchip__btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--surface-subtle); color: var(--text-secondary);
+  border: 1px solid var(--border); font: inherit; font-size: 13px;
+}
+.dp-syncchip__btn:hover { background: var(--hover); color: var(--text-primary); }
+.dp-syncchip__mark { font-size: 14px; }
+.dp-syncchip__tick { font-size: 12px; }
+.dp-syncchip__btn--ok .dp-syncchip__tick { color: var(--hp-accent-green, #2e9e57); }
+.dp-syncchip__btn--warn .dp-syncchip__tick { color: var(--hp-accent-orange, #d98a3a); }
+.dp-syncchip__pop {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 40;
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  min-width: 240px; padding: 14px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  box-shadow: var(--hp-shadow-lg);
+}
+.dp-syncchip__meta { font-size: 12px; color: var(--text-tertiary); }
+
+/* Connect-your-calendar, in place of the grid */
+.dp-calconnect { display: flex; align-items: center; justify-content: center; padding: 48px 24px; }
+.dp-calconnect__card {
+  max-width: 560px; text-align: center; padding: 36px 32px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--border);
+}
+.dp-calconnect__spark { display: block; font-size: 26px; color: var(--accent); margin-bottom: 10px; }
+.dp-calconnect__card h3 { margin: 0 0 10px; font-size: 22px; }
+.dp-calconnect__card p { margin: 0 0 20px; color: var(--text-secondary); line-height: 1.6; }
+.dp-calconnect__actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 18px; }
+.dp-calconnect__cta {
+  padding: 11px 20px; border-radius: 10px; cursor: pointer; font: inherit; font-weight: 600;
+  background: var(--accent); color: #fff; border: 0;
+}
+.dp-calconnect__cta:hover { filter: brightness(1.08); }
+.dp-calconnect__foot { font-size: 12.5px; color: var(--text-tertiary); }
+
+/* Settings → Calendar */
+.dp-cset { display: flex; flex-direction: column; gap: 26px; }
+.dp-cset__section { display: flex; flex-direction: column; gap: 12px; }
+.dp-cset__title { margin: 0; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.dp-cset__lede { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+.dp-cset__note { margin: 4px 0 0; font-size: 12px; color: var(--text-tertiary); line-height: 1.5; }
+.dp-cset__hint { font-size: 12px; color: var(--text-tertiary); cursor: help; }
+.dp-cset__muted { font-size: 12px; color: var(--text-tertiary); }
+
+.dp-cset__cards { display: flex; flex-direction: column; gap: 10px; }
+.dp-cset__conn {
+  display: grid; gap: 8px 12px; align-items: center;
+  grid-template-columns: auto 1fr auto;
+  padding: 14px; border-radius: 12px;
+  background: var(--surface-subtle); border: 1px solid var(--border);
+}
+.dp-cset__conn--empty { background: transparent; }
+.dp-cset__mark {
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px;
+  font-size: 12px; font-weight: 700; color: #fff; background: var(--accent);
+}
+.dp-cset__mark--microsoft_calendar { background: #0f6cbd; }
+.dp-cset__mark--google_calendar { background: #1a73e8; }
+.dp-cset__conn-head { display: flex; align-items: baseline; gap: 10px; }
+.dp-cset__conn-head strong { white-space: nowrap; }
+.dp-cset__conn-body { min-width: 0; }
+.dp-cset__conn-meta {
+  font-size: 12px; color: var(--text-tertiary); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.dp-cset__conn-actions { display: flex; gap: 8px; align-items: center; }
+.dp-cset__conn-actions button { white-space: nowrap; }
+.dp-cset__ok { font-size: 12px; white-space: nowrap; color: var(--hp-accent-green, #2e9e57); }
+.dp-cset__disconnect {
+  grid-column: 2 / -1; justify-self: end; margin-top: -4px;
+  font-size: 12px; color: var(--hp-accent-red, #e5484d);
+}
+
+.dp-cset__row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; }
+.dp-cset__row label { cursor: pointer; }
+.dp-cset__group { display: flex; flex-direction: column; gap: 12px; }
+.dp-cset__group.is-disabled { opacity: 0.5; }
+
+.dp-cset__radios {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  padding: 4px; border-radius: 10px; background: var(--surface-subtle);
+  border: 1px solid var(--border);
+}
+.dp-cset__radio {
+  display: flex; align-items: center; gap: 8px; justify-content: center;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px;
+  white-space: nowrap;
+  background: transparent; color: var(--text-secondary); border: 0;
+}
+.dp-cset__radio.is-on { background: var(--hover); color: var(--text-primary); }
+.dp-cset__dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 1.5px solid var(--text-tertiary); flex: 0 0 auto;
+}
+.dp-cset__radio.is-on .dp-cset__dot { border-color: var(--accent); box-shadow: inset 0 0 0 3px var(--accent); }
+
+.dp-cset__field {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--surface-subtle); border: 1px solid var(--border); font-size: 13.5px;
+}
+.dp-cset__field > span:first-child { flex: 1 1 auto; }
+.dp-cset__select {
+  padding: 6px 10px; border-radius: 8px; font: inherit; font-size: 13px;
+  background: var(--surface); color: var(--text-primary); border: 1px solid var(--border);
+}
+.dp-cset__buffers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.dp-cset__sources {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px;
+  padding: 14px; border-radius: 12px;
+  background: var(--surface-subtle); border: 1px solid var(--border);
+}
+.dp-cset__source { display: flex; align-items: center; gap: 9px; font-size: 13px; cursor: pointer; }
+.dp-cset__source input { accent-color: var(--accent); width: 15px; height: 15px; }
+.dp-cset__source.is-unavailable { opacity: 0.55; cursor: not-allowed; }
+.dp-cset__source-label { flex: 0 1 auto; }
+
+/* Switch — used by the calendar settings toggles */
+.dp-switch {
+  position: relative; width: 38px; height: 22px; flex: 0 0 auto; padding: 0;
+  border-radius: 999px; cursor: pointer; border: 1px solid var(--border);
+  background: var(--surface-subtle); transition: background 0.15s ease;
+}
+.dp-switch.is-on { background: var(--accent); border-color: var(--accent); }
+.dp-switch__knob {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--text-tertiary); transition: transform 0.15s ease, background 0.15s ease;
+}
+.dp-switch.is-on .dp-switch__knob { transform: translateX(16px); background: #fff; }
+
+@media (max-width: 720px) {
+  .dp-cset__sources, .dp-cset__buffers { grid-template-columns: 1fr; }
+  .dp-cset__conn { grid-template-columns: auto 1fr; }
+  .dp-cset__conn-actions { grid-column: 1 / -1; }
+}

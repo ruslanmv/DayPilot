@@ -1,9 +1,12 @@
 """Additional providers behind the one interface (batch I7).
 
-GitHub and Google Calendar, implemented against IntegrationProvider with the same
-capability classification and injectable transports as Slack. Adding a provider
-is a self-contained adapter — no new approval, notification, or gateway logic —
+GitHub, implemented against IntegrationProvider with the same capability
+classification and injectable transports as Slack. Adding a provider is a
+self-contained adapter — no new approval, notification, or gateway logic —
 which is the whole point of Phase 4.
+
+``_BearerProvider`` is the shared OAuth-Bearer plumbing; the calendar providers
+in ``calendars.py`` build on it too.
 """
 from __future__ import annotations
 
@@ -22,7 +25,6 @@ from ..provider import (
 from ..registry import register_provider
 
 GITHUB_API = "https://api.github.com"
-GOOGLE_CAL_API = "https://www.googleapis.com/calendar/v3"
 
 
 class _BearerProvider:
@@ -106,34 +108,4 @@ class GitHubProvider(_BearerProvider):
             return r.json()
 
 
-class GoogleCalendarProvider(_BearerProvider):
-    provider = "calendar"
-    base_url = GOOGLE_CAL_API
-
-    def _verify_path(self) -> str:
-        return "/users/me/calendarList"
-
-    def list_capabilities(self) -> list[Capability]:
-        return [
-            Capability("events.read", CapabilityKind.READ, "Read calendar events."),
-            Capability("events.write", CapabilityKind.WRITE, "Create/move events (approval-gated)."),
-        ]
-
-    def execute(self, action: str, payload: Any) -> Any:
-        if not self._token:
-            raise IntegrationError("not connected")
-        payload = payload or {}
-        cal = payload.get("calendarId", "primary")
-        with self._client() as client:
-            if action == "events.read":
-                r = client.get(f"/calendars/{cal}/events")
-            elif action == "events.write":
-                r = client.post(f"/calendars/{cal}/events", json=payload.get("event", {}))
-            else:
-                raise IntegrationError(f"unknown action '{action}'")
-            r.raise_for_status()
-            return r.json()
-
-
 register_provider("github", lambda: GitHubProvider())
-register_provider("calendar", lambda: GoogleCalendarProvider())

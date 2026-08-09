@@ -12,7 +12,11 @@ from fastapi.testclient import TestClient
 from app.main import app
 from daypilot_knowledge.db import Task, create_engine_from_settings, session_scope
 from daypilot_orchestrator.integrations import notifications as notif
-from daypilot_orchestrator.integrations.providers.extra import GitHubProvider, GoogleCalendarProvider
+from daypilot_orchestrator.integrations.providers.calendars import (
+    GoogleCalendarProvider,
+    MicrosoftCalendarProvider,
+)
+from daypilot_orchestrator.integrations.providers.extra import GitHubProvider
 from daypilot_orchestrator.integrations.registry import available_providers
 from daypilot_orchestrator.integrations.workflows import available_workflows, run_workflow
 
@@ -49,6 +53,15 @@ def test_calendar_provider_capabilities():
     cal = GoogleCalendarProvider()
     caps = {c.id: c.kind.value for c in cal.list_capabilities()}
     assert caps["events.read"] == "read" and caps["events.write"] == "write"
+
+
+def test_both_calendar_providers_answer_to_the_same_capability_ids():
+    # Nothing downstream — planner, brief assembler, UI — should have to branch
+    # on which calendar vendor a workspace happens to use.
+    google = {c.id: c.kind.value for c in GoogleCalendarProvider().list_capabilities()}
+    microsoft = {c.id: c.kind.value for c in MicrosoftCalendarProvider().list_capabilities()}
+    assert google == microsoft
+    assert google["events.write"] == "write"  # so the gateway gates it
 
 
 def test_events_normalize_and_group_by_severity():

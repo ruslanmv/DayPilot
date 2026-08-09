@@ -107,8 +107,10 @@ def main() -> None:
                                     status="connected", auth_type="api_key",
                                     capabilities=["homepilot.persona.chat"]))
         ids: dict[str, str] = {}
+        portraits = 0
         for slug, name, role, status, desc, caps, persona_id in AGENTS:
             portrait = fetch_portrait(persona_id)
+            portraits += 1 if portrait else 0
             snapshot = {"shared": True, "capabilities": caps}
             if portrait:
                 snapshot["avatar_data_uri"] = portrait
@@ -172,7 +174,14 @@ def main() -> None:
         s.add(task("Review inbox and flag priorities", "completed", "medium", 100))
         s.add(task("Pull Q2 data and risk summary", "completed", "medium", 100, cap="research"))
 
-    print("seeded demo agents + Scarlett workspace")
+    print(f"seeded demo agents + Scarlett workspace ({portraits}/{len(AGENTS)} portraits)")
+    # The agents screenshots exist to show portraits. A run that could not reach
+    # the gallery still succeeds — but photographing it would replace the checked-in
+    # images with initials circles, which is a regression nobody asked for and
+    # nobody notices in a diff of PNGs. Say so in a way capture.sh can act on.
+    if portraits == 0:
+        print("PORTRAITS_UNAVAILABLE")
+    return portraits
 
 
 if __name__ == "__main__":

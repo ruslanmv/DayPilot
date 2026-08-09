@@ -17,6 +17,12 @@ import {
   type CalCategory,
   type CalEvent,
 } from './calendarData'
+import {
+  calendarApi,
+  relativeTime,
+  syncLabel,
+  type CalendarStatus,
+} from '../settings/calendarClient'
 
 type Mode = 'day' | 'week'
 
@@ -270,29 +276,152 @@ function WeekView({ timed, allDay, now, onSelect }: { timed: CalEvent[]; allDay:
 
 // ---- shell ------------------------------------------------------------------
 
-export function MinutePlanCalendar({ tasks, onSelect }: { tasks: DayPilotTask[]; onSelect: (task: DayPilotTask) => void }) {
+/**
+ * Connect-your-calendar, shown in place of the grid.
+ *
+ * An empty grid is the wrong empty state: it says "you have nothing on" when
+ * the truth is "DayPilot cannot see your calendar". The offer lives here rather
+ * than in Settings because connecting is the thing worth doing, and making a
+ * user find a settings page first is how features go unused.
+ */
+function ConnectCalendar({ status, onOpenSettings }: {
+  status: CalendarStatus | null
+  onOpenSettings?: () => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const providers = status?.available || [
+    { provider: 'microsoft_calendar', label: 'Microsoft Outlook' },
+    { provider: 'google_calendar', label: 'Google Calendar' },
+  ]
+  const connect = async (provider: string) => {
+    const r = await calendarApi.connect(provider)
+    if (!r.ok) { setError(r.error); return }
+    window.location.assign(r.url)
+  }
+  return (
+    <div className="dp-calconnect">
+      <div className="dp-calconnect__card">
+        <span className="dp-calconnect__spark" aria-hidden="true">✦</span>
+        <h3>Show up prepared for every meeting</h3>
+        <p>
+          Connect your work calendar so DayPilot can plan around real meetings and
+          prepare context, research and talking points before you join.
+        </p>
+        <div className="dp-calconnect__actions">
+          {providers.map((p) => (
+            <button key={p.provider} type="button" className="dp-calconnect__cta"
+                    onClick={() => void connect(p.provider)}>
+              Connect {p.label.replace('Microsoft ', '')}
+            </button>
+          ))}
+        </div>
+        {error && <p className="dp-standupcard__error" role="alert">{error}</p>}
+        <p className="dp-calconnect__foot">
+          Read-only to start. You control what DayPilot may use as AI context, and
+          every calendar change is approved by you.
+        </p>
+        {onOpenSettings && (
+          <button type="button" className="dp-linkbtn" onClick={onOpenSettings}>
+            Calendar settings →
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The connection chip in the header: "Outlook · Synced 2m ago ✓". */
+function SyncChip({ status, onOpenSettings, onSynced }: {
+  status: CalendarStatus
+  onOpenSettings?: () => void
+  onSynced: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const conn = status.connections.find((c) => c.status === 'connected')
+  const tone = status.freshness === 'fresh' ? 'ok' : status.freshness === 'stale' ? 'warn' : 'muted'
+  return (
+    <div className="dp-syncchip">
+      <button type="button" className={'dp-syncchip__btn dp-syncchip__btn--' + tone}
+              aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span className="dp-syncchip__mark" aria-hidden="true">🗓</span>
+        {syncLabel(status)}
+        <span className="dp-syncchip__tick" aria-hidden="true">
+          {status.freshness === 'fresh' ? '✓' : '⚠'}
+        </span>
+      </button>
+      {open && (
+        <div className="dp-syncchip__pop" role="dialog" aria-label="Calendar connection">
+          <strong>{conn?.label || 'Calendar'}</strong>
+          {conn?.account && <span className="dp-syncchip__meta">{conn.account}</span>}
+          <span className="dp-syncchip__meta">Last sync {relativeTime(status.lastSyncAt)}</span>
+          <button type="button" className="dp-linkbtn" disabled={busy} onClick={async () => {
+            setBusy(true); await calendarApi.sync(); onSynced(); setBusy(false); setOpen(false)
+          }}>{busy ? 'Syncing…' : 'Sync now'}</button>
+          {onOpenSettings && (
+            <button type="button" className="dp-linkbtn"
+                    onClick={() => { setOpen(false); onOpenSettings() }}>Calendar settings</button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function MinutePlanCalendar({ tasks, onSelect, onOpenSettings }: {
+  tasks: DayPilotTask[]
+  onSelect: (task: DayPilotTask) => void
+  onOpenSettings?: () => void
+}) {
   const [mode, setMode] = useState<Mode>('day')
   const now = useNow()
   const { timed, allDay } = useMemo(() => calendarEvents(tasks), [tasks])
   const todayIdx = mondayIndex(now)
   const dayEvents = useMemo(() => timed.filter((e) => e.dayIndex === todayIdx), [timed, todayIdx])
 
+  // Connection state decides whether this page shows a grid or an offer.
+  const [status, setStatus] = useState<CalendarStatus | null>(null)
+  const [checked, setChecked] = useState(false)
+  const loadStatus = React.useCallback(() => {
+    calendarApi.status().then((r) => {
+      if (r.ok) setStatus(r.data)
+      setChecked(true)
+    })
+  }, [])
+  useEffect(() => { loadStatus() }, [loadStatus])
+
+  // Only offer the connection once we know there isn't one — flashing the
+  // onboarding card at a connected user on every page load is worse than a
+  // moment of empty grid.
+  const showConnect = checked && !status?.connected && dayEvents.length === 0
+
+  const longDate = now.toLocaleDateString(undefined, {
+    weekday: 'long', month: 'long', day: 'numeric',
+  })
+
   return (
     <section className="dp-calendar-screen dp-cal">
       <div className="dp-calendar-controls">
         <div>
-          <h3>Minute-by-Minute AI Plan</h3>
-          <p>Each block shows owner, source, status, and drawer actions.</p>
+          <h3>Calendar</h3>
+          <p>Your meetings and AI-planned work in one place. · {longDate}</p>
         </div>
-        <div className="dp-calendar-toggle" role="tablist" aria-label="Calendar view">
-          <button type="button" role="tab" aria-selected={mode === 'day'} className={mode === 'day' ? 'is-active' : ''} onClick={() => setMode('day')}>Day</button>
-          <button type="button" role="tab" aria-selected={mode === 'week'} className={mode === 'week' ? 'is-active' : ''} onClick={() => setMode('week')}>Week</button>
+        <div className="dp-calendar-controls__right">
+          {status?.connected && (
+            <SyncChip status={status} onOpenSettings={onOpenSettings} onSynced={loadStatus} />
+          )}
+          <div className="dp-calendar-toggle" role="tablist" aria-label="Calendar view">
+            <button type="button" role="tab" aria-selected={mode === 'day'} className={mode === 'day' ? 'is-active' : ''} onClick={() => setMode('day')}>Day</button>
+            <button type="button" role="tab" aria-selected={mode === 'week'} className={mode === 'week' ? 'is-active' : ''} onClick={() => setMode('week')}>Week</button>
+          </div>
         </div>
       </div>
       <div className="dp-cal__area">
-        {mode === 'day'
-          ? <DayView events={dayEvents} now={now} onSelect={onSelect} />
-          : <WeekView timed={timed} allDay={allDay} now={now} onSelect={onSelect} />}
+        {showConnect
+          ? <ConnectCalendar status={status} onOpenSettings={onOpenSettings} />
+          : mode === 'day'
+            ? <DayView events={dayEvents} now={now} onSelect={onSelect} />
+            : <WeekView timed={timed} allDay={allDay} now={now} onSelect={onSelect} />}
       </div>
     </section>
   )

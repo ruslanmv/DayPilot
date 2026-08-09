@@ -26,6 +26,7 @@ SLACK_API = "https://slack.com/api"
 CAPABILITIES = [
     Capability("chat.read", CapabilityKind.READ, "Read an authorized thread/conversation."),
     Capability("chat.send", CapabilityKind.WRITE, "Send a message (approval-gated)."),
+    Capability("chat.history", CapabilityKind.READ, "Read recent root messages in a channel."),
 ]
 
 
@@ -76,10 +77,49 @@ class SlackProvider:
             data = self._call("GET", "/conversations.replies",
                               params={"channel": payload["channel"], "ts": payload["ts"]})
             return {"messages": [m.get("text", "") for m in data.get("messages", [])]}
+        if action == "chat.history":
+            # Root messages only — a standup reminder is a root message, and its
+            # replies are other people's updates. Structured (not flattened to
+            # text) because thread resolution matches on bot identity and ts,
+            # not only on the wording.
+            params: dict[str, Any] = {
+                "channel": payload["channel"],
+                "limit": int(payload.get("limit") or 50),
+            }
+            for key, slack_key in (("oldest", "oldest"), ("latest", "latest")):
+                if payload.get(key):
+                    params[slack_key] = str(payload[key])
+            data = self._call("GET", "/conversations.history", params=params)
+            return {"messages": [
+                {
+                    "ts": m.get("ts"),
+                    "text": m.get("text", ""),
+                    "botId": m.get("bot_id"),
+                    "user": m.get("user"),
+                    "subtype": m.get("subtype"),
+                    "threadTs": m.get("thread_ts"),
+                }
+                for m in data.get("messages", [])
+            ]}
         if action == "chat.send":
-            data = self._call("POST", "/chat.postMessage",
-                              json={"channel": payload["channel"], "text": payload["text"]})
-            return {"ts": data.get("ts"), "channel": data.get("channel")}
+            # `threadTs` is what makes this a *reply*. Without it Slack posts a
+            # new root message in the channel, which for a standup means shouting
+            # into the channel instead of answering the reminder.
+            body: dict[str, Any] = {"channel": payload["channel"], "text": payload["text"]}
+            if payload.get("threadTs"):
+                body["thread_ts"] = str(payload["threadTs"])
+            # Slack dedupes retries of an identical (channel, text) pair only
+            # within a short window, so the caller's own key is what actually
+            # guarantees one reply per day. It rides along for the audit trail
+            # and is echoed back so the caller can prove which send this was.
+            client_message_id = payload.get("clientMessageId")
+            data = self._call("POST", "/chat.postMessage", json=body)
+            return {
+                "ts": data.get("ts"),
+                "channel": data.get("channel"),
+                "threadTs": body.get("thread_ts"),
+                "clientMessageId": client_message_id,
+            }
         raise IntegrationError(f"unknown action '{action}'")
 
     def get_health(self) -> IntegrationHealth:

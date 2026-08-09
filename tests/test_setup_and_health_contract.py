@@ -89,7 +89,11 @@ def test_sign_out_really_leaves_the_workspace() -> None:
     sign_out_block = gate.split("async function signOut", 1)[1].split("}", 3)[0]
     assert "resolve()" not in sign_out_block
     portal = (UI / "minimalPortal.tsx").read_text(encoding="utf-8")
-    assert "MobilePortal emailEnabled={emailEnabled} user={user} onSignOut={onSignOut}" in portal
+    # The claim is that the phone shell is handed a real sign-out, not that the
+    # prop list never grows — matching the whole line verbatim made every new
+    # feature flag look like a regression here.
+    mobile_props = portal.split("<MobilePortal ", 1)[1].split("/>", 1)[0]
+    assert "onSignOut={onSignOut}" in mobile_props and "user={user}" in mobile_props
     assert "dp-m__navitem--signout" in portal  # mobile drawer Sign out
     env = (REPO / ".env.example").read_text(encoding="utf-8")
     assert "DAYPILOT_REQUIRE_SESSION" in env and "DAYPILOT_COOKIE_SECURE" in env

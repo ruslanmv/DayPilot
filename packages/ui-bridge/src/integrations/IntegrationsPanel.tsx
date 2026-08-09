@@ -1,5 +1,7 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { INTEGRATIONS, type IntegrationRow } from '../settings/settingsData'
+import { StandupSetup } from '../standup/StandupSetup'
+import { standupApi, type StandupWorkflow } from '../standup/standupClient'
 
 const CONNECTED = new Set(['connected', 'default'])
 
@@ -67,6 +69,36 @@ export function IntegrationsPanel() {
           </div>
         )
       })}
+
+      <AutomationsSection />
     </div>
+  )
+}
+
+/**
+ * Automations that run on a schedule, configured against the live API.
+ *
+ * The provider rows above are still local view state; this section is not.
+ * A standup posts into a public channel on a timer, so its channel, signature
+ * and timing have to be the ones the server will actually act on — a seeded
+ * setting that looks configured but is not would post to the wrong place.
+ */
+function AutomationsSection() {
+  const [workflow, setWorkflow] = useState<StandupWorkflow | null>(null)
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    void standupApi.listWorkflows().then((r) => {
+      if (r.ok) setWorkflow(r.data.workflows[0] ?? null)
+      setLoaded(true)
+    })
+  }, [])
+
+  if (!loaded) return null
+  return (
+    <section className="dp-integrations__automations" aria-label="Automations">
+      <h3 className="dp-integrations__automations-title">Automations</h3>
+      <StandupSetup workflow={workflow} onSaved={setWorkflow} />
+    </section>
   )
 }

@@ -55,6 +55,58 @@ class HomePilotClient:
             transport=self.transport,
         )
 
+    def asset_base_url(self) -> str:
+        """Where HomePilot serves files, which is NOT where it serves the API.
+
+        ``/files/...`` is mounted at HomePilot's application root, while
+        ``base_url`` conventionally carries the ``/api`` prefix
+        (``http://homepilot:7860/api``). Joining an asset path onto the API base
+        therefore produces ``/api/files/...`` — a 404 on every install that uses
+        the prefixed form, which is why persona portraits came back empty.
+
+        Only a trailing ``/api`` segment is dropped: a HomePilot reverse-proxied
+        under ``https://host/homepilot/api`` still serves its files from
+        ``https://host/homepilot/files``, so the rest of the path has to stay.
+        """
+        base = (self.base_url or "").rstrip("/")
+        if base.endswith("/api"):
+            base = base[: -len("/api")]
+        return base or self.base_url.rstrip("/")
+
+    # -- assets --------------------------------------------------------------
+    def asset(self, ref: str) -> tuple[bytes, str] | None:
+        """Fetch one persona asset by its HomePilot-relative reference.
+
+        ``ref`` is what a persona's appearance stores — either a bare relative
+        path (``projects/<id>/persona/appearance/thumb_avatar_x.webp``) or an
+        already-rooted ``/files/...`` URL. Returns ``(content, content_type)``,
+        or ``None`` for anything that isn't a usable image so the caller can
+        fall back to initials rather than serve a broken picture.
+        """
+        ref = (ref or "").strip()
+        if not ref:
+            return None
+        path = ref if ref.startswith("/") else f"/files/{ref}"
+        try:
+            with httpx.Client(
+                base_url=self.asset_base_url(),
+                headers=self._headers(),
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as c:
+                r = c.get(path, follow_redirects=True)
+        except httpx.HTTPError:
+            return None
+        if r.status_code != 200 or not r.content:
+            return None
+        content_type = (r.headers.get("content-type") or "").split(";")[0].strip()
+        # HomePilot answers an unauthenticated request for a private file with an
+        # HTML error page and a 200 in some deployments; serving that as an image
+        # gives a broken card instead of an honest fallback.
+        if not content_type.startswith("image/"):
+            return None
+        return r.content, content_type
+
     # -- discovery -----------------------------------------------------------
     def health(self) -> HealthResult:
         """Liveness + identity probe against HomePilot's ``/health``. Never raises."""
