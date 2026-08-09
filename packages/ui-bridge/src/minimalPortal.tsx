@@ -14,25 +14,26 @@ import { StartCodingRun } from './coding/StartCodingRun'
 import { PlanFromIdea } from './design/PlanFromIdea'
 import { DesignReview } from './design/DesignReview'
 import { EmailWorkspace } from './email/EmailWorkspace'
+import { SlackWorkspace } from './slack/SlackWorkspace'
 import { ApprovalCenter } from './approvals/ApprovalCenter'
 import { HomeWorkspace } from './home/HomeWorkspace'
 import { PlanningWorkspace } from './planning/PlanningWorkspace'
 import { AgentsLandingPage } from './agents/AgentsLandingPage'
+import { StandupWorkspace } from './standup/StandupWorkspace'
 import { useRoute, type PortalView } from './shell/route'
 import { OnboardingWizard } from './onboarding/OnboardingWizard'
 import { ProjectWizard, type NewProject } from './projects/ProjectWizard'
+import { fetchTasks, focusCandidate } from './tasksClient'
 import { useProjects } from './useProjects'
 import {
   AI_PLAN_BULLETS,
   AI_SEED,
   AI_WELCOME,
-  CONTINUE_ITEMS,
   HOME_SUGGESTIONS,
-  NEXT_PRIORITY,
-  TODAY_PLAN,
   aiReply,
   type HomeTurn,
 } from './home/homeData'
+import { useHomeDay } from './home/homeLive'
 import type { SettingsSectionId } from './settings/settingsData'
 
 type NavItem = { id: PortalView; label: string; icon: NavIconName }
@@ -45,13 +46,20 @@ const NAV_BASE: NavItem[] = [
   { id: 'documents', label: 'Documents', icon: 'documents' },
   { id: 'agents', label: 'Agents', icon: 'agents' },
 ]
-// Email is an optional, feature-flagged tab (placed before Documents); DayPilot
-// works without it.
+// Email and Slack are optional, feature-flagged tabs, both inserted before
+// Documents; DayPilot works without either. Slack sits after Email because
+// that is the order the day runs in — mail, then the room everyone is in — and
+// it keeps its place when Email is off rather than sliding around.
 const EMAIL_NAV: NavItem = { id: 'email', label: 'Email', icon: 'email' }
-function navViews(emailEnabled: boolean): NavItem[] {
-  if (!emailEnabled) return NAV_BASE
+const SLACK_NAV: NavItem = { id: 'slack', label: 'Slack', icon: 'slack' }
+function navViews(emailEnabled: boolean, slackEnabled: boolean = false): NavItem[] {
+  const optional = [
+    ...(emailEnabled ? [EMAIL_NAV] : []),
+    ...(slackEnabled ? [SLACK_NAV] : []),
+  ]
+  if (optional.length === 0) return NAV_BASE
   const docsIndex = NAV_BASE.findIndex((n) => n.id === 'documents')
-  return [...NAV_BASE.slice(0, docsIndex), EMAIL_NAV, ...NAV_BASE.slice(docsIndex)]
+  return [...NAV_BASE.slice(0, docsIndex), ...optional, ...NAV_BASE.slice(docsIndex)]
 }
 
 // PortalView + the hash router live in ./shell/route (Batch A3).
@@ -65,6 +73,9 @@ type SpaceBridgeShellProps = {
   compact?: boolean
   /** Optional Email tab. DayPilot works fully without it. */
   emailEnabled?: boolean
+  /** Optional Slack communication workspace. Off unless the deployment turns it
+   *  on, and the API has its own flag that must agree. */
+  slackEnabled?: boolean
   /** Sign out of the DayPilot workspace (separate from disconnecting an AI
    *  provider). Provided by the auth gate; when absent, Sign out opens the
    *  profile settings (local-first default). */
@@ -152,7 +163,7 @@ function createAiTask(input: string): DayPilotTask {
   }
 }
 
-type NavIconName = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'email' | 'documents' | 'agents' | 'settings'
+type NavIconName = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'email' | 'slack' | 'documents' | 'agents' | 'settings'
 
 function NavIcon({ name }: { name: NavIconName }) {
   const p: Record<NavIconName, React.ReactNode> = {
@@ -162,6 +173,9 @@ function NavIcon({ name }: { name: NavIconName }) {
     tasks: <><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.4 2.4L16 9.5" /></>,
     projects: <><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M3.5 9.5h17M9 4.5v15" /></>,
     email: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 6.5 8 6 8-6" /></>,
+    // Slack's four-lozenge mark, drawn as strokes so it inherits the nav's
+    // colour and active state like every other icon here.
+    slack: <><path d="M6.5 14.5h-2a2 2 0 1 0 2 2Z" /><path d="M9.5 14.5a2 2 0 1 1 4 0v5a2 2 0 1 1-4 0Z" /><path d="M9.5 6.5v2a2 2 0 1 1-2-2Z" /><path d="M9.5 9.5a2 2 0 1 1 0 4h-5a2 2 0 1 1 0-4Z" /><path d="M17.5 9.5h2a2 2 0 1 0-2-2Z" /><path d="M14.5 9.5a2 2 0 1 1-4 0v-5a2 2 0 1 1 4 0Z" /><path d="M14.5 17.5v-2a2 2 0 1 1 2 2Z" /><path d="M14.5 14.5a2 2 0 1 1 0-4h5a2 2 0 1 1 0 4Z" /></>,
     documents: <><path d="M6 3h7l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M13 3v5h5M8.5 13h7M8.5 16.5h7" /></>,
     agents: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.5 3.1-5.5 7-5.5s7 2 7 5.5" /></>,
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 13.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.1a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9Z" /></>,
@@ -320,8 +334,12 @@ function LiveContext({ projects, agents }: { projects: DayPilotProject[]; agents
 
 /** Minute Plan calendar — professional Day + Week timetable with an
  *  Outlook-style live current-time indicator (see calendar/MinutePlanCalendar). */
-function CalendarCore({ tasks, onSelect }: { tasks: DayPilotTask[]; onSelect: (task: DayPilotTask) => void }) {
-  return <MinutePlanCalendar tasks={tasks} onSelect={onSelect} />
+function CalendarCore({ tasks, onSelect, onOpenSettings }: {
+  tasks: DayPilotTask[]
+  onSelect: (task: DayPilotTask) => void
+  onOpenSettings?: () => void
+}) {
+  return <MinutePlanCalendar tasks={tasks} onSelect={onSelect} onOpenSettings={onOpenSettings} />
 }
 
 function LedgerCard({ task, onSelect }: { task: DayPilotTask; onSelect: () => void }) {
@@ -414,8 +432,15 @@ function ProjectsCore({ projects, documents, onSelect, onNew }: {
               <span className={cx('dp-tag', riskClass(project.risk))}>{project.status}</span>
             </div>
             <div className="dp-progress"><span style={{ width: `${project.progress}%` }} /></div>
-            <div className="dp-meta-row"><span>{project.progress}%</span><span>{project.aiActivity}</span><span>{project.continueAction}</span></div>
-            <p>{project.nextHumanAction}</p>
+            {/* Only the parts that exist, each in its own cell — rendering the
+                empty ones ran the AI activity and the continue action together
+                into one unreadable sentence. */}
+            <div className="dp-meta-row">
+              <span>{project.progress}%</span>
+              {project.aiActivity && <span className="dp-project-card__ai">✦ {project.aiActivity}</span>}
+              {project.continueAction && <span>{project.continueAction}</span>}
+            </div>
+            {project.nextHumanAction && <p><strong>Next:</strong> {project.nextHumanAction}</p>}
             <div className="dp-project-documents">
               {documents.filter((document) => document.projectId === project.id).slice(0, 3).map((document) => <span key={document.id}>{document.name}</span>)}
             </div>
@@ -549,12 +574,12 @@ function DetailDrawer({ selected, documents, onClose }: { selected?: DrawerItem;
   )
 }
 
-export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSignOut, user }: SpaceBridgeShellProps) {
+export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackEnabled = false, onSignOut, user }: SpaceBridgeShellProps) {
   const isMobile = useIsMobile()
   // Apply the persisted theme (dark by default) so the shell is consistent even
   // when the host app didn't call initTheme() itself.
   useEffect(() => { initTheme() }, [])
-  const NAV_VIEWS = navViews(emailEnabled)
+  const NAV_VIEWS = navViews(emailEnabled, slackEnabled)
   // Deep-linkable hash routing (Batch A3). `setView` keeps the old call sites
   // working; navigating also updates the URL and browser history.
   const { route, navigate } = useRoute()
@@ -562,6 +587,15 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
   const setView = navigate
   const [messages, setMessages] = useState<DayPilotMessage[]>(seedMessages)
   const [tasks, setTasks] = useState<DayPilotTask[]>(seedTasks)
+  // Calendar, Tasks and Focus Mode all read this list. Outside demo mode it
+  // seeds empty, so without this the three views are blank and Home's
+  // "Start focus" button has nothing to open.
+  useEffect(() => {
+    if (isDemoMode()) return
+    let cancelled = false
+    fetchTasks().then((rows) => { if (!cancelled && rows.length) setTasks(rows) })
+    return () => { cancelled = true }
+  }, [])
   const { projects, setProjects, reload: reloadProjects, createProject } = useProjects(seedProjects)
   const documents = useMemo(seedDocuments, [])
   const documentSources = useMemo(seedDocumentSources, [])
@@ -598,7 +632,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
   }
 
   function startFocusMode() {
-    const target = tasks.find((task) => task.title.includes('Deep Coding')) ?? tasks[0]
+    const target = focusCandidate(tasks)
     if (target) setFocusTask(target)
   }
 
@@ -669,7 +703,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
 
   // Phones get a dedicated ChatGPT-style shell (hamburger drawer, single-page
   // views, full-screen AI) rather than a squeezed desktop layout.
-  if (isMobile) return <MobilePortal emailEnabled={emailEnabled} user={user} onSignOut={onSignOut} />
+  if (isMobile) return <MobilePortal emailEnabled={emailEnabled} slackEnabled={slackEnabled} user={user} onSignOut={onSignOut} />
 
   return (
     <div className={cx('dp-shell', compact && 'dp-shell--compact')}>
@@ -713,13 +747,19 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
           />
         ) : (
           <>
-            <header className="dp-topbar">
-              <div>
-                <h2>{view === 'planning' ? 'Day Planner' : view === 'calendar' ? 'Minute Plan' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : view === 'email' ? 'Email' : 'Agents'}</h2>
-                <p>DayPilot = Calendar + Tasks + Projects + Agents + Documents + Natural Tools.</p>
-              </div>
-              <span className="dp-pill">NOW · DOCUMENTS · AI RUNNING · APPROVALS</span>
-            </header>
+            {/* Calendar and Slack own their whole headers — title, connection
+                chip and the view's own controls belong on one row there, and a
+                second generic title above it just repeats the nav item you
+                already clicked. */}
+            {view !== 'calendar' && view !== 'slack' && (
+              <header className="dp-topbar">
+                <div>
+                  <h2>{view === 'planning' ? 'Day Planner' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : view === 'email' ? 'Email' : view === 'standup' ? 'Daily Standup' : 'Agents'}</h2>
+                  <p>DayPilot = Calendar + Tasks + Projects + Agents + Documents + Natural Tools.</p>
+                </div>
+                <span className="dp-pill">NOW · DOCUMENTS · AI RUNNING · APPROVALS</span>
+              </header>
+            )}
 
             <div className="dp-view">
               {view === 'planning' && <PlanningWorkspace onStartFocus={startFocusMode} onNavigate={(t) => {
@@ -728,7 +768,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
                 else if (t === 'new-project') setProjectWizardOpen(true)
                 else if (t === 'settings-profile') setSettingsSection('profile')
               }} />}
-              {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
+              {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} onOpenSettings={() => setSettingsSection('calendar')} />}
               {view === 'tasks' && <OperationalLedger tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
               {view === 'projects' && <ProjectsCore projects={projects} documents={documents} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
               {view === 'documents' && <DocumentsCore sources={documentSources} documents={documents} onSelect={(item) => setSelected({ kind: 'document', item })} />}
@@ -740,6 +780,8 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, onSign
                 />
               )}
               {view === 'email' && <EmailWorkspace />}
+              {view === 'slack' && <SlackWorkspace onOpenSettings={() => setSettingsSection('slack')} />}
+              {view === 'standup' && <StandupWorkspace />}
             </div>
           </>
         )}
@@ -810,16 +852,19 @@ const MOBILE_TITLES: Record<PortalView, string> = {
   email: 'Email',
   documents: 'Documents',
   agents: 'Agents',
+  slack: 'Slack',
+  standup: 'Standup',
 }
 
 const RECENT_AI = isDemoMode() ? ['Email workspace status', 'Prepare Client Alpha meeting', "Today's plan"] : []
 
-function MobilePortal({ emailEnabled, user, onSignOut }: {
+function MobilePortal({ emailEnabled, slackEnabled, user, onSignOut }: {
   emailEnabled: boolean
+  slackEnabled: boolean
   user?: { displayName?: string | null; email?: string | null; role?: string | null } | null
   onSignOut?: () => void
 }) {
-  const NAV = navViews(emailEnabled)
+  const NAV = navViews(emailEnabled, slackEnabled)
   // Deep-linkable hash routing (Batch A3); shared with the desktop shell.
   const { route, navigate } = useRoute()
   const view = route.view
@@ -827,7 +872,13 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [aiSeed, setAiSeed] = useState<string | undefined>()
-  const [tasks] = useState<DayPilotTask[]>(seedTasks)
+  const [tasks, setTasks] = useState<DayPilotTask[]>(seedTasks)
+  useEffect(() => {
+    if (isDemoMode()) return
+    let cancelled = false
+    fetchTasks().then((rows) => { if (!cancelled && rows.length) setTasks(rows) })
+    return () => { cancelled = true }
+  }, [])
   const { projects, setProjects, createProject } = useProjects(seedProjects)
   const documents = useMemo(seedDocuments, [])
   const documentSources = useMemo(seedDocumentSources, [])
@@ -868,7 +919,7 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
     setDrawerOpen(false)
   }
   function startFocus() {
-    const target = tasks.find((t) => t.title.includes('Deep Coding')) ?? tasks[0]
+    const target = focusCandidate(tasks)
     if (target) setFocusTask(target)
   }
 
@@ -894,7 +945,7 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
           else if (t === 'new-project') setProjectWizardOpen(true)
           else if (t === 'settings-profile') setSettingsSection('profile')
         }} />}
-        {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
+        {view === 'calendar' && <CalendarCore tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} onOpenSettings={() => setSettingsSection('calendar')} />}
         {view === 'tasks' && <OperationalLedger tasks={tasks} onSelect={(item) => setSelected({ kind: 'task', item })} />}
         {view === 'projects' && <ProjectsCore projects={projects} documents={documents} onSelect={(item) => setSelected({ kind: 'project', item })} onNew={() => setProjectWizardOpen(true)} />}
         {view === 'documents' && <DocumentsCore sources={documentSources} documents={documents} onSelect={(item) => setSelected({ kind: 'document', item })} />}
@@ -906,6 +957,8 @@ function MobilePortal({ emailEnabled, user, onSignOut }: {
           />
         )}
         {view === 'email' && <EmailWorkspace />}
+        {view === 'slack' && <SlackWorkspace onOpenSettings={() => setSettingsSection('slack')} />}
+        {view === 'standup' && <StandupWorkspace />}
       </main>
 
       {/* Off-canvas navigation drawer */}
@@ -986,24 +1039,32 @@ function MobileHome({ onStartFocus, onNavigate, onAsk }: {
   onNavigate: (view: PortalView) => void
   onAsk: (seed?: string) => void
 }) {
+  // Same day as the desktop Home, from the same endpoints — a phone that
+  // disagreed with the laptop about what is next would be worse than useless.
+  const day = useHomeDay()
+  const priority = day.priority
   return (
     <div className="dp-m__page">
       <section className="dp-m__ready">
-        <h2 className="dp-m__ready-title"><span className="dp-m__ready-icon" aria-hidden="true">☼</span> {NEXT_PRIORITY ? 'Your day is ready' : 'Ready when you are'}</h2>
-        <p className="dp-m__ready-sub">{NEXT_PRIORITY ? 'Focus on your top priority and keep the momentum.' : 'No plan yet for today. Ask the assistant to generate one.'}</p>
+        <h2 className="dp-m__ready-title"><span className="dp-m__ready-icon" aria-hidden="true">☼</span> {priority ? 'Your day is ready' : 'Ready when you are'}</h2>
+        <p className="dp-m__ready-sub">{priority ? 'Focus on your top priority and keep the momentum.' : 'No plan yet for today. Ask the assistant to generate one.'}</p>
       </section>
 
-      {NEXT_PRIORITY && (
+      {priority && (
         <section className="dp-m__card">
           <div className="dp-m__label">Next priority</div>
           <div className="dp-m__np">
             <span className="dp-m__np-icon" aria-hidden="true">🖥</span>
             <div className="dp-m__np-body">
-              <div className="dp-m__np-title">{NEXT_PRIORITY.title}</div>
-              <div className="dp-m__np-meta"><span>🗓 {NEXT_PRIORITY.time}</span><span className="dp-m__dot">·</span><span className="dp-chip">{NEXT_PRIORITY.project}</span></div>
+              <div className="dp-m__np-title">{priority.title}</div>
+              <div className="dp-m__np-meta">
+                {priority.time && <span>🗓 {priority.time}</span>}
+                {priority.time && priority.project && <span className="dp-m__dot">·</span>}
+                {priority.project && <span className="dp-chip">{priority.project}</span>}
+              </div>
             </div>
           </div>
-          <p className="dp-m__np-support">{NEXT_PRIORITY.support}</p>
+          {priority.support && <p className="dp-m__np-support">{priority.support}</p>}
           <button className="dp-m__cta" onClick={onStartFocus}>▶ Start focus</button>
           <button className="dp-m__ghostlink" onClick={() => onNavigate('projects')}>View project ↗</button>
         </section>
@@ -1011,10 +1072,10 @@ function MobileHome({ onStartFocus, onNavigate, onAsk }: {
 
       <section className="dp-m__card">
         <h3 className="dp-m__card-title"><span aria-hidden="true">🗓</span> Today's plan</h3>
-        {TODAY_PLAN.length > 0 ? (
+        {day.agenda.length > 0 ? (
           <ul className="dp-m__agenda">
-            {TODAY_PLAN.map((item) => (
-              <li key={item.time} className="dp-m__agenda-row" onClick={() => onNavigate('planning')}>
+            {day.agenda.map((item, i) => (
+              <li key={`${item.time}-${i}`} className="dp-m__agenda-row" onClick={() => onNavigate('planning')}>
                 <span className="dp-m__agenda-dot" aria-hidden="true" />
                 <span className="dp-m__agenda-time">{item.time}</span>
                 <span className="dp-m__agenda-title">{item.title}</span>
@@ -1032,8 +1093,8 @@ function MobileHome({ onStartFocus, onNavigate, onAsk }: {
       <section className="dp-m__card">
         <h3 className="dp-m__card-title"><span aria-hidden="true">⟳</span> Continue from yesterday</h3>
         <div className="dp-m__continue">
-          {CONTINUE_ITEMS.length === 0 && <p className="dp-m__card-empty">Nothing carried over yet.</p>}
-          {CONTINUE_ITEMS.map((c) => (
+          {day.continues.length === 0 && <p className="dp-m__card-empty">Nothing carried over yet.</p>}
+          {day.continues.map((c) => (
             <button key={c.id} className="dp-m__cont" onClick={() => onNavigate('projects')}>
               <span className={'dp-m__cont-icon dp-continue__icon--' + c.accent} aria-hidden="true">{c.icon}</span>
               <span className="dp-m__cont-body">

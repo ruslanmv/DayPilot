@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 
 import { agentStatusLabel, type AgentProfile } from '../../settings/homepilotClient'
+import { AgentPortrait } from '../AgentPortrait'
 
 /**
  * Agent workspace identity header (Batch A4, restyled). Large portrait with a
@@ -18,11 +19,11 @@ export function AgentWorkspaceHeader({ agent }: { agent: AgentProfile }) {
 
   return (
     <header className="dp-agentws__head">
-      <div className={'dp-agentws__portrait dp-agentcard__portrait--' + agent.status} aria-hidden="true">
-        {agent.avatarUrl
-          ? <img src={agent.avatarUrl} alt="" />
-          : <span className="dp-agentcard__initials">{agent.name.slice(0, 2).toUpperCase()}</span>}
-      </div>
+      <AgentPortrait
+        name={agent.name}
+        avatarUrl={agent.avatarUrl}
+        className={'dp-agentws__portrait dp-agentcard__portrait--' + agent.status}
+      />
       <div className="dp-agentws__ident">
         <h2 className="dp-agentws__name" tabIndex={-1} ref={headingRef}>
           {agent.name}

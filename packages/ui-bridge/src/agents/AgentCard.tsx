@@ -1,6 +1,7 @@
 import React from 'react'
 
 import { agentStatusLabel, type AgentProfile } from '../settings/homepilotClient'
+import { AgentPortrait } from './AgentPortrait'
 import { capabilityIcon } from './agentIcons'
 
 /**
@@ -13,19 +14,16 @@ import { capabilityIcon } from './agentIcons'
  * dedicated workspace on a separate page — never an inline chat or side panel.
  * Status is text AND colour (never colour alone).
  */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2)
-  return parts.map((p) => p[0]?.toUpperCase() || '').join('') || 'A'
-}
-
 export function AgentCard({
   agent,
   onOpen,
   onToggleFavorite,
+  onToggleEnabled,
 }: {
   agent: AgentProfile
   onOpen: (a: AgentProfile) => void
   onToggleFavorite: (a: AgentProfile) => void
+  onToggleEnabled: (a: AgentProfile) => void
 }) {
   const statusText = agentStatusLabel(agent.status)
   const chips = agent.capabilities.slice(0, 3)
@@ -42,11 +40,11 @@ export function AgentCard({
       }}
     >
       <div className="dp-agentcard__top">
-        <div className={'dp-agentcard__portrait dp-agentcard__portrait--' + agent.status} aria-hidden="true">
-          {agent.avatarUrl
-            ? <img src={agent.avatarUrl} alt="" loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-            : <span className="dp-agentcard__initials">{initials(agent.name)}</span>}
-        </div>
+        <AgentPortrait
+          name={agent.name}
+          avatarUrl={agent.avatarUrl}
+          className={'dp-agentcard__portrait dp-agentcard__portrait--' + agent.status}
+        />
         <div className="dp-agentcard__badges">
           <span className={'dp-agentcard__status dp-agentcard__status--' + agent.status}>
             <span className="dp-agentcard__status-dot" aria-hidden="true" />{statusText}
@@ -76,6 +74,25 @@ export function AgentCard({
           ))}
         </div>
       )}
+
+      {/* Synced agents arrive disabled on purpose — adding an agent to DayPilot
+          is a deliberate act, not a side effect of connecting HomePilot. That
+          only works if the directory offers the deliberate act: without this
+          button the backend toggle was unreachable and every card stayed
+          "Disabled" with no way forward. */}
+      <div className="dp-agentcard__actions">
+        <button
+          type="button"
+          className={'dp-agentcard__enable' + (agent.enabled ? ' is-on' : '')}
+          aria-pressed={agent.enabled}
+          aria-label={agent.enabled
+            ? `Turn off ${agent.name}`
+            : `Turn on ${agent.name} so you can chat with them`}
+          onClick={(e) => { e.stopPropagation(); onToggleEnabled(agent) }}
+        >
+          {agent.enabled ? 'Turn off' : 'Turn on'}
+        </button>
+      </div>
     </div>
   )
 }

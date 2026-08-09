@@ -218,13 +218,24 @@ def patch_profile(link_id: str, body: ProfilePatch, session: Session = Depends(g
 
 @router.get("/v1/agents/profiles/{link_id}/avatar")
 def get_avatar(link_id: str, workspaceId: str = "default", session: Session = Depends(get_session)) -> Response:
+    """Proxy one persona portrait. The browser never reaches HomePilot itself.
+
+    A directory of a few dozen agents means a few dozen of these per page load,
+    each a round trip to HomePilot, so the response is cacheable: portraits are
+    immutable once committed and only change when the persona is re-synced.
+    """
     _require_runtime()
     result = hp.fetch_avatar(session, workspaceId, link_id)
     if result is None:
-        # No avatar — the UI falls back to initials.
-        return Response(status_code=204)
+        # No avatar — the UI falls back to initials. 404 rather than 204 so the
+        # <img> onError handler fires reliably across browsers.
+        return Response(status_code=404)
     content, content_type = result
-    return Response(content=content, media_type=content_type)
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 # ---- agent chat (A6) --------------------------------------------------------

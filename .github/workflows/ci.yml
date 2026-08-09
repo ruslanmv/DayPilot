@@ -8,6 +8,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege by default. The token only ever needs to read the checkout;
+# any job that needs more asks for it explicitly below.
+permissions:
+  contents: read
+
 jobs:
   python:
     name: Python tests & lint
@@ -28,6 +33,14 @@ jobs:
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest
+    # On a pull request gitleaks-action lists the PR's commits to scan only what
+    # the PR added, which needs `pull-requests: read`. Without it the API returns
+    # 403 "Resource not accessible by integration" and the job fails before it
+    # has scanned anything — a green-looking pipeline with no secret scan is the
+    # worst outcome here, so the scope is granted rather than the step skipped.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,6 +49,13 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Findings belong in the job log and its exit status, not in PR
+          # comments: commenting would need `pull-requests: write`, and a bot
+          # that can write to a PR is a bigger grant than a secret scanner needs.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          # The run summary is where a reviewer looks instead, and it needs no
+          # extra permission.
+          GITLEAKS_ENABLE_SUMMARY: "true"
 
   frontend:
     name: TypeScript build & typecheck

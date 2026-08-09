@@ -124,7 +124,12 @@ def sync_agents(
         link.source_version = norm["source_version"]
         link.last_synced_at = now
         link.last_seen_at = now
-        link.snapshot_json = {"shared": norm["shared"], "capabilities": norm["capabilities"]}
+        # Merge, never replace: an agent imported from a .hpersona package keeps
+        # its portrait in ``avatar_data_uri``, and a sync that overwrote the whole
+        # snapshot silently deleted it — the card went blank on the next pass.
+        snapshot = dict(link.snapshot_json or {})
+        snapshot.update({"shared": norm["shared"], "capabilities": norm["capabilities"]})
+        link.snapshot_json = snapshot
         link.status = _derive_status(link.enabled, norm["shared"])
         synced += 1
 

@@ -25,7 +25,16 @@ def enqueue(
     workspace_id: str = "default",
     max_attempts: int = 3,
     priority: int = 0,
+    run_after: datetime | None = None,
 ) -> Job:
+    """Enqueue a durable job, optionally deferred.
+
+    ``run_after`` (naive UTC) holds the job until that moment — the same column
+    the retry backoff already uses, so a deferred job is claimed by exactly the
+    same worker loop with no second scheduling mechanism. Recurring work is
+    modelled by enqueuing the *next* occurrence when one runs, never by
+    materialising months of future jobs.
+    """
     job = Job(
         workspace_id=workspace_id,
         kind=kind,
@@ -33,7 +42,7 @@ def enqueue(
         state="queued",
         max_attempts=max_attempts,
         priority=priority,
-        run_after=datetime.utcnow(),
+        run_after=run_after or datetime.utcnow(),
     )
     session.add(job)
     session.flush()

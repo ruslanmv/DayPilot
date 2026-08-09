@@ -43,6 +43,15 @@ export function apiBase(): string {
   return base.endsWith('/') ? base.slice(0, -1) : base
 }
 
+/**
+ * The optional Slack communication workspace. Off unless explicitly turned on,
+ * and the server has its own flag — a UI tab whose API returns 404 is worse
+ * than no tab, so both have to agree before the feature exists.
+ */
+export function isSlackWorkspaceEnabled(): boolean {
+  return String(readEnv().VITE_DAYPILOT_SLACK_WORKSPACE_ENABLED ?? '').toLowerCase() === 'true'
+}
+
 /** Workspace the shell operates on (single-tenant default for local dev). */
 export function workspaceId(): string {
   return String(readEnv().VITE_DAYPILOT_WORKSPACE_ID ?? '').trim() || 'default'

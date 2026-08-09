@@ -831,27 +831,18 @@ def fetch_avatar(session: Session, workspace_id: str, link_id: str) -> tuple[byt
     embedded = decode_avatar_data_uri((link.snapshot_json or {}).get("avatar_data_uri"))
     if embedded is not None:
         return embedded
-    ref = link.thumbnail_ref or link.avatar_ref
-    if not ref:
-        return None
     row = _get_connection(session, workspace_id, link.connection_id)
     if row is None:
         return None
     client = _client_for(row)
     if client is None:
         return None
-    import httpx
-
-    secret = _secret(row.id)
-    base = (secret.get("base_url") or _default_base_url()).rstrip("/")
-    # HomePilot serves project assets under /files/<relative-path>.
-    url_path = ref if ref.startswith("/") else f"/files/{ref}"
-    try:
-        with httpx.Client(base_url=base, headers={"Authorization": f"Bearer {secret.get('api_key','')}"}
-                          if secret.get("api_key") else {}, timeout=10.0) as c:
-            r = c.get(url_path)
-        if r.status_code != 200 or not r.content:
-            return None
-        return r.content, r.headers.get("content-type", "image/webp")
-    except (httpx.HTTPError, ValueError):
-        return None
+    # Thumbnail first (256px, what the card actually needs), full portrait as the
+    # fallback for a persona committed before thumbnails existed.
+    for ref in (link.thumbnail_ref, link.avatar_ref):
+        if not ref:
+            continue
+        found = client.asset(ref)
+        if found is not None:
+            return found
+    return None

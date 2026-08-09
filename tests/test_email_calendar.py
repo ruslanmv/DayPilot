@@ -205,6 +205,9 @@ def test_create_task_from_email(monkeypatch):
 
 def test_calendar_detects_overlapping_events():
     ws = _ws()
+    # Syncing is an explicit POST now: reading the calendar used to perform the
+    # upsert as a side effect, which made rendering it a write.
+    assert client.post(f"/v1/calendar/sync?workspaceId={ws}").json()["synced"] == 3
     body = client.get(f"/v1/calendar/events?workspaceId={ws}").json()
     assert len(body["items"]) == 3
     # The seeded 09:00-10:00 and 09:30-11:00 events overlap.

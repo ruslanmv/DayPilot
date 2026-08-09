@@ -8,8 +8,10 @@
 export type SettingsSectionId =
   | 'profile'
   | 'integrations'
+  | 'calendar'
   | 'providers'
   | 'mail'
+  | 'slack'
   | 'sources'
   | 'homepilot'
   | 'appearance'
@@ -35,7 +37,7 @@ export type IntegrationRow = {
 export const INTEGRATIONS: IntegrationRow[] = [
   { name: 'Ollabridge', role: 'Default LLM provider', state: 'default', detail: 'OpenAI-compatible routing for local, hybrid, and cloud models.', capabilities: ['chat.completions', 'models.list'], lastActivity: '2 min ago', authType: 'api_key' },
   { name: 'GitPilot', role: 'Default coding bridge', state: 'connected', detail: 'Retro-compatible runs with Ask/Auto/Plan modes and controlled diffs.', capabilities: ['repo.read', 'branch.create', 'patch.propose'], lastActivity: '1 h ago', authType: 'oauth' },
-  { name: 'Slack', role: 'Team messaging', state: 'available', detail: 'Draft replies to mentions and DMs — approval-gated, never auto-sends.', authType: 'oauth' },
+  { name: 'Slack', role: 'Team messaging', state: 'available', detail: 'Trace the conversations you choose, see what needs you, and draft replies — approval-gated, never auto-sends. Configure it in Settings → Slack.', authType: 'oauth' },
   { name: 'GitHub', role: 'Repositories & CI', state: 'connected', detail: 'Read repos, watch checks; writes and PRs require approval.', capabilities: ['repo.read', 'checks.read', 'pr.create'], lastActivity: '12 min ago', authType: 'oauth' },
   { name: 'Google Calendar', role: 'Calendar', state: 'connected', detail: 'Read events and detect conflicts; creates/moves require approval.', capabilities: ['events.read', 'events.write'], lastActivity: '5 min ago', authType: 'oauth' },
   { name: 'Claude Code', role: 'Optional coding executor', state: 'available', detail: 'Enable to route coding blocks through Claude Code.', authType: 'api_key' },

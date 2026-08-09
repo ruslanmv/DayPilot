@@ -34,5 +34,6 @@ def is_registered(name: str) -> bool:
 
 # Register built-in providers on import.
 from .providers import reference as _reference  # noqa: E402,F401  (side-effect: registers)
-from .providers import extra as _extra  # noqa: E402,F401  (side-effect: registers github, calendar)
+from .providers import extra as _extra  # noqa: E402,F401  (side-effect: registers github)
+from .providers import calendars as _calendars  # noqa: E402,F401  (side-effect: registers calendars)
 from .providers.slack import adapter as _slack  # noqa: E402,F401  (side-effect: registers)

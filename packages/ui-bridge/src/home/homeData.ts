@@ -11,7 +11,7 @@ export type ContinueItem = {
   accent: 'blue' | 'purple' | 'green'
 }
 
-type NextPriority = { title: string; project: string; time: string; support: string } | null
+export type NextPriority = { title: string; project: string; time: string; support: string } | null
 
 const DEMO_NEXT_PRIORITY: NextPriority = {
   title: 'Continue DayPilot UI implementation',

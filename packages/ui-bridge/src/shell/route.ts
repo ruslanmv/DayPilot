@@ -11,8 +11,9 @@ import { useCallback, useEffect, useState } from 'react'
  */
 export type PortalView =
   | 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'documents' | 'agents' | 'email'
+  | 'slack' | 'standup'
 
-const VIEWS: PortalView[] = ['home', 'planning', 'calendar', 'tasks', 'projects', 'documents', 'agents', 'email']
+const VIEWS: PortalView[] = ['home', 'planning', 'calendar', 'tasks', 'projects', 'documents', 'agents', 'email', 'slack', 'standup']
 
 export type Route = { view: PortalView; agentId: string | null }
 
