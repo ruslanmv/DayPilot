@@ -195,6 +195,67 @@ def test_local_probe_connected_when_models_listed():
     assert res["code"] == "connected" and res["models"] == ["llama3", "qwen2.5"]
 
 
+def test_scan_ports_defaults_and_parsing(monkeypatch):
+    monkeypatch.delenv("DAYPILOT_PROVIDER_PORT_SCAN", raising=False)
+    assert pp._scan_ports() == list(range(8000, 8011))  # 8000–8010 inclusive
+    monkeypatch.setenv("DAYPILOT_PROVIDER_PORT_SCAN", "8000,8001,8080")
+    assert pp._scan_ports() == [8000, 8001, 8080]
+    monkeypatch.setenv("DAYPILOT_PROVIDER_PORT_SCAN", "9000-9002")
+    assert pp._scan_ports() == [9000, 9001, 9002]
+    # A garbage value falls back rather than raising into the probe path.
+    monkeypatch.setenv("DAYPILOT_PROVIDER_PORT_SCAN", "not-a-range")
+    assert pp._scan_ports() == list(range(8000, 8011))
+
+
+def test_port_scan_roots_are_localhost_only_and_exclude_the_configured_port(monkeypatch):
+    monkeypatch.setenv("DAYPILOT_PROVIDER_PORT_SCAN", "8000-8002")
+    roots = pp._port_scan_roots("http://localhost:8000")
+    # The configured port is not re-probed; the rest of the range is.
+    assert "http://localhost:8000" not in roots
+    assert "http://localhost:8001" in roots and "http://localhost:8002" in roots
+    # A non-loopback host is never port-scanned (that would be a real port sweep).
+    assert pp._port_scan_roots("http://192.168.1.5:8000") == []
+
+
+def test_local_probe_finds_a_gateway_on_a_nearby_port(monkeypatch):
+    """The reported symptom: the configured port is dead, but a working gateway
+    is one port over. The probe scans the bounded range and resolves to it."""
+    srv, base = _tiny_gateway(200, {"data": [{"id": "llama3.1"}]})
+    live_port = srv.server_address[1]
+    # Point the configured URL at a port nothing is listening on, and put the
+    # live gateway's real port in the scan range.
+    monkeypatch.setenv("DAYPILOT_PROVIDER_PORT_SCAN", str(live_port))
+    try:
+        res = pp._probe_local("http://localhost:9/v1", None)
+    finally:
+        srv.shutdown()
+    assert res["code"] == "connected" and res["models"] == ["llama3.1"]
+    # And it persisted the port that actually answered, not the dead one.
+    assert res["resolvedBaseUrl"] == f"http://localhost:{live_port}/v1"
+
+
+def test_port_scan_is_not_reached_when_the_configured_port_works(monkeypatch):
+    """The scan must be a fallback, never an always-on sweep: a working primary
+    short-circuits before any scan port is touched."""
+    scanned: list[str] = []
+    real_probe = pp._probe_one
+
+    def spy(root, key, timeout=5.0):
+        scanned.append(root)
+        return real_probe(root, key, timeout)
+
+    srv, base = _tiny_gateway(200, {"data": [{"id": "llama3.1"}]})
+    monkeypatch.setenv("DAYPILOT_PROVIDER_PORT_SCAN", "8000-8010")
+    monkeypatch.setattr(pp, "_probe_one", spy)
+    try:
+        res = pp._probe_local(base, None)
+    finally:
+        srv.shutdown()
+    assert res["code"] == "connected"
+    # Only the configured host was probed; no 8000–8010 candidate was touched.
+    assert all(":800" not in r and ":801" not in r for r in scanned)
+
+
 def test_cloud_auth_root_and_web_links_never_double_v1():
     assert not pp._cloud_auth_root().endswith("/v1")
     login = pp.cloud_web_login_url()

@@ -92,12 +92,30 @@ def active_connector(session: Session, workspace_id: str):
 
     secret = credential_store().get(row.secret_reference) if row.secret_reference else {}
     key = (secret or {}).get("api_key") or (secret or {}).get("token")
-    return OllabridgeConnector(
-        base_url=row.base_url,
-        api_key=key,
-        model=row.default_model or "default",
-        mode="cloud" if row.kind == "ollabridge_cloud" else "local",
-    )
+    kwargs: dict[str, Any] = {
+        "base_url": row.base_url,
+        "api_key": key,
+        "mode": "cloud" if row.kind == "ollabridge_cloud" else "local",
+    }
+    # Never the literal "default": most OpenAI-compatible gateways 404 an unknown
+    # model id, which is exactly why the provider could list 32 models (that call
+    # sends no model) while a chat completion failed. Use the saved default when
+    # there is one; otherwise leave the connector's own conventional default in
+    # place and try to resolve the gateway's first real model, remembering it so
+    # the next turn is instant.
+    if row.default_model:
+        kwargs["model"] = row.default_model
+    connector = OllabridgeConnector(**kwargs)
+    if not row.default_model:
+        try:
+            models = connector.list_models()
+        except Exception:  # noqa: BLE001 - a resolution failure must not break the turn
+            models = []
+        if models:
+            connector.model = models[0]
+            row.default_model = models[0]
+            session.flush()
+    return connector
 
 
 def _workspace_context(session: Session, workspace_id: str) -> str:
