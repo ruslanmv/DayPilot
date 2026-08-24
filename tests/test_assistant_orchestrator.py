@@ -87,6 +87,47 @@ def test_general_question_uses_active_provider_inference(monkeypatch):
     assert data["intent"] == "unknown"
 
 
+def test_general_question_resolves_a_real_model_when_none_is_saved(monkeypatch):
+    """The 'healthy status but chat 404' bug: a provider can list models (that
+    call sends no model id) while a chat completion with the literal 'default'
+    404s. When no default model is saved, the assistant must resolve the
+    gateway's first real model instead of sending 'default' — and remember it."""
+    ws = _ws()
+    with session_scope() as s:
+        s.add(ProviderConnection(
+            workspace_id=ws, kind="local", state="connected", active=True,
+            base_url="http://prov-host:11435/v1", default_model=None,
+        ))
+
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/models":
+            return httpx.Response(200, json={"data": [{"id": "mistral-small"}, {"id": "llama3.1"}]})
+        seen["path"] = request.url.path
+        seen["model"] = json.loads(request.content)["model"]
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": "Answered with a real model."}}], "usage": {},
+        })
+
+    transport = httpx.MockTransport(handler)
+    from daypilot_models import ollabridge_client as oc
+    real = oc.OllabridgeConnector
+    monkeypatch.setattr(oc, "OllabridgeConnector",
+                        lambda **kw: real(**{**kw, "transport": transport}))
+
+    r = client.post("/v1/assistant/turn", json={
+        "workspaceId": ws, "message": "Explain gradient descent in one sentence."})
+    assert r.status_code == 200
+    # The chat call used the gateway's first real model, never the literal "default".
+    assert seen.get("model") == "mistral-small"
+    assert seen.get("path") == "/v1/chat/completions"
+    # And it was persisted, so the next turn skips the extra /v1/models round-trip.
+    with session_scope() as s:
+        row = s.query(ProviderConnection).filter_by(workspace_id=ws, kind="local").one()
+        assert row.default_model == "mistral-small"
+
+
 def test_general_question_falls_back_without_active_provider():
     """With no active provider, an arbitrary question gets the deterministic
     reply (never a fabricated answer) — and no inference call is made."""

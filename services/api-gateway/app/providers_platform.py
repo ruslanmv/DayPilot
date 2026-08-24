@@ -15,7 +15,7 @@ import ipaddress
 import os
 from datetime import datetime
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -225,7 +225,63 @@ def _loopback_candidates(root: str) -> list[str]:
     return uniq
 
 
-def _probe_one(root: str, api_key: str | None) -> dict[str, Any]:
+def _scan_ports() -> list[int]:
+    """The bounded port range to try when the configured local port is refused.
+
+    Defaults to 8000–8010 — where the common OpenAI-compatible local servers
+    (vLLM, llama.cpp, LM Studio, text-generation-webui) land — because a machine
+    that just bumped one service off a busy port has very likely bumped the model
+    server too, and the user should not have to hunt for where it ended up.
+    Override with ``DAYPILOT_PROVIDER_PORT_SCAN`` as ``start-end`` or a
+    comma-separated list (e.g. ``8000-8010`` or ``8000,8001,8080``).
+    """
+    raw = (os.getenv("DAYPILOT_PROVIDER_PORT_SCAN") or "8000-8010").strip()
+    ports: list[int] = []
+    try:
+        for piece in raw.split(","):
+            piece = piece.strip()
+            if "-" in piece:
+                lo, hi = piece.split("-", 1)
+                lo_i, hi_i = int(lo), int(hi)
+                if hi_i - lo_i > 64:  # a sane cap; a scan is not a port sweep
+                    hi_i = lo_i + 64
+                ports.extend(range(lo_i, hi_i + 1))
+            elif piece:
+                ports.append(int(piece))
+    except ValueError:
+        return list(range(8000, 8011))
+    return [p for p in ports if 1 <= p <= 65535]
+
+
+def _port_scan_roots(root: str) -> list[str]:
+    """Extra loopback roots to try when the configured one is refused.
+
+    Localhost only — the SSRF guard already confined us there, and probing a
+    range of ports on someone else's host would be a scan we have no business
+    doing. Yields the conventional local-server ports (see :func:`_scan_ports`),
+    a short walk up from the configured port (the "8080 was busy, try 8081"
+    case), then Ollabridge's own default, minus whatever port we already tried.
+    """
+    parts = urlsplit(root)
+    host = (parts.hostname or "").lower()
+    if host not in ("localhost", "127.0.0.1", "::1"):
+        return []
+    primary = parts.port
+    ports: list[int] = list(_scan_ports())
+    if primary:
+        ports += [primary + i for i in range(1, 4)]
+    ports += [11435, 11434]
+    out: list[str] = []
+    seen: set[int] = {primary} if primary else set()
+    for p in ports:
+        if p in seen or not (1 <= p <= 65535):
+            continue
+        seen.add(p)
+        out.append(urlunsplit((parts.scheme, f"{parts.hostname}:{p}", parts.path, "", "")))
+    return out
+
+
+def _probe_one(root: str, api_key: str | None, timeout: float = 5.0) -> dict[str, Any]:
     """Probe a single normalized gateway root, health-first.
 
     ``/health`` is public (no key, no loopback requirement), so it — not
@@ -245,7 +301,7 @@ def _probe_one(root: str, api_key: str | None) -> dict[str, Any]:
 
     start = _time.perf_counter()
     try:
-        with httpx.Client(base_url=root, timeout=5.0) as c:
+        with httpx.Client(base_url=root, timeout=timeout) as c:
             health = c.get("/health")
     except httpx.ConnectError:
         return {"code": "connection_refused", "latencyMs": None, "models": []}
@@ -264,7 +320,7 @@ def _probe_one(root: str, api_key: str | None) -> dict[str, Any]:
 
     # Reachable & identified. Enumerate models (needs a key unless loopback+local-trust).
     try:
-        with httpx.Client(base_url=root, timeout=6.0, headers=auth) as c:
+        with httpx.Client(base_url=root, timeout=timeout + 1.0, headers=auth) as c:
             r = c.get("/v1/models")
     except httpx.HTTPError:
         return {"code": "no_models", "latencyMs": latency, "models": []}
@@ -294,12 +350,24 @@ def _probe_local(base_url: str, api_key: str | None) -> dict[str, Any]:
     # Reachable outcomes we can stop on (anything that proves a gateway is there).
     reachable_codes = {"connected", "no_models", "unauthorized", "key_required"}
     fallback: dict[str, Any] | None = None
-    for root in _loopback_candidates(root0):
+
+    # The configured host first (at its full timeout, and across WSL/Docker host
+    # aliases), then a quick scan of nearby/conventional local ports. The port
+    # scan is only reached when the configured port is refused, and each closed
+    # localhost port refuses instantly, so this stays fast in the common case.
+    primary = _loopback_candidates(root0)
+    scan = _port_scan_roots(root0)
+    for root in primary:
         res = _probe_one(root, api_key)
         res["resolvedBaseUrl"] = root + "/v1"
         if res["code"] in reachable_codes:
             return res
         fallback = fallback or res
+    for root in scan:
+        res = _probe_one(root, api_key, timeout=0.6)
+        res["resolvedBaseUrl"] = root + "/v1"
+        if res["code"] in reachable_codes:
+            return res
     if fallback is None:
         fallback = {"code": "connection_refused", "latencyMs": None, "models": []}
     fallback.setdefault("resolvedBaseUrl", root0 + "/v1")

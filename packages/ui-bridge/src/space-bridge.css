@@ -2835,12 +2835,24 @@
 .dp-calconnect__spark { display: block; font-size: 26px; color: var(--accent); margin-bottom: 10px; }
 .dp-calconnect__card h3 { margin: 0 0 10px; font-size: 22px; }
 .dp-calconnect__card p { margin: 0 0 20px; color: var(--text-secondary); line-height: 1.6; }
-.dp-calconnect__actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 18px; }
+/* Stacked, full-width selection fields rather than side-by-side solid buttons:
+   connecting a calendar is a choice between providers, and a list of outlined
+   options reads as a choice where two blue buttons read as one primary action
+   plus a lesser one. */
+.dp-calconnect__actions { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
 .dp-calconnect__cta {
-  padding: 11px 20px; border-radius: 10px; cursor: pointer; font: inherit; font-weight: 600;
-  background: var(--accent); color: #fff; border: 0;
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 13px 16px; border-radius: 8px; cursor: pointer; font: inherit; font-weight: 600;
+  color: var(--text-primary); background: var(--surface-elevated); border: 1px solid var(--border);
+  transition: border-color 140ms ease, background 140ms ease;
 }
-.dp-calconnect__cta:hover { filter: brightness(1.08); }
+.dp-calconnect__cta:hover { border-color: var(--border-strong); background: var(--surface); }
+.dp-calconnect__cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dp-calconnect__cta-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; flex: 0 0 auto;
+}
+.dp-calconnect__cta-label { flex: 1; }
 .dp-calconnect__foot { font-size: 12.5px; color: var(--text-tertiary); }
 
 /* Settings → Calendar */
