@@ -691,3 +691,17 @@ Licensed under Apache 2.0.
 ### dmind diagrams
 
 Open **Diagrams** to turn topics, brainstorms and text attachments into editable mind maps, flows or system graphs. Save revision history, export/share portable snapshots and prepare Claude Code/Codex briefs or fresh Matrix Designer proposals. The native file format is `.dmind`. See [the complete dmind development plan](docs/dmind-development-plan.md) for the batch plan (B0 to B10), the B0 verification record and acceptance gates. Run `make dmind-e2e` for the browser end-to-end test.
+
+<img src="docs/assets/screenshots/dmind/3-editor.png" alt="dmind editor: a mind map with topic details, appearance and layout controls" width="100%" />
+
+<img src="docs/assets/screenshots/dmind/1-start.png" alt="dmind start: topic and outline, with document and web page sources" width="49%" /> <img src="docs/assets/screenshots/dmind/2-preview.png" alt="dmind preview before it replaces anything" width="49%" />
+
+#### How to use it
+
+1. **Start.** Open **Diagrams → New diagram**. Type a topic and one idea per line (indent for child topics), or attach a `.txt`/`.md` file, a `.dmind` file, a DOCX/PDF/image, or import an `.opml` / `.xmind` file (import only; what could not be carried over is listed).
+2. **Preview.** Pick mind map, flowchart or system, then **Generate preview**. Nothing is saved or replaced until you press **Use this diagram**.
+3. **Edit.** Click a topic to rename it, add children or siblings, move, fold, colour or link it; drag to reposition; right-click for more. **Undo/Redo**, **Auto-layout** (tree, org chart, radial, fishbone, grid, columns, layered) and the outline view are always at hand.
+4. **Check and refine.** Open **Check and refine** for solver findings (loops without an exit, unreachable or unconnected topics) and to review a pasted `dmind-patch/v1` proposal as a diff before applying it.
+5. **Save and share.** **Save** keeps revision history; **Save a copy** forks. **Export / share…** gives `.dmind` (a ZIP bundle when attachments are present), Markdown, Mermaid, SVG, a read-only HTML snapshot and a Claude Code / Codex brief. Read-only expiring links exist but are off unless `DAYPILOT_DMIND_SHARING=true`.
+
+Screenshots are regenerated with `scripts/dmind_screenshots.sh`.
