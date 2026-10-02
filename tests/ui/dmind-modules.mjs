@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import { loadDiagramModules } from './_load.mjs'
+import { PNG, PDF, archiveTools, bundleTools, sha256 as sha } from './_archives.mjs'
 
 const m = await loadDiagramModules()
 const fixture = JSON.parse(
@@ -783,6 +784,208 @@ section('B4 typing history and styled exports', () => {
     const loop = { ...d, edges: [...d.edges, { id: 'self', source: 'n1', target: 'n1', kind: 'flow', label: 'retry' }] }
     assert.ok(dmind.toSvg(loop).includes('retry'))
   })
+})
+
+
+// ---------------------------------------------------------------- B5 bundle: zip, assets, bundle
+import zlib from 'node:zlib'
+import crypto from 'node:crypto'
+const JPG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70])
+const GIF = new TextEncoder().encode('GIF89a\x01\x00\x01\x00')
+const WEBP = Uint8Array.from([...new TextEncoder().encode('RIFF'), 0, 0, 0, 0, ...new TextEncoder().encode('WEBPVP8 ')])
+
+const { craft, good, hostile } = archiveTools(m)
+
+await asyncSection('B5 zip reader and writer', async () => {
+  const z = m.zip
+  const bytes = (s) => new TextEncoder().encode(s)
+  const refused = async (label, archive, pattern, limits) => {
+    await assert.rejects(() => z.readZip(archive, limits), (e) => e instanceof z.ZipError && pattern.test(e.message), label)
+    checks++
+  }
+  // the crafter itself builds a valid archive, so every failure below is due to its one falsified field
+  const read = await z.readZip(good)
+  assert.deepEqual([...read.keys()], ['a.txt', 'dir/b.txt'])
+  assert.equal(new TextDecoder().decode(read.get('dir/b.txt')), 'world')
+  checks += 2
+  // writer: round trip, determinism, content including empty and large entries
+  const big = crypto.randomBytes(3_000_000)
+  const entries = [{ name: 'manifest.json', data: bytes('{}\n') }, { name: 'empty', data: new Uint8Array() }, { name: 'assets/big.bin', data: new Uint8Array(big) }]
+  const packed = z.writeZip(entries)
+  const back = await z.readZip(packed)
+  assert.deepEqual([...back.keys()], entries.map((e) => e.name))
+  assert.equal(back.get('empty').length, 0)
+  assert.equal(Buffer.compare(Buffer.from(back.get('assets/big.bin')), big), 0)
+  assert.equal(Buffer.compare(Buffer.from(z.writeZip(entries)), Buffer.from(packed)), 0, 'the same input gives the same bytes')
+  const golden = z.writeZip([{ name: 'a.txt', data: bytes('hello\n') }, { name: 'b/c.txt', data: bytes('world\n') }])
+  // 2 locals (41 + 43 bytes) + 2 directory records (51 + 53) + the 22-byte end record
+  assert.equal(golden.length, 41 + 43 + 51 + 53 + 22)
+  assert.equal(sha(golden), 'f2ef9f3fb79969a29ee189ff5da4fcefff153f7bb88f91c8f0e7a8f18cf9b1b8', 'the writer output is pinned; Matrix Designer pins the same digest')
+  assert.equal(z.crc32(bytes('123456789')), 0xcbf43926, 'the standard CRC-32 check value')
+  checks += 8
+  // writer refuses what a bundle never contains
+  for (const bad of ['../x', '/x', 'a/../b', 'a\\b', 'C:x', '', 'é.txt', 'dir/', 'a\u0000b', 'x'.repeat(201)])
+    assert.throws(() => z.writeZip([{ name: bad, data: new Uint8Array() }]), z.ZipError, JSON.stringify(bad))
+  assert.throws(() => z.writeZip([{ name: 'A', data: new Uint8Array() }, { name: 'a', data: new Uint8Array() }]), /Duplicate/)
+  checks += 11
+  for (const [label, archive, pattern, limits] of hostile) await refused(label, archive, pattern, limits)
+  await refused('tight custom limits', craft([{ name: 'a', data: 'hello world' }]), /too large/, { ...z.BUNDLE_LIMITS, maxEntryBytes: 5 })
+  // a read that survives: stored and deflated entries, directory entries, and a Python-style comment-free archive
+  const mixed = await z.readZip(craft([{ name: 'x/', data: '' }, { name: 'x/one', data: 'a'.repeat(1000), method: 8 }, { name: 'two', data: '' }]))
+  assert.equal(mixed.get('x/one').length, 1000)
+  assert.equal(mixed.get('two').length, 0)
+  checks += 2
+  globalThis.__goldenZip = golden
+})
+
+
+await asyncSection('B5 attachments and bundles', async () => {
+  const { assets: A, bundle: Bn, dmind, dmindFile: F, zip: z } = m
+  const bytes = (s) => new TextEncoder().encode(s)
+  const sniff = A.sniffType
+  // type comes from the bytes, never the name
+  assert.equal(sniff(PNG), 'image/png'); assert.equal(sniff(JPG), 'image/jpeg'); assert.equal(sniff(GIF), 'image/gif')
+  assert.equal(sniff(bytes('GIF87a....')), 'image/gif'); assert.equal(sniff(WEBP), 'image/webp'); assert.equal(sniff(PDF), 'application/pdf')
+  assert.equal(sniff(PNG, 'photo.pdf'), 'image/png', 'the name never overrides the bytes')
+  assert.equal(sniff(bytes('# Notes\n- a'), 'notes.md'), 'text/markdown')
+  assert.equal(sniff(bytes('plain'), 'notes.txt'), 'text/plain')
+  assert.equal(sniff(bytes('plain')), null, 'text needs a text file name')
+  assert.equal(sniff(bytes('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'), 'x.txt'), null, 'SVG is refused even when renamed')
+  assert.equal(sniff(bytes('<?xml version="1.0"?><svg/>'), 'x.md'), null)
+  assert.equal(sniff(bytes('<!DOCTYPE svg PUBLIC ""><svg/>'), 'x.txt'), null)
+  assert.equal(sniff(Uint8Array.from([0x61, 0, 0x62]), 'x.txt'), null, 'a NUL byte is not text')
+  assert.equal(sniff(Uint8Array.from([0xff, 0xfe, 0x41]), 'x.txt'), null, 'invalid UTF-8 is not text')
+  for (const junk of [new Uint8Array(), bytes('MZ\x90\x00'), bytes('\x7fELF'), bytes('PK\x03\x04'), bytes('<html><script>'), bytes('RIFF....WAVE')])
+    assert.equal(sniff(junk, 'f.bin'), null, 'unknown bytes are never an allowed type')
+  assert.equal(sniff(bytes('MZ\x90\x00'), 'f.txt'), null, 'a text file name does not make binary data text')
+  checks += 2
+  assert.equal(await A.sha256Hex(bytes('abc')), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+  assert.equal(A.cleanFileName('../../a/b\\c.png'), 'c.png'); assert.equal(A.cleanFileName('a\u0001b .txt'), 'ab.txt')
+  assert.equal(A.cleanFileName('  '), 'file'); assert.equal(A.cleanFileName('x'.repeat(300)).length, 120)
+  assert.equal(A.formatBytes(12), '12 B'); assert.equal(A.formatBytes(1500), '1.5 kB'); assert.equal(A.formatBytes(250_000), '250 kB'); assert.equal(A.formatBytes(2_500_000), '2.5 MB')
+  assert.ok(A.isAssetRef('sha256:' + 'a'.repeat(64)) && !A.isAssetRef('sha256:xyz') && !A.isAssetRef('a'.repeat(64)))
+  checks += 5
+
+  // attaching, refusing, and removing
+  let d = dmind.fromOutline('Spec', 'Design\nBuild', 'mindmap')
+  const a1 = await A.attachFile(d, 'n1', { name: 'sketch.png', bytes: PNG })
+  assert.ok(!a1.error)
+  assert.deepEqual(a1.diagram.nodes[1].metadata.attachments, [{ asset: 'sha256:' + sha(PNG), name: 'sketch.png', type: 'image/png', bytes: PNG.length }])
+  assert.equal(d.nodes[1].metadata, undefined, 'the input is never mutated')
+  assert.equal(a1.data.type, 'image/png')
+  dmind.validateDiagram(a1.diagram)
+  assert.match((await A.attachFile(a1.diagram, 'n1', { name: 'again.png', bytes: PNG })).error, /already attached/)
+  assert.match((await A.attachFile(d, 'ghost', { name: 'x.png', bytes: PNG })).error, /no longer exists/)
+  assert.match((await A.attachFile(d, 'n1', { name: 'x.png', bytes: new Uint8Array() })).error, /empty/)
+  assert.match((await A.attachFile(d, 'n1', { name: 'x.bin', bytes: bytes('MZ') })).error, /PNG, JPEG, GIF or WebP/)
+  assert.match((await A.attachFile(d, 'n1', { name: 'x.svg', bytes: bytes('<svg/>') })).error, /SVG is not allowed/)
+  assert.match((await A.attachFile(d, 'n1', { name: 'big.png', bytes: new Uint8Array([...PNG, ...new Uint8Array(A.MAX_ASSET_BYTES)]) })).error, /smaller than 5 MB/)
+  let many = d
+  for (let i = 0; i < A.MAX_ATTACHMENTS_PER_TOPIC; i++) many = (await A.attachFile(many, 'n1', { name: `f${i}.txt`, bytes: bytes('file ' + i) })).diagram
+  assert.match((await A.attachFile(many, 'n1', { name: 'one-more.txt', bytes: bytes('overflow') })).error, /10 attachments/)
+  let wide = dmind.fromOutline('Wide', 'a\nb\nc\nd\ne\nf', 'mindmap')
+  for (let i = 0; i < A.MAX_ASSETS; i++) wide = (await A.attachFile(wide, 'n' + (1 + (i % 6)), { name: `w${i}.txt`, bytes: bytes('w ' + i) })).diagram
+  assert.match((await A.attachFile(wide, 'root', { name: 'last.txt', bytes: bytes('over the cap') })).error, /50 different attachments/)
+  assert.equal(A.allAttachments(wide).length, A.MAX_ASSETS)
+  const sameFileTwice = await A.attachFile(a1.diagram, 'n2', { name: 'copy.png', bytes: PNG }) // one asset, two topics
+  assert.equal(A.allAttachments(sameFileTwice.diagram).length, 1)
+  const removed = A.removeAttachment(a1.diagram, 'n1', a1.ref)
+  assert.equal(removed.nodes[1].metadata, undefined, 'removing the last attachment removes the empty metadata')
+  assert.deepEqual(A.attachmentsOf({ id: 'x', label: 'x', metadata: { attachments: [null, 5, { asset: 'bad' }, { asset: 'sha256:' + 'b'.repeat(64), name: 'ok.pdf', type: 'application/pdf', bytes: 3 }, { asset: 'sha256:' + 'b'.repeat(64), name: 'x', type: 'image/svg+xml', bytes: 3 }] } }).map((a) => a.name), ['ok.pdf'])
+  assert.deepEqual(A.attachmentsOf({ id: 'x', label: 'x', metadata: { attachments: 'nope' } }), [])
+  checks += 17
+
+  // bundles: round trip, determinism, and everything a tampered bundle must trip over
+  const store = new Map([[a1.ref, a1.data]])
+  const withPdf = await A.attachFile(a1.diagram, 'n2', { name: 'brief.pdf', bytes: PDF })
+  store.set(withPdf.ref, withPdf.data)
+  const doc = withPdf.diagram
+  const packed = await Bn.packBundle(doc, store)
+  assert.equal(String.fromCharCode(packed[0], packed[1]), 'PK')
+  const opened = await Bn.unpackBundle(packed)
+  assert.deepEqual(opened.diagram, doc)
+  assert.deepEqual([...opened.assets.keys()].sort(), [a1.ref, withPdf.ref].sort())
+  assert.equal(Buffer.compare(Buffer.from(opened.assets.get(a1.ref).bytes), Buffer.from(PNG)), 0)
+  assert.deepEqual(opened.warnings, [])
+  assert.equal(Buffer.compare(Buffer.from(await Bn.packBundle(doc, new Map([...store].reverse()))), Buffer.from(packed)), 0, 'asset order never changes the bytes')
+  const files = await z.readZip(packed)
+  assert.deepEqual([...files.keys()], ['manifest.json', 'document.json', ...[a1.ref, withPdf.ref].map((r) => r.slice(7)).sort().map((h) => `assets/${h}.${h === sha(PNG) ? 'png' : 'pdf'}`)])
+  const manifest = JSON.parse(new TextDecoder().decode(files.get('manifest.json')))
+  assert.equal(manifest.format, 'dmind-bundle/v1')
+  assert.deepEqual(Object.keys(manifest), ['assets', 'document', 'format'], 'keys are sorted for stable bytes')
+  assert.equal(manifest.document.sha256, sha(files.get('document.json')))
+  checks += 10
+  // an unreferenced asset is left out; a missing one is reported, not invented
+  const extra = new Map([...store, ['sha256:' + 'c'.repeat(64), { bytes: bytes('x'), name: 'x.txt', type: 'text/plain' }]])
+  assert.equal((await Bn.unpackBundle(await Bn.packBundle(doc, extra))).assets.size, 2)
+  const partial = await Bn.unpackBundle(await Bn.packBundle(doc, new Map([[a1.ref, a1.data]])))
+  assert.match(partial.warnings[0], /1 attachment\(s\) are referenced but not included/)
+  assert.equal(Bn.missingAssets(doc, new Map([[a1.ref, a1.data]])).length, 1)
+  await assert.rejects(() => Bn.packBundle(doc, new Map([[a1.ref, { ...a1.data, bytes: bytes('tampered') }]])), /does not match its recorded hash/)
+  checks += 4
+
+  const T = await bundleTools(m)
+  for (const [label, archive, pattern] of T.cases) {
+    await assert.rejects(() => Bn.unpackBundle(archive), (e) => pattern.test(e.message), label)
+    checks++
+  }
+  await assert.rejects(() => Bn.unpackBundle(bytes('definitely not a zip')), /not a valid ZIP/)
+  checks += 3
+
+  // through the file layer: .dmind opens in either form, and export picks the right one
+  const asJson = await F.exportDmind(dmind.fromOutline('Plain', 'x', 'mindmap'), new Map())
+  assert.equal(asJson.form, 'json'); assert.equal(asJson.mime, F.DMIND_MIME); assert.ok(asJson.name.endsWith('.dmind'))
+  const asBundle = await F.exportDmind(doc, store)
+  assert.equal(asBundle.form, 'bundle'); assert.deepEqual(asBundle.missing, [])
+  const partialExport = await F.exportDmind(doc, new Map([[a1.ref, a1.data]]))
+  assert.equal(partialExport.form, 'bundle'); assert.equal(partialExport.missing.length, 1)
+  const noBytes = await F.exportDmind(doc, new Map())
+  assert.equal(noBytes.form, 'json'); assert.equal(noBytes.missing.length, 2, 'attachments without bytes are reported')
+  const viaAny = await F.importAny('spec.dmind', asBundle.bytes)
+  assert.equal(viaAny.via, 'dmind-bundle'); assert.equal(viaAny.assets.size, 2); assert.deepEqual(viaAny.diagram, doc)
+  const jsonAny = await F.importAny('x.dmind', asJson.bytes)
+  assert.equal(jsonAny.via, 'dmind')
+  await assert.rejects(() => F.importAny('spec.zip', asBundle.bytes), /Only .dmind files/)
+  await assert.rejects(() => F.importAny('evil.dmind', craft([{ name: '../x', data: 'x' }])), /unsafe entry name/)
+  const oversized = new Uint8Array(62_000_001)
+  oversized.set([0x50, 0x4b, 3, 4])
+  await assert.rejects(() => F.importAny('big.dmind', oversized), /smaller than 62 MB/)
+  assert.throws(() => F.importFile('spec.dmind', asBundle.bytes), /ZIP/)
+  checks += 15
+})
+
+
+await asyncSection('B5 shared archive corpus', async () => {
+  const corpus = JSON.parse(fs.readFileSync(new URL('../../packages/dmind-contract/archive-cases.json', import.meta.url)))
+  const unhex = (h) => new Uint8Array(Buffer.from(h, 'hex'))
+  const { zip: z, bundle: Bn, assets: A } = m
+  assert.equal(corpus.contract, 'dmind-bundle/v1')
+  assert.deepEqual(corpus.limits, z.BUNDLE_LIMITS)
+  for (const c of corpus.zip.valid) {
+    const read = await z.readZip(unhex(c.hex))
+    assert.deepEqual(Object.fromEntries([...read].map(([n, d]) => [n, sha(d)])), c.entries, c.name)
+    checks++
+  }
+  for (const c of corpus.zip.refused) {
+    await assert.rejects(() => z.readZip(unhex(c.hex), c.limits ?? z.BUNDLE_LIMITS), z.ZipError, c.name)
+    checks++
+  }
+  for (const c of corpus.bundle.valid) {
+    const u = await Bn.unpackBundle(unhex(c.hex))
+    assert.equal(sha(new TextEncoder().encode(JSON.stringify(u.diagram, null, 2) + '\n')), c.document_sha256)
+    assert.deepEqual(Object.fromEntries([...u.assets].map(([ref, d]) => [ref, d.type])), c.assets)
+    checks += 2
+  }
+  for (const c of corpus.bundle.refused) {
+    await assert.rejects(() => Bn.unpackBundle(unhex(c.hex)), Error, c.name)
+    checks++
+  }
+  for (const c of corpus.writer) {
+    const out = z.writeZip(c.entries.map((e) => ({ name: e.name, data: new TextEncoder().encode(e.text) })))
+    assert.equal(sha(out), c.sha256, c.name)
+    checks++
+  }
+  assert.ok(corpus.zip.refused.length >= 35 && corpus.bundle.refused.length >= 20)
 })
 
 console.log(`dmind modules: ${checks} checks passed`)

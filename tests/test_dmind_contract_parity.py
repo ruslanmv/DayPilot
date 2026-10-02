@@ -19,6 +19,7 @@ CONTRACT = Path(__file__).parents[1] / "packages/dmind-contract"
 SCHEMA = CONTRACT / "dmind.schema.json"
 FIXTURE = CONTRACT / "order-system.dmind.json"
 CASES = CONTRACT / "contract-cases.json"
+ARCHIVES = CONTRACT / "archive-cases.json"
 
 # Canonical-JSON digests of the shared contract. Matrix Designer pins the same values;
 # change the schema, fixture or corpus in BOTH repositories together and update both pins.
@@ -26,6 +27,7 @@ PINNED = {
     "schema": "a72d842dec9d606474f11acaeb2afcaecb252d88e68ceb1700a8dca3d0778f98",
     "fixture": "be2c8afa7978a29c32693fb7252666563a77d6edd8d2b81934fd45d9b120e095",
     "cases": "bbba4b6458a90b0053a61e8743a37a4a320496d3ec73cfc09e8b4cc2a2d46b50",
+    "archives": "7821afee40c47f81788c3703597c07bea277e2142341c408cbd76ab398e6da5d",
 }
 
 
@@ -86,7 +88,8 @@ def case_id(case):
 
 
 def test_contract_files_match_the_pinned_digests():
-    actual = {"schema": digest(SCHEMA), "fixture": digest(FIXTURE), "cases": digest(CASES)}
+    actual = {"schema": digest(SCHEMA), "fixture": digest(FIXTURE), "cases": digest(CASES),
+              "archives": digest(ARCHIVES)}
     assert actual == PINNED, (
         "dmind/v1 contract changed. Update schema, fixture and corpus in DayPilot AND "
         "Matrix Designer together, then update the pinned digests in both test suites."

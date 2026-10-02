@@ -589,6 +589,14 @@ export function removeBranch(d: Diagram, id: string): Diagram | null {
   }
 }
 
+export function downloadBytes(name: string, bytes: Uint8Array, type: string) {
+  const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type })),
+    a = document.createElement('a')
+  a.href = url
+  a.download = name.replace(/[^a-z0-9._-]/gi, '-')
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
 export function download(name: string, text: string, type: string) {
   const url = URL.createObjectURL(new Blob([text], { type })),
     a = document.createElement('a')

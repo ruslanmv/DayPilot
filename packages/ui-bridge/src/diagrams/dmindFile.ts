@@ -5,7 +5,10 @@
  * version does not use is kept and reported, never dropped. The ZIP bundle form (B5) is detected
  * from the first bytes so a future reader and this one agree on which form a file is.
  */
+import { allAttachments, type AssetStore, type Attachment } from './assets'
+import { packBundle, unpackBundle, missingAssets } from './bundle'
 import { fromBundle, validateDiagram, type Diagram } from './dmind'
+import { ZipError } from './zip'
 
 export const DMIND_EXTENSION = '.dmind'
 export const DMIND_MIME = 'application/vnd.dmind+json'
@@ -21,7 +24,15 @@ export type UnknownReport = {
   total: number
 }
 export type ImportResult =
-  | { kind: 'diagram'; diagram: Diagram; via: 'dmind' | 'bundle'; report: UnknownReport }
+  | {
+      kind: 'diagram'
+      diagram: Diagram
+      /** 'bundle' is a Matrix Design Bundle; 'dmind-bundle' is the ZIP form with attachments. */
+      via: 'dmind' | 'bundle' | 'dmind-bundle'
+      report: UnknownReport
+      assets?: AssetStore
+      warnings?: string[]
+    }
   | { kind: 'text'; text: string; name: string }
 
 const KNOWN = {
@@ -121,7 +132,7 @@ export function importFile(name: string, bytes: Uint8Array): ImportResult {
   if (bytes.length > MAX_FILE_BYTES) throw new Error('Use a file smaller than 2 MB.')
   const lower = name.toLowerCase()
   const form = detectForm(bytes)
-  if (form === 'zip') throw new Error('The .dmind bundle form (ZIP) is not supported by this reader.')
+  if (form === 'zip') throw new Error('This is a .dmind bundle (ZIP). Open it with the bundle reader.')
   if (/\.(txt|md|markdown)$/.test(lower)) {
     const text = decode(bytes)
     if (text.length > MAX_TEXT_CHARS) throw new Error('Text source exceeds 100000 characters.')
@@ -134,4 +145,45 @@ export function importFile(name: string, bytes: Uint8Array): ImportResult {
   throw new Error(
     'Supported attachments: .dmind, JSON (dmind or Matrix Design Bundle), TXT and Markdown.',
   )
+}
+
+/** Largest file the bundle form may be (the archive limit plus headroom). */
+export const MAX_BUNDLE_FILE_BYTES = 62_000_000
+
+/**
+ * Read any file a person may bring, including the bundle form with attachments. The bundle is
+ * unpacked strictly: see zip.ts and bundle.ts for what is refused.
+ */
+export async function importAny(name: string, bytes: Uint8Array): Promise<ImportResult> {
+  if (detectForm(bytes) !== 'zip') return importFile(name, bytes)
+  if (!/\.dmind$/i.test(name)) throw new Error('Only .dmind files can be opened as bundles.')
+  if (bytes.length > MAX_BUNDLE_FILE_BYTES) throw new Error('Use a bundle smaller than 62 MB.')
+  try {
+    const u = await unpackBundle(bytes)
+    return { kind: 'diagram', diagram: u.diagram, via: 'dmind-bundle', report: unknownFields(u.diagram), assets: u.assets, warnings: u.warnings }
+  } catch (e) {
+    if (e instanceof ZipError) throw new Error(e.message)
+    throw e
+  }
+}
+
+export type ExportedFile = {
+  name: string
+  bytes: Uint8Array
+  mime: string
+  form: 'json' | 'bundle'
+  /** Attachments referenced by the diagram whose bytes were not available to include. */
+  missing: Attachment[]
+}
+
+/**
+ * The file to download for "dmind file": plain JSON normally, the bundle form as soon as any
+ * attachment's bytes are in hand. Attachments without bytes are listed, never silently dropped.
+ */
+export async function exportDmind(d: Diagram, store: AssetStore): Promise<ExportedFile> {
+  const name = dmindFileName(d.title)
+  const missing = missingAssets(d, store)
+  if (allAttachments(d).some((a) => store.has(a.asset)))
+    return { name, bytes: await packBundle(d, store), mime: 'application/zip', form: 'bundle', missing }
+  return { name, bytes: new TextEncoder().encode(serializeDmind(d)), mime: DMIND_MIME, form: 'json', missing }
 }
