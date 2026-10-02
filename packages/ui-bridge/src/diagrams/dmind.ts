@@ -152,6 +152,11 @@ function indentOf(raw: string): number {
   return column
 }
 
+/** The topic text of one outline line: trimmed, with a list or heading marker removed. */
+export function outlineLabel(raw: string): string {
+  return raw.trim().replace(/^(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+)/, '')
+}
+
 export function fromOutline(
   topic: string,
   content: string,
@@ -169,7 +174,7 @@ export function fromOutline(
     .forEach((raw) => {
       const indent = indentOf(raw)
       const id = `n${nodes.length}`,
-        label = raw.trim().replace(/^(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+)/, '')
+        label = outlineLabel(raw)
       while (stack.length > 1 && stack[stack.length - 1].indent >= indent)
         stack.pop()
       nodes.push({ id, label, notes: '' })

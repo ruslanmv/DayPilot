@@ -1,6 +1,7 @@
 import { api } from '../apiClient'
 import { workspaceId } from '../env'
 import type { Diagram, DiagramKind } from './dmind'
+import type { SourceRef } from './provenance'
 export type SavedDiagram = {
   id: string
   revision: number
@@ -41,6 +42,19 @@ export type RevisionPage = {
   items: RevisionSummary[]
   hasMore: boolean
   nextBefore: number | null
+}
+export type Extracted = {
+  text: string
+  source: Omit<SourceRef, 'id'> & { chars?: number }
+  warnings: string[]
+}
+export type InputCapabilities = {
+  text: boolean
+  docx: boolean
+  pdf: boolean
+  ocr: boolean
+  urlFetch: boolean
+  limits: { fileBytes: number; textChars: number; pdfPages: number; pageBytes: number }
 }
 const query = (params: Record<string, string | number | null | undefined>) => {
   const search = new URLSearchParams()
@@ -113,4 +127,12 @@ export const diagramsApi = {
       bundle: Record<string, unknown>
       validation: Record<string, unknown>
     }>('/v1/diagrams/design-bundle', { document, candidateId }, headers()),
+  inputCapabilities: () => api.get<InputCapabilities>('/v1/diagram-inputs/capabilities'),
+  extract: (file: File) => {
+    const form = new FormData()
+    form.append('file', file, file.name)
+    return api.postForm<Extracted>('/v1/diagram-inputs/extract', form, headers())
+  },
+  fetchUrl: (url: string) =>
+    api.post<Extracted>('/v1/diagram-inputs/fetch-url', { url }, headers()),
 }

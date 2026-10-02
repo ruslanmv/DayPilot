@@ -277,3 +277,34 @@
 .dmind-meta label {
   flex: 1 1 200px;
 }
+
+.dmind-sources {
+  border-top: 1px solid var(--dmind-border);
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+}
+.dmind-hint {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+.dmind-error {
+  color: #fca5a5;
+  opacity: 1;
+}
+.dmind-extraction {
+  border: 1px solid var(--dmind-border);
+  border-radius: 10px;
+  padding: 0.6rem;
+  margin: 0.6rem 0;
+}
+.dmind-extraction textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+.dmind-sources li button {
+  display: inline-block;
+  width: auto;
+  margin-left: 0.5rem;
+}

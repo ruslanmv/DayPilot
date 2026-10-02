@@ -16,10 +16,12 @@
  */
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import zlib from 'node:zlib'
 import { createRequire } from 'node:module'
 
 const base = (process.argv[2] || 'http://127.0.0.1:8890').replace(/\/$/, '')
 const withDesigner = process.env.E2E_DESIGNER === '1'
+const withUrlFetch = process.env.E2E_URL_FETCH === '1' // the gateway has DAYPILOT_DMIND_URL_FETCH=true
 
 function loadPlaywright() {
   const roots = [process.env.PLAYWRIGHT_CORE_ROOT, import.meta.url, '/opt/node-tools/'].filter(Boolean)
@@ -34,6 +36,57 @@ function loadPlaywright() {
 }
 const { chromium } = loadPlaywright()
 const fixture = new URL('../../packages/dmind-contract/order-system.dmind.json', import.meta.url)
+
+
+// ---- file builders for the input tests (no third-party libraries)
+function storeZip(entries) {
+  const parts = [], central = []
+  let offset = 0
+  for (const [name, content] of Object.entries(entries)) {
+    const data = Buffer.from(content), nameBuf = Buffer.from(name)
+    const crc = zlib.crc32(data)
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt32LE(crc, 14)
+    local.writeUInt32LE(data.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(nameBuf.length, 26)
+    parts.push(local, nameBuf, data)
+    const entry = Buffer.alloc(46)
+    entry.writeUInt32LE(0x02014b50, 0); entry.writeUInt16LE(20, 4); entry.writeUInt16LE(20, 6); entry.writeUInt32LE(crc, 16)
+    entry.writeUInt32LE(data.length, 20); entry.writeUInt32LE(data.length, 24); entry.writeUInt16LE(nameBuf.length, 28)
+    entry.writeUInt32LE(offset, 42)
+    central.push(entry, nameBuf)
+    offset += 30 + nameBuf.length + data.length
+  }
+  const centralBuf = Buffer.concat(central)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(central.length / 2, 8); end.writeUInt16LE(central.length / 2, 10)
+  end.writeUInt32LE(centralBuf.length, 12); end.writeUInt32LE(offset, 16)
+  return Buffer.concat([...parts, centralBuf, end])
+}
+function docxBuffer(paragraphs) {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+  const body = paragraphs
+    .map(([text, style]) => `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t>${text}</w:t></w:r></w:p>`)
+    .join('')
+  return storeZip({
+    '[Content_Types].xml': '<Types/>',
+    'word/document.xml': `<?xml version="1.0"?><w:document xmlns:w="${W}"><w:body>${body}</w:body></w:document>`,
+  })
+}
+function pdfBuffer(lines) {
+  const stream = 'BT /F1 12 Tf 72 720 Td 14 TL ' + lines.map((l) => `(${l}) Tj`).join(' T* ') + ' ET'
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ]
+  let out = '%PDF-1.4\n'
+  const offsets = []
+  objs.forEach((o, i) => { offsets.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n` })
+  const xref = out.length
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offsets.map((o) => String(o).padStart(10, '0') + ' 00000 n \n').join('')
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  return Buffer.from(out, 'latin1')
+}
 
 const results = []
 const pageErrors = []
@@ -562,6 +615,74 @@ await step('drafts: shared live across tabs, optional, and cleared when discarde
   await page.getByLabel('Keep drafts in this browser').check()
   await page.getByLabel('Diagram title').fill('Stored again')
   await page.locator('.dmind-draft', { hasText: 'Stored again' }).waitFor()
+})
+
+// ---------------------------------------------------------------- B3 inputs
+await step('inputs: documents are extracted for review, never auto-added, and cited by topics', async () => {
+  await button(page, 'New diagram').click()
+  const add = page.getByLabel('Add a document')
+  const docx = docxBuffer([
+    ['Order process', 'Title'], ['Intake', 'Heading1'], ['Receive the order', null], ['Check stock', null],
+    ['Billing', 'Heading1'], ['Charge the card', null],
+  ])
+  await add.setInputFiles({ name: 'process.docx', mimeType: 'application/octet-stream', buffer: docx })
+  const preview = page.getByRole('region', { name: 'Extraction preview' })
+  await preview.waitFor()
+  assert.match(await preview.getByLabel('Extracted text').inputValue(), /^Order process\nIntake\n {2}Receive the order/)
+  assert.match(await preview.innerText(), /process\.docx \(docx/)
+  assert.equal(await page.getByLabel('Brainstorm or outline').inputValue(), '', 'nothing enters the outline until it is accepted')
+  await button(page, 'Use this text').click()
+  assert.equal(await page.getByLabel('Topic', { exact: true }).inputValue(), 'process')
+  assert.match(await page.getByLabel('Brainstorm or outline').inputValue(), /Charge the card/)
+  assert.equal(await page.getByLabel('Sources').locator('li').count(), 1)
+  // A PDF can be previewed and discarded without changing anything.
+  await add.setInputFiles({ name: 'notes.pdf', mimeType: 'application/pdf', buffer: pdfBuffer(['Refund policy', 'Within 30 days']) })
+  await preview.waitFor()
+  assert.match(await preview.getByLabel('Extracted text').inputValue(), /Refund policy\nWithin 30 days/)
+  await button(page, 'Discard').click()
+  assert.equal(await preview.count(), 0)
+  assert.equal(await page.getByLabel('Sources').locator('li').count(), 1)
+  // Refusals are specific and leave the outline alone.
+  await add.setInputFiles({ name: 'tool.exe', mimeType: 'application/octet-stream', buffer: Buffer.from('MZ\x90\0') })
+  await page.getByRole('alert').filter({ hasText: /Supported documents/ }).waitFor()
+  await add.setInputFiles({ name: 'evil.docx', mimeType: 'application/octet-stream', buffer: storeZip({ 'word/document.xml': '<!DOCTYPE d [<!ENTITY a "x">]><d/>' }) })
+  await page.getByRole('alert').filter({ hasText: /DTD or entity/ }).waitFor()
+  await add.setInputFiles({ name: 'huge.txt', mimeType: 'text/plain', buffer: Buffer.alloc(10_100_000, 97) })
+  await page.getByRole('alert').filter({ hasText: /smaller than 10 MB/ }).waitFor()
+  assert.match(await page.getByLabel('Brainstorm or outline').inputValue(), /Charge the card/)
+  // The accepted source is cited by the topics generated from it.
+  await button(page, 'Next: structure').click()
+  await page.getByLabel(/Ask Matrix Designer/).check()
+  assert.match(await page.locator('.dmind-wizard').innerText(), /including the extracted text of 1 source/)
+  await page.getByLabel(/Ask Matrix Designer/).uncheck()
+  await button(page, 'Generate preview').click()
+  await useDiagram(page)
+  await page.locator('[data-node][aria-label="Charge the card"]').click()
+  const cites = page.getByLabel('Topic sources')
+  await cites.waitFor()
+  assert.match(await cites.innerText(), /process\.docx \(docx, \d+ bytes\), line 6/)
+})
+
+await step(withUrlFetch ? 'inputs: URL fetching refuses private addresses end to end' : 'inputs: URL fetching is off until an administrator enables it', async () => {
+  await button(page, 'New diagram').click()
+  const address = page.getByLabel('Web page address')
+  if (!withUrlFetch) {
+    assert.ok(await address.isDisabled())
+    assert.match(await page.locator('.dmind-sources').innerText(), /turned off on this server/)
+    const none = []
+    page.on('request', (r) => r.url().includes('fetch-url') && none.push(r.url()))
+    assert.ok(await button(page, 'Fetch page').isDisabled())
+    assert.deepEqual(none, [])
+    return
+  }
+  assert.match(await page.locator('.dmind-sources').innerText(), /Nothing is fetched automatically/)
+  for (const url of [base + '/', 'http://127.0.0.1/', 'http://localhost/', 'http://[::1]/', 'http://169.254.169.254/latest/meta-data/', 'file:///etc/passwd', 'http://user:pw@example.org/']) {
+    await address.fill(url)
+    await button(page, 'Fetch page').click()
+    await page.getByRole('alert').waitFor()
+    assert.match(await page.getByRole('alert').innerText(), /private or reserved|Only http|credentials|could not be resolved|Only ports/, url)
+    assert.equal(await page.getByRole('region', { name: 'Extraction preview' }).count(), 0)
+  }
 })
 
 await step('layout: usable at phone width without horizontal page scroll', async () => {

@@ -3,12 +3,20 @@ import { workspaceId } from '../env'
 import {
   diagramsApi,
   type DiagramSummary,
+  type Extracted,
   type RevisionSummary,
   type SavedDiagram,
 } from './diagramsClient'
 import { diffDiagrams } from './diff'
 import type { DraftRecord } from './draftStore'
 import { relativeTime } from './format'
+import { SourcePanel } from './SourcePanel'
+import {
+  attachProvenance,
+  citationsFor,
+  describeSource,
+  type SourceText,
+} from './provenance'
 import { normalizeTags, sameContent, withRetry } from './saveQueue'
 import { useDrafts } from './useDrafts'
 import {
@@ -147,6 +155,7 @@ export function DiagramsWorkspace({
     [selected, setSelected] = useState(''),
     [busy, setBusy] = useState(false)
   const [dropping, setDropping] = useState(false)
+  const [sources, setSources] = useState<SourceText[]>([])
   const [message, setMessage] = useState(''),
     [wizard, setWizard] = useState(0)
   const [topic, setTopic] = useState(''),
@@ -476,6 +485,21 @@ export function DiagramsWorkspace({
       )
     else setMessage(result.error)
   }
+  function useExtracted(x: Extracted) {
+    const joined = content ? content + '\n' + x.text : x.text
+    if (joined.length > 100000) {
+      setMessage('The combined text would exceed 100000 characters. Remove a source or split the document.')
+      return
+    }
+    let n = sources.length + 1
+    while (sources.some((s) => s.ref.id === `src${n}`)) n++
+    const ref = { ...x.source, id: `src${n}`, kind: x.source.kind ?? 'file', fetched_at: new Date().toISOString() }
+    setSources([...sources, { ref, text: x.text }])
+    setContent(joined)
+    if (!topic)
+      setTopic((x.source.title || x.source.name || '').replace(/\.[^.]+$/, '').slice(0, 200))
+    setMessage(`Added ${describeSource(ref)}. Review the text, then continue.`)
+  }
   async function openDraft(rec: DraftRecord) {
     if (!canLeave()) return
     let persisted: SavedDiagram | null = null
@@ -538,7 +562,7 @@ export function DiagramsWorkspace({
         const r = await diagramsApi.generate(topic, content, kind, true, tier)
         if (!r.ok) throw new Error(r.error)
         d = r.data.diagram
-      } else d = fromOutline(topic, content, kind)
+      } else d = attachProvenance(fromOutline(topic, content, kind), sources)
       setPreview(layout(validateDiagram(d)))
       setWizard(3)
     } catch (e) {
@@ -678,6 +702,9 @@ export function DiagramsWorkspace({
               setPreview(null)
               // Sending text to a provider is an opt-in for this run only.
               setUseDesigner(false)
+              setSources([])
+              setTopic('')
+              setContent('')
             }
           }}
         >
@@ -744,6 +771,12 @@ export function DiagramsWorkspace({
                 <button onClick={() => input.current?.click()}>
                   Attach text or open a .dmind file
                 </button>
+                <SourcePanel
+                  sources={sources}
+                  onUse={useExtracted}
+                  onRemove={(id) => setSources(sources.filter((s) => s.ref.id !== id))}
+                  disabled={busy}
+                />
                 <button disabled={!topic.trim()} onClick={() => setWizard(2)}>
                   Next: structure
                 </button>
@@ -776,7 +809,7 @@ export function DiagramsWorkspace({
                 </label>
                 <p>
                   {useDesigner
-                    ? 'Sends the topic and attached text to your configured Matrix Designer provider. Returns batches and dependencies for review.'
+                    ? `Sends the topic and attached text${sources.length ? ` (including the extracted text of ${sources.length} source${sources.length > 1 ? 's' : ''})` : ''} to your configured Matrix Designer provider. Returns batches and dependencies for review.`
                     : 'Local outline mode works without AI or a network connection. Flowcharts connect the lines in order; you can add decision links in the editor.'}
                 </p>
                 {useDesigner && (
@@ -1204,6 +1237,16 @@ export function DiagramsWorkspace({
                   onChange={(e) => changeNode({ notes: e.target.value })}
                 />
               </label>
+              {citationsFor(diagram, node.id).length > 0 && (
+                <>
+                  <h4>Sources</h4>
+                  <ul aria-label="Topic sources">
+                    {citationsFor(diagram, node.id).map((c, i) => (
+                      <li key={i}>{c.text}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
               <button onClick={() => addChild()}>Add child · Insert</button>
               <button onClick={() => addChild(true)}>Add sibling</button>
               <button

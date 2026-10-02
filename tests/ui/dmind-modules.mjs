@@ -266,4 +266,60 @@ section('B2 display helpers', () => {
   })
 })
 
+
+// ---------------------------------------------------------------- B3 provenance
+section('B3 provenance', () => {
+  const { provenance: pv, dmind } = m
+  const ref = (id, name) => ({ id, kind: 'file', name, bytes: 10, extractor: 'docx' })
+  ok(() => {
+    const a = { ref: ref('src1', 'spec.docx'), text: 'Billing\n  Charge card\n  Retry\n\nRefunds' }
+    const b = { ref: { id: 'src2', kind: 'url', url: 'https://example.org/p', extractor: 'html' }, text: '- Retry\n- Audit log' }
+    const typed = 'Charge card\nRetry\nAudit log\nSomething I wrote\nRefunds'
+    const base = dmind.fromOutline('Payments', typed, 'mindmap')
+    const d = pv.attachProvenance(base, [a, b])
+    const byLabel = (l) => d.nodes.find((n) => n.label === l)
+    assert.deepEqual(byLabel('Charge card').metadata.provenance, [{ source: 'src1', line: 2 }])
+    assert.deepEqual(byLabel('Retry').metadata.provenance, [{ source: 'src1', line: 3 }, { source: 'src2', line: 1 }])
+    assert.deepEqual(byLabel('Audit log').metadata.provenance, [{ source: 'src2', line: 2 }])
+    assert.deepEqual(byLabel('Refunds').metadata.provenance, [{ source: 'src1', line: 5 }]) // blank lines still count
+    assert.equal(byLabel('Something I wrote').metadata, undefined) // the person's own topics cite nothing
+    assert.equal(d.nodes[0].metadata, undefined) // and neither does the typed root
+    assert.deepEqual(d.metadata.sources.map((s) => s.id), ['src1', 'src2'])
+    assert.equal(base.nodes[1].metadata, undefined, 'the input diagram is never mutated')
+    assert.equal(base.metadata.sources, undefined)
+    dmind.validateDiagram(d)
+  })
+  ok(() => {
+    // Matching is by content: markers, spacing and order do not matter; unused sources are not attached.
+    const src = { ref: ref('src1', 'a.md'), text: '## Heading  with   gaps\n1. Numbered item' }
+    const unused = { ref: ref('src2', 'unused.md'), text: 'Nothing matches here' }
+    const d = pv.attachProvenance(dmind.fromOutline('T', 'Numbered item\nHeading with gaps', 'flowchart'), [src, unused])
+    assert.equal(d.nodes.filter((n) => n.metadata?.provenance).length, 2)
+    assert.deepEqual(d.metadata.sources.map((s) => s.id), ['src1'])
+    const none = pv.attachProvenance(dmind.fromOutline('T', 'x', 'mindmap'), [unused])
+    assert.equal(none.metadata.sources, undefined)
+    const same = dmind.fromOutline('T', 'x', 'mindmap')
+    assert.equal(pv.attachProvenance(same, []), same)
+  })
+  ok(() => {
+    const dup = { ref: ref('src1', 'dup.txt'), text: Array.from({ length: 6 }, () => 'Same line').join('\n') }
+    const d = pv.attachProvenance(dmind.fromOutline('T', 'Same line', 'mindmap'), [dup])
+    assert.equal(d.nodes[1].metadata.provenance.length, pv.MAX_CITATIONS)
+    assert.deepEqual(d.nodes[1].metadata.provenance.map((c) => c.line), [1, 2, 3])
+  })
+  ok(() => {
+    const d = pv.attachProvenance(dmind.fromOutline('T', 'Alpha', 'mindmap'), [{ ref: ref('src1', 'a.docx'), text: 'Alpha' }])
+    const id = d.nodes[1].id
+    assert.deepEqual(pv.citationsFor(d, id), [{ text: 'a.docx (docx, 10 bytes), line 1' }])
+    assert.deepEqual(pv.citationsFor(d, 'root'), [])
+    assert.deepEqual(pv.citationsFor(d, 'ghost'), [])
+    assert.equal(pv.sourceId(0), 'src1')
+    assert.equal(pv.describeSource({ id: 'x', kind: 'url', url: 'https://e.org/', pages: 3 }), 'https://e.org/ (3 pages)')
+    assert.equal(pv.describeSource({ id: 'x', kind: 'file' }), 'document')
+    // Provenance rides along through save, open and export like any metadata.
+    const text = m.dmindFile.serializeDmind(d)
+    assert.deepEqual(m.dmindFile.importFile('x.dmind', new TextEncoder().encode(text)).diagram, d)
+  })
+})
+
 console.log(`dmind modules: ${checks} checks passed`)

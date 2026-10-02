@@ -21,6 +21,7 @@ dev = ["pytest>=8.2", "ruff>=0.5"]
 rag = ["sentence-transformers", "chromadb", "rank-bm25", "qdrant-client"]
 models = ["ollama", "transformers", "accelerate"]
 observability = ["opentelemetry-api", "opentelemetry-sdk", "prometheus-client"]
+dmind-extract = ["pypdf>=4.0"]  # PDF text for dmind diagrams (DOCX and text need nothing extra)
 
 [tool.ruff]
 line-length = 100
@@ -48,6 +49,7 @@ testpaths = ["tests"]
 dev = [
   "pytest>=8.2",
   "ruff>=0.5",
+  "pypdf>=4.0",
 ]
 
 [tool.uv]
