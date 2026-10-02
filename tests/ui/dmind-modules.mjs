@@ -1077,4 +1077,33 @@ await asyncSection('B6 analysis and patches', async () => {
   }
 })
 
+await asyncSection('B8 coder handoff', async () => {
+  const { handoff: hf, dmind: dm } = m
+  const hc = JSON.parse(fs.readFileSync(new URL('../../packages/dmind-contract/handoff-cases.json', import.meta.url)))
+  for (const [t, e] of hc.fnv) assert.equal(hf.fnv1a(t), e)
+  for (const [p, e] of hc.scopes) assert.equal(hf.validScope(p), e, p)
+  const built = hf.buildHandoff(hc.diagram)
+  assert.deepEqual(built, hc.handoff)
+  assert.equal(hf.toHandoffBrief(built), hc.brief)
+  for (const c of hc.checks) assert.deepEqual(hf.checkChanges(built, c.files, c.reviewed), c.expect, c.name)
+  checks += hc.fnv.length + hc.scopes.length + 2 + hc.checks.length
+  // authoring guards and immutability
+  const d0 = dm.fromOutline('T', 'A\nB', 'mindmap')
+  assert.throws(() => hf.buildHandoff(d0), /Mark at least one/)
+  assert.throws(() => hf.setScope(d0, 'ghost', { files: [], acceptance: [] }))
+  assert.throws(() => hf.setScope(d0, 'n1', { files: ['../x'], acceptance: [] }), /not allowed/)
+  assert.throws(() => hf.setScope(d0, 'n1', { files: [], acceptance: [' '] }))
+  assert.throws(() => hf.setScope(d0, 'n1', { files: Array(51).fill('a'), acceptance: [] }))
+  const d1 = hf.setScope(d0, 'n1', { files: ['a/*.py'], acceptance: [' ok '] })
+  assert.equal(d0.nodes[1].metadata, undefined)
+  assert.deepEqual(d1.nodes[1].metadata.handoff, { files: ['a/*.py'], acceptance: ['ok'] })
+  dm.validateDiagram(d1)
+  // a scope smuggled in through a file is re-checked when the handoff is built
+  const smuggled = structuredClone(d1)
+  smuggled.nodes[1].metadata.handoff.files = ['/etc/passwd']
+  assert.throws(() => hf.buildHandoff(smuggled), /not allowed/)
+  // colliding ids stay unique; wildcards never match across a dot-dot
+  checks += 9
+})
+
 console.log(`dmind modules: ${checks} checks passed`)
