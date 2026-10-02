@@ -166,3 +166,15 @@ def test_0026_adds_only_the_shares_table_and_reverses_cleanly(database):
         assert after[table] == shape, f"{table} changed"
     command.downgrade(config(), "0025_dmind_workspace")
     assert snapshot(database) == before
+
+
+def test_0027_adds_only_the_credit_tables_and_reverses_cleanly(database):
+    command.upgrade(config(), "0026_dmind_shares")
+    before = snapshot(database)
+    command.upgrade(config(), "0027_ai_credits")
+    after = snapshot(database)
+    assert set(after) - set(before) == {"ai_credit_accounts", "ai_credit_events"}
+    for table, shape in before.items():
+        assert after[table] == shape, f"{table} changed"
+    command.downgrade(config(), "0026_dmind_shares")
+    assert snapshot(database) == before

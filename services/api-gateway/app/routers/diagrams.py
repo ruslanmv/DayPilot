@@ -32,7 +32,8 @@ from ..rbac import ROLE_RANK
 router = APIRouter(prefix="/v1/diagrams", tags=["diagrams"])
 
 
-def access(request: Request, session: Session = Depends(get_session)) -> str:
+def access_role(request: Request, session: Session) -> tuple[str, str]:
+    """The workspace and the caller's role there (membership, or the token's role)."""
     workspace = request.headers.get("x-workspace-id", "default")
     if len(workspace) > 36 or not workspace.strip():
         raise HTTPException(400, "invalid workspace")
@@ -63,6 +64,11 @@ def access(request: Request, session: Session = Depends(get_session)) -> str:
         ):
             raise HTTPException(403, "workspace membership required")
         role = principal.role
+    return workspace, role
+
+
+def access(request: Request, session: Session = Depends(get_session)) -> str:
+    workspace, role = access_role(request, session)
     minimum = 0 if request.method == "GET" else 2
     if ROLE_RANK.get(role, -1) < minimum:
         raise HTTPException(403, "diagram access denied for this role")

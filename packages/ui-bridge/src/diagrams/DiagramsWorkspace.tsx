@@ -12,6 +12,7 @@ import type { DraftRecord } from './draftStore'
 import { relativeTime } from './format'
 import { SourcePanel } from './SourcePanel'
 import { RefinePanel } from './RefinePanel'
+import { AssistPanel, type AssistTrigger } from './AssistPanel'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { NodeStyleControls } from './NodeStyleControls'
 import { OutlineEditor } from './OutlineEditor'
@@ -194,6 +195,7 @@ export function DiagramsWorkspace({
     [saved, setSaved] = useState<SavedDiagram | null>(null)
   const [dirty, setDirty] = useState(false),
     [selected, setSelected] = useState(''),
+    [aiTrigger, setAiTrigger] = useState<AssistTrigger | null>(null),
     [busy, setBusy] = useState(false)
   const [dropping, setDropping] = useState(false)
   const [sources, setSources] = useState<SourceText[]>([])
@@ -524,6 +526,9 @@ export function DiagramsWorkspace({
       { label: 'Move down', disabled: !moveSibling(diagram, id, 1), onSelect: () => commit(moveSibling(diagram, id, 1)!) },
       { label: 'Indent', disabled: !indentNode(diagram, id), onSelect: () => commit(indentNode(diagram, id)!) },
       { label: 'Outdent', disabled: !outdentNode(diagram, id), onSelect: () => commit(outdentNode(diagram, id)!) },
+      { label: 'AI: Suggest subtopics', onSelect: () => setAiTrigger({ nonce: Date.now(), action: 'grow', options: { count: 4 } }) },
+      { label: 'AI: Explain', onSelect: () => setAiTrigger({ nonce: Date.now(), action: 'explain' }) },
+      { label: 'AI: Polish wording', onSelect: () => setAiTrigger({ nonce: Date.now(), action: 'refine', options: { mode: 'polish' } }) },
       { label: members.length > 1 ? `Delete ${members.length} topics` : 'Delete', disabled: members.length >= diagram.nodes.length, onSelect: removeNode },
     ]
   }
@@ -1290,6 +1295,7 @@ export function DiagramsWorkspace({
                   </label>
                 )}
               </div>
+              <AssistPanel diagram={diagram} focus={group} onApply={(next) => commit(next)} trigger={aiTrigger} />
               <RefinePanel diagram={diagram} onApply={(next) => commit(next)} />
               <p>
                 {diagram.nodes.length} topics · {diagram.edges.length} links ·{' '}

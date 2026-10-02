@@ -1319,3 +1319,26 @@ class DiagramShare(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     views: Mapped[int] = mapped_column(Integer, default=0)
     last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiCreditAccount(Base):
+    """AI credits for one workspace: a balance that refills from a monthly allowance."""
+    __tablename__ = "ai_credit_accounts"
+
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
+    monthly_allowance: Mapped[int] = mapped_column(Integer, default=0)
+    period: Mapped[str] = mapped_column(String(7), default="")  # YYYY-MM of the last refill
+
+
+class AiCreditEvent(Base):
+    """Append-only ledger: usage (negative), grants and refills (positive). Never holds prompt text."""
+    __tablename__ = "ai_credit_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # use | grant | refill
+    action: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    balance_after: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

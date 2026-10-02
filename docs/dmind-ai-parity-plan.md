@@ -45,3 +45,13 @@ Goal: cover what people use an AI mind-mapping product for (prompt/file/link/ima
 ## Honest boundaries
 
 AI quality depends on the connected provider; the service validates and bounds what comes back but cannot make a weak model insightful. Speech recognition depends on the browser. Features that require generating images or video are not attempted.
+
+## AI credits and your own models (C1/C2 delivered)
+
+AI actions run on the models the workspace connected in Settings (the provider the assistant already uses); nothing is sent to any other service. Usage is metered in **credits**:
+
+- Off by default (`DAYPILOT_AI_CREDITS=true` turns it on); when off, AI is unmetered as before.
+- Default costs: chat 1, generate 2, grow 1, explain 1, reorganize 2, refine 1 (+1 per five topics beyond the first five); override with `DAYPILOT_AI_CREDIT_COSTS='{"chat":2}'`.
+- `DAYPILOT_AI_MONTHLY_CREDITS` (default 100) sets each workspace's monthly allowance; balances refill to it at the start of each month and never shrink (granted credits carry over).
+- Credits are taken atomically before the model is called (concurrent requests cannot overspend; out of credits returns 402 before any model call); failures and "no provider" answers cost nothing.
+- Owners add credits or change the allowance at `POST /v1/diagrams/assist/credits/grant`; `GET .../credits` shows the balance and a ledger of actions and amounts (never prompt text). The panel shows the balance and each button's cost.

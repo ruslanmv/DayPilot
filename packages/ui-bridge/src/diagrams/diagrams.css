@@ -405,3 +405,16 @@
   line-height: 1.5;
   padding-left: 1.1rem;
 }
+
+.dmind-ai { margin: 0.75rem 0; padding: 0.75rem; border: 1px solid var(--dp-border, #2a3347); border-radius: 10px }
+.dmind-ai h4 { margin: 0 0 0.5rem }
+.dmind-ai-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center }
+.dmind-ai-translate { display: inline-flex; gap: 0.3rem }
+.dmind-ai-translate input { width: 8rem }
+.dmind-ai-note { opacity: 0.8; margin: 0.4rem 0 }
+.dmind-ai-log { list-style: none; padding: 0; margin: 0.5rem 0; max-height: 9rem; overflow: auto }
+.dmind-ai-log li { padding: 0.15rem 0 }
+.dmind-ai-log li[data-role='user'] { font-weight: 600 }
+.dmind-ai form { display: flex; gap: 0.4rem; margin-top: 0.5rem }
+.dmind-ai form input { flex: 1 }
+.dmind-ai-proposal { margin: 0.5rem 0; padding: 0.5rem; border: 1px dashed var(--dp-border, #2a3347); border-radius: 8px }

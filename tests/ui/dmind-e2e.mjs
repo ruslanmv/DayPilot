@@ -1007,6 +1007,21 @@ await step('import-only adapters: OPML opens as a preview and reports what was n
   await page.getByText(/XMind|ZIP|archive/i).first().waitFor()
 })
 
+await step('ask AI: without a connected provider the panel says so plainly and never fakes an answer', async () => {
+  await wizard(page, { topic: 'AI check', outline: 'A\n  B\nC' })
+  await page.locator('.dmind-preview').waitFor()
+  await useDiagram(page)
+  const panel = page.getByRole('region', { name: 'Ask AI' })
+  await panel.waitFor()
+  await panel.getByText(/AI is not connected/).waitFor()
+  assert.ok(await panel.getByRole('button', { name: 'Tidy structure' }).isDisabled())
+  assert.ok(await panel.getByRole('button', { name: 'Send' }).isDisabled())
+  // the context menu offers the AI actions too, and they explain rather than fail silently
+  await nodes(page).first().click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'AI: Suggest subtopics' }).waitFor()
+  await page.keyboard.press('Escape')
+})
+
 await step('no uncaught script errors during the whole run', async () => {
   assert.deepEqual(pageErrors, [])
 })

@@ -1,6 +1,7 @@
 import { api } from '../apiClient'
 import { workspaceId } from '../env'
 import type { Diagram, DiagramKind } from './dmind'
+import type { Patch } from './patch'
 import type { SourceRef } from './provenance'
 export type SavedDiagram = {
   id: string
@@ -55,6 +56,29 @@ export type InputCapabilities = {
   ocr: boolean
   urlFetch: boolean
   limits: { fileBytes: number; textChars: number; pdfPages: number; pageBytes: number }
+}
+export type AssistAction = 'chat' | 'generate' | 'grow' | 'explain' | 'reorganize' | 'refine'
+export type AssistRequest = {
+  action: AssistAction
+  document?: Diagram | null
+  focus?: string[]
+  prompt?: string
+  history?: { role: 'user' | 'assistant'; content: string }[]
+  options?: { count?: number; mode?: string; language?: string }
+}
+export type AssistReply = {
+  mode: 'model' | 'offline'
+  message: string
+  patch?: Patch
+  title?: string | null
+  outline?: string
+  credits?: { charged: number; balance: number }
+}
+export type CreditSummary = {
+  enabled: boolean
+  balance?: number
+  monthlyAllowance?: number
+  costs: Record<string, number>
 }
 const query = (params: Record<string, string | number | null | undefined>) => {
   const search = new URLSearchParams()
@@ -127,6 +151,8 @@ export const diagramsApi = {
       bundle: Record<string, unknown>
       validation: Record<string, unknown>
     }>('/v1/diagrams/design-bundle', { document, candidateId }, headers()),
+  assistStatus: () => api.get<{ available: boolean; actions: string[]; credits: CreditSummary }>('/v1/diagrams/assist/status'),
+  assist: (body: AssistRequest) => api.post<AssistReply>('/v1/diagrams/assist', body, headers()),
   inputCapabilities: () => api.get<InputCapabilities>('/v1/diagram-inputs/capabilities'),
   extract: (file: File) => {
     const form = new FormData()
