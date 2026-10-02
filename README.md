@@ -687,3 +687,7 @@ Licensed under Apache 2.0.
 <div align="center">
 <sub>DayPilot is part of the HomePilot Family. HomePilot creates portable AI identities; DayPilot governs them in professional workflows.</sub>
 </div>
+
+### dmind diagrams
+
+Open **Diagrams** to turn topics, brainstorms and text attachments into editable mind maps, flows or system graphs. Save revision history, export/share portable snapshots and prepare Claude Code/Codex briefs or fresh Matrix Designer proposals. See [the complete dmind development plan](docs/dmind-development-plan.md) for delivery scope and follow-up phases.

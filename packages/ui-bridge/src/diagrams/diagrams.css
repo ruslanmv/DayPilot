@@ -1,0 +1,233 @@
+.dmind {
+  --dmind-border: var(--dp-border, #334155);
+  color: inherit;
+  min-width: 0;
+}
+.dmind button,
+.dmind select,
+.dmind input,
+.dmind textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--dp-surface, #172033);
+  border: 1px solid var(--dmind-border);
+  border-radius: 8px;
+  padding: 0.55rem;
+}
+.dmind button {
+  cursor: pointer;
+}
+.dmind button:hover,
+.dmind button[aria-pressed='true'] {
+  border-color: #818cf8;
+}
+.dmind button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.dmind :focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 3px;
+}
+.dmind-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.dmind-brand {
+  font-weight: 800;
+  color: #a5b4fc;
+  letter-spacing: 0.08em;
+}
+.dmind h2 {
+  margin: 0.25rem 0;
+}
+.dmind p {
+  opacity: 0.8;
+  line-height: 1.5;
+}
+.dmind-status {
+  min-height: 1.5rem;
+  overflow-wrap: anywhere;
+}
+.dmind-controls {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.dmind-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) 250px;
+  gap: 1rem;
+}
+.dmind-library,
+.dmind-inspector {
+  border: 1px solid var(--dmind-border);
+  padding: 0.8rem;
+  border-radius: 12px;
+  min-width: 0;
+  max-height: 78vh;
+  overflow: auto;
+}
+.dmind-library button,
+.dmind-inspector button {
+  display: block;
+  width: 100%;
+  margin: 0.5rem 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.dmind-library small {
+  display: block;
+  opacity: 0.6;
+  margin-top: 0.3rem;
+}
+.dmind label {
+  display: block;
+  margin: 0.6rem 0;
+}
+.dmind label > input:not([type='checkbox']),
+.dmind label > textarea,
+.dmind label > select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.4rem;
+}
+.dmind textarea {
+  resize: vertical;
+}
+.dmind-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+.dmind-toolbar label {
+  max-width: 110px;
+  margin: 0;
+}
+.dmind-editor {
+  min-width: 0;
+}
+.dmind-canvas {
+  overflow: auto;
+  max-height: 65vh;
+  min-height: 350px;
+  border: 1px solid var(--dmind-border);
+  border-radius: 12px;
+  background: radial-gradient(#64748b55 1px, transparent 1px);
+  background-size: 20px 20px;
+  touch-action: none;
+}
+.dmind-canvas svg {
+  display: block;
+  user-select: none;
+}
+.dmind-canvas rect {
+  fill: var(--dp-surface, #172033);
+  stroke: #64748b;
+  stroke-width: 1.5;
+}
+.dmind-canvas rect.is-selected {
+  stroke: #a5b4fc;
+  stroke-width: 3;
+}
+.dmind-canvas text {
+  fill: currentColor;
+  font: 14px system-ui;
+}
+.dmind-canvas g[role='button'] {
+  cursor: grab;
+}
+.dmind-edge {
+  fill: none;
+  stroke: #94a3b8;
+  stroke-width: 1.5;
+}
+.dmind-edge-dependency {
+  stroke: #818cf8;
+  stroke-dasharray: 6 4;
+}
+.dmind-edge-relationship {
+  stroke-dasharray: 3 4;
+}
+.dmind-wizard {
+  max-width: 750px;
+  border: 1px solid var(--dmind-border);
+  padding: 1rem;
+  border-radius: 12px;
+  margin: 1rem 0;
+}
+.dmind-wizard ol {
+  display: flex;
+  list-style: none;
+  gap: 1rem;
+  padding: 0;
+}
+.dmind-wizard li[aria-current='step'] {
+  color: #a5b4fc;
+  font-weight: 700;
+}
+.dmind-wizard button {
+  margin-right: 0.5rem;
+  margin-top: 0.5rem;
+}
+.dmind-preview {
+  max-height: 260px;
+  overflow: auto;
+}
+.dmind-file {
+  display: none;
+}
+.dmind-empty {
+  padding: 3rem 1rem;
+}
+.dmind-inspector ul {
+  padding-left: 1rem;
+  font-size: 0.8rem;
+}
+.dmind-title {
+  font-weight: 600;
+}
+@media (max-width: 1100px) {
+  .dmind-layout {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+  .dmind-inspector {
+    grid-column: 1/-1;
+    max-height: none;
+  }
+  .dmind-inspector {
+    display: block;
+  }
+}
+@media (max-width: 767px) {
+  .dmind-header {
+    align-items: flex-start;
+  }
+  .dmind-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dmind-library {
+    max-height: 200px;
+  }
+  .dmind-canvas {
+    min-height: 300px;
+  }
+  .dmind-wizard ol {
+    font-size: 0.8rem;
+  }
+  .dmind {
+    padding: 0.5rem;
+  }
+  .dmind-toolbar {
+    font-size: 0.85rem;
+  }
+}
+[data-theme='light'] .dmind {
+  --dp-surface: #fff;
+  --dmind-border: #cbd5e1;
+}

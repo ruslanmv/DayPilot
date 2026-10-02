@@ -1,0 +1,73 @@
+{
+  "schema_version": "dmind/v1",
+  "id": "order-system",
+  "title": "Order processing system",
+  "kind": "system",
+  "nodes": [
+    {
+      "id": "root",
+      "label": "Order processing",
+      "notes": "Input: validated cart. Output: confirmed order or explicit failure."
+    },
+    {
+      "id": "validate",
+      "label": "Validate order",
+      "notes": "Reject invalid items before reserving stock."
+    },
+    {
+      "id": "payment",
+      "label": "Charge payment",
+      "notes": "Use an idempotency key. Retry at most three times."
+    },
+    {
+      "id": "confirm",
+      "label": "Confirm order",
+      "notes": "Acceptance: repeated requests cannot create duplicate orders."
+    }
+  ],
+  "edges": [
+    {
+      "id": "b1",
+      "source": "root",
+      "target": "validate",
+      "kind": "branch"
+    },
+    {
+      "id": "b2",
+      "source": "root",
+      "target": "payment",
+      "kind": "branch"
+    },
+    {
+      "id": "b3",
+      "source": "root",
+      "target": "confirm",
+      "kind": "branch"
+    },
+    {
+      "id": "f1",
+      "source": "validate",
+      "target": "payment",
+      "kind": "flow",
+      "label": "valid"
+    },
+    {
+      "id": "f2",
+      "source": "payment",
+      "target": "confirm",
+      "kind": "flow",
+      "label": "paid"
+    },
+    {
+      "id": "f3",
+      "source": "payment",
+      "target": "payment",
+      "kind": "flow",
+      "label": "temporary failure; retry ≤ 3"
+    }
+  ],
+  "metadata": {
+    "generator": "manual",
+    "ai_assisted": false
+  }
+}
