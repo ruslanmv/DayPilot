@@ -1277,3 +1277,24 @@ class SlackDraftRevision(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, server_default=func.now()
     )
+
+
+class Diagram(TimestampMixin, Base):
+    """dmind heads; revision snapshots are immutable and archived heads stay recoverable."""
+    __tablename__ = "diagrams"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    document_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class DiagramRevision(Base):
+    __tablename__ = "diagram_revisions"
+
+    diagram_id: Mapped[str] = mapped_column(ForeignKey("diagrams.id"), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
