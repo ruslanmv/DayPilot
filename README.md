@@ -38,6 +38,10 @@ while keeping every sensitive action human-approved, audited, and reversible. It
 of the **HomePilot Family** and shares its calm, obsidian design language across desktop,
 web, and a mobile PWA.
 
+## Presentation workspace proposal
+
+An additive [DayPilot Presentations design](docs/presentations/README.md) defines company brand kits and templates, a brief-to-deck wizard, editable PowerPoint export with actual-file visual checks, immutable revisions, and weekly draft series. The package includes an implementation roadmap, quality benchmark and validated draft contracts. It is a design proposal; no presentation feature or recurring schedule is enabled by this documentation.
+
 ## Table of contents
 
 - [Product tour](#product-tour) · [Why DayPilot](#why-daypilot) · [Architecture](#architecture)
