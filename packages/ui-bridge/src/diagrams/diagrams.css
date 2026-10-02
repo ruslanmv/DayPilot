@@ -418,3 +418,7 @@
 .dmind-ai form { display: flex; gap: 0.4rem; margin-top: 0.5rem }
 .dmind-ai form input { flex: 1 }
 .dmind-ai-proposal { margin: 0.5rem 0; padding: 0.5rem; border: 1px dashed var(--dp-border, #2a3347); border-radius: 8px }
+
+.dmind-quick { display: grid; gap: 0.6rem; margin: 0.75rem 0; padding: 0.75rem; border: 1px solid var(--dp-border, #2a3347); border-radius: 10px }
+.dmind-quick label { display: grid; gap: 0.25rem }
+.dmind-quick-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap }

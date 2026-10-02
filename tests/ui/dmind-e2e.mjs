@@ -1022,6 +1022,21 @@ await step('ask AI: without a connected provider the panel says so plainly and n
   await page.keyboard.press('Escape')
 })
 
+await step('quick start: a template and a brainstorming method fill the outline with no AI, and the preview shows them', async () => {
+  await button(page, 'New diagram').click()
+  await page.getByLabel('Start from a template').selectOption('swot')
+  assert.match(await page.getByLabel('Brainstorm or outline').inputValue(), /^Strengths/)
+  assert.equal(await page.getByLabel('Topic', { exact: true }).inputValue(), 'SWOT analysis')
+  await page.getByText(/Template .SWOT analysis. loaded/).waitFor()
+  await page.getByLabel('Brainstorm this topic').selectOption('five-whys')
+  assert.match(await page.getByLabel('Brainstorm or outline').inputValue(), /Problem: SWOT analysis/)
+  assert.ok(await page.getByRole('button', { name: 'Draft with AI' }).isDisabled(), 'no provider: AI draft is unavailable, not faked')
+  await button(page, 'Next: structure').click()
+  await button(page, 'Generate preview').click()
+  await page.locator('.dmind-preview').waitFor()
+  assert.ok((await page.locator('.dmind-preview li').count()) > 15)
+})
+
 await step('no uncaught script errors during the whole run', async () => {
   assert.deepEqual(pageErrors, [])
 })

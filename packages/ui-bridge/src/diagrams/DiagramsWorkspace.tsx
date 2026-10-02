@@ -13,6 +13,7 @@ import { relativeTime } from './format'
 import { SourcePanel } from './SourcePanel'
 import { RefinePanel } from './RefinePanel'
 import { AssistPanel, type AssistTrigger } from './AssistPanel'
+import { QuickStart } from './QuickStart'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { NodeStyleControls } from './NodeStyleControls'
 import { OutlineEditor } from './OutlineEditor'
@@ -950,6 +951,17 @@ export function DiagramsWorkspace({
                   Start with any topic. Add one idea per line; indent for child
                   topics.
                 </p>
+                <QuickStart
+                  topic={topic}
+                  content={content}
+                  disabled={busy}
+                  onMessage={setMessage}
+                  onFill={(n) => {
+                    if (n.topic !== undefined) setTopic(n.topic)
+                    setContent(n.content)
+                    if (n.kind) setKind(n.kind)
+                  }}
+                />
                 <button onClick={() => input.current?.click()}>
                   Attach text or open a .dmind, .opml or .xmind file
                 </button>

@@ -1163,4 +1163,33 @@ await asyncSection('B10 OPML and XMind import', async () => {
   assert.equal(r.diagram.nodes.length, 101); assert.ok(dropOf(r, 'topics nested deeper than 100') >= 1); checks += 9
 })
 
+section('C3 templates, brainstorming and dictation', () => {
+  const { templates: tp, voice: vc, dmind: dm } = m
+  assert.ok(tp.TEMPLATES.length >= 12 && tp.BRAINSTORM_MODES.length >= 7)
+  assert.equal(new Set(tp.TEMPLATES.map((t) => t.id)).size, tp.TEMPLATES.length)
+  assert.equal(new Set(tp.BRAINSTORM_MODES.map((t) => t.id)).size, tp.BRAINSTORM_MODES.length)
+  for (const t of tp.TEMPLATES) {
+    const d = dm.fromOutline(t.name, t.outline, t.kind)
+    dm.validateDiagram(d)
+    assert.ok(d.nodes.length >= 5 && d.nodes.length <= 60, t.id)
+    assert.equal(d.kind, t.kind); assert.ok(t.blurb.length < 60)
+    assert.ok(t.outline.split('\n').every((l) => (l.length - l.trimStart().length) % 2 === 0 && !l.includes('\t')), t.id + ' indentation')
+  }
+  for (const mode of tp.BRAINSTORM_MODES)
+    for (const topic of ['Launch a podcast', '', '  \n\n  ', 'x'.repeat(5000), '"><script>alert(1)</script>']) {
+      const out = mode.build(topic)
+      const d = dm.fromOutline(topic.trim().slice(0, 100) || 'Topic', out, 'mindmap')
+      dm.validateDiagram(d)
+      assert.ok(out.split('\n').every((l) => l.length < 400), mode.id)
+    }
+  assert.ok(tp.modeById('five-whys').build('Slow site').includes('Slow site'))
+  assert.equal(tp.templateById('nope'), undefined)
+  checks += 3 + tp.TEMPLATES.length * 4 + tp.BRAINSTORM_MODES.length * 10 + 2
+  // dictation text becomes one idea per sentence
+  assert.equal(vc.transcriptToOutline('plan the launch. book a venue! new line invite guests'), 'Plan the launch\nBook a venue\nInvite guests')
+  assert.equal(vc.transcriptToOutline('  '), ''); assert.equal(vc.transcriptToOutline('one new line two'), 'One\nTwo')
+  assert.equal(vc.speechSupported(), false) // no browser speech engine in Node
+  assert.equal(vc.startDictation('en-US', () => {}, () => {}), null); checks += 5
+})
+
 console.log(`dmind modules: ${checks} checks passed`)
