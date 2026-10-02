@@ -690,4 +690,4 @@ Licensed under Apache 2.0.
 
 ### dmind diagrams
 
-Open **Diagrams** to turn topics, brainstorms and text attachments into editable mind maps, flows or system graphs. Save revision history, export/share portable snapshots and prepare Claude Code/Codex briefs or fresh Matrix Designer proposals. See [the complete dmind development plan](docs/dmind-development-plan.md) for delivery scope and follow-up phases.
+Open **Diagrams** to turn topics, brainstorms and text attachments into editable mind maps, flows or system graphs. Save revision history, export/share portable snapshots and prepare Claude Code/Codex briefs or fresh Matrix Designer proposals. The native file format is `.dmind`. See [the complete dmind development plan](docs/dmind-development-plan.md) for the batch plan (B0 to B10), the B0 verification record and acceptance gates. Run `make dmind-e2e` for the browser end-to-end test.

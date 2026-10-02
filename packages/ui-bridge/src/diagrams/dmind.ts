@@ -30,6 +30,10 @@ export const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 const safeId = /^[A-Za-z0-9_-]{1,100}$/
 const edgeKinds = ['branch', 'flow', 'dependency', 'relationship']
 const kinds = ['mindmap', 'flowchart', 'system']
+// The Python validators and the JSON Schema count code points, not UTF-16 units.
+// Fast path: units >= code points, so only an over-long string needs a real count.
+const tooLong = (s: string, limit: number) =>
+  s.length > limit && [...s].length > limit
 
 export function validateDiagram(value: unknown): Diagram {
   if (!value || typeof value !== 'object')
@@ -47,10 +51,10 @@ export function validateDiagram(value: unknown): Diagram {
   if (
     typeof d.id !== 'string' ||
     !d.id.trim() ||
-    d.id.length > 100 ||
+    tooLong(d.id, 100) ||
     typeof d.title !== 'string' ||
     !d.title.trim() ||
-    d.title.length > 200
+    tooLong(d.title, 200)
   )
     throw new Error('Invalid diagram ID or title')
   if (
@@ -81,21 +85,20 @@ export function validateDiagram(value: unknown): Diagram {
     if (
       typeof n.label !== 'string' ||
       !n.label.trim() ||
-      n.label.length > 500 ||
+      tooLong(n.label, 500) ||
       (n.notes !== undefined &&
-        (typeof n.notes !== 'string' || n.notes.length > 20000))
+        (typeof n.notes !== 'string' || tooLong(n.notes, 20000)))
     )
       throw new Error('Invalid label or notes')
     if (n.collapsed !== undefined && typeof n.collapsed !== 'boolean')
       throw new Error('Invalid collapse state')
-    if (
-      n.position &&
-      (!Number.isFinite(n.position.x) ||
-        !Number.isFinite(n.position.y) ||
-        Math.abs(n.position.x) > 100000 ||
-        Math.abs(n.position.y) > 100000)
-    )
-      throw new Error('Invalid node position')
+    if (n.position !== undefined) {
+      const p = n.position as { x?: unknown; y?: unknown } | null
+      const bad = (v: unknown) =>
+        typeof v !== 'number' || !Number.isFinite(v) || Math.abs(v) > 100000
+      if (!p || typeof p !== 'object' || bad(p.x) || bad(p.y))
+        throw new Error('Invalid node position')
+    }
   })
   const edgeIds = new Set<string>(),
     parents = new Map<string, string>()
@@ -112,7 +115,7 @@ export function validateDiagram(value: unknown): Diagram {
       throw new Error('Invalid link or missing node')
     if (
       e.label !== undefined &&
-      (typeof e.label !== 'string' || e.label.length > 500)
+      (typeof e.label !== 'string' || tooLong(e.label, 500))
     )
       throw new Error('Invalid link label')
     edgeIds.add(e.id)
@@ -134,6 +137,21 @@ export function validateDiagram(value: unknown): Diagram {
   return clone(d)
 }
 
+// Same line separators as Python's str.splitlines(), so the editor's local outline
+// mode and Matrix Designer build identical graphs from the same text.
+const LINE_BREAKS = /\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/
+// Leading indentation in columns; a tab advances to the next multiple of 2
+// (Python's expandtabs(2)).
+function indentOf(raw: string): number {
+  let column = 0
+  for (const ch of raw) {
+    if (ch === '\t') column += 2 - (column % 2)
+    else if (/\s/.test(ch)) column += 1
+    else break
+  }
+  return column
+}
+
 export function fromOutline(
   topic: string,
   content: string,
@@ -146,13 +164,12 @@ export function fromOutline(
   const stack: { indent: number; id: string }[] = [{ indent: -1, id: 'root' }]
   let previous = 'root'
   content
-    .split(/\r?\n/)
+    .split(LINE_BREAKS)
     .filter((line) => line.trim())
     .forEach((raw) => {
-      const line = raw.replace(/\t/g, '  '),
-        indent = line.length - line.trimStart().length
+      const indent = indentOf(raw)
       const id = `n${nodes.length}`,
-        label = line.trim().replace(/^(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+)/, '')
+        label = raw.trim().replace(/^(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+)/, '')
       while (stack.length > 1 && stack[stack.length - 1].indent >= indent)
         stack.pop()
       nodes.push({ id, label, notes: '' })
@@ -414,7 +431,8 @@ export function toSvg(input: Diagram): string {
 }
 export function toShareHtml(d: Diagram): string {
   // No scripts or external resources; complete notes and graph accompany the SVG.
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${xml(d.title)} · dmind</title><style>body{font:16px system-ui;margin:2rem;background:#fff;color:#172033}svg{max-width:100%;height:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere}@media print{body{margin:0}}</style><h1>${xml(d.title)}</h1><p>dmind read-only snapshot. Print this page to save a PDF.</p>${toSvg(d)}<h2>Complete outline</h2><pre>${xml(toMarkdown(d))}</pre><h2>Portable graph</h2><pre>${xml(JSON.stringify(d, null, 2))}</pre></html>`
+  // The policy enforces that even if a viewer opens the file in a script-capable context.
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><meta name="viewport" content="width=device-width"><title>${xml(d.title)} · dmind</title><style>body{font:16px system-ui;margin:2rem;background:#fff;color:#172033}svg{max-width:100%;height:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere}@media print{body{margin:0}}</style><h1>${xml(d.title)}</h1><p>dmind read-only snapshot. Print this page to save a PDF.</p>${toSvg(d)}<h2>Complete outline</h2><pre>${xml(toMarkdown(d))}</pre><h2>Portable graph</h2><pre>${xml(JSON.stringify(d, null, 2))}</pre></html>`
 }
 export function toCodingBrief(d: Diagram): string {
   return [
@@ -441,6 +459,98 @@ export function toCodingBrief(d: Diagram): string {
     '```',
   ].join('\n')
 }
+/** In-memory edit session: bounded undo/redo of whole, validated documents. */
+export const HISTORY_LIMIT = 50
+export type History = { past: Diagram[]; present: Diagram; future: Diagram[] }
+export const startHistory = (present: Diagram): History => ({
+  past: [],
+  present,
+  future: [],
+})
+export function commitHistory(h: History | null, next: Diagram): History {
+  if (!h) return startHistory(next)
+  return {
+    past: [...h.past, h.present].slice(-HISTORY_LIMIT),
+    present: next,
+    future: [],
+  }
+}
+export function undoHistory(h: History): History {
+  if (!h.past.length) return h
+  return {
+    past: h.past.slice(0, -1),
+    present: h.past[h.past.length - 1],
+    future: [h.present, ...h.future],
+  }
+}
+export function redoHistory(h: History): History {
+  if (!h.future.length) return h
+  return {
+    past: [...h.past, h.present].slice(-HISTORY_LIMIT),
+    present: h.future[0],
+    future: h.future.slice(1),
+  }
+}
+
+/**
+ * Add a topic after `selectedId`. Flowcharts grow along `flow` links so decisions
+ * and loops stay visible to graphAnalysis; mind maps and systems grow along
+ * `branch` links. A sibling of a topic with no parent is added unconnected.
+ */
+export function addTopic(
+  d: Diagram,
+  selectedId: string,
+  sibling = false,
+  id = newId(),
+): { diagram: Diagram; id: string } | null {
+  if (!d.nodes.some((n) => n.id === selectedId)) return null
+  const kind: EdgeKind = d.kind === 'flowchart' ? 'flow' : 'branch'
+  const parent = sibling
+    ? d.edges.find((e) => e.kind === kind && e.target === selectedId)?.source
+    : selectedId
+  return {
+    id,
+    diagram: {
+      ...d,
+      nodes: [...d.nodes, { id, label: 'New idea', notes: '' }],
+      edges: parent
+        ? [...d.edges, { id: newId(), source: parent, target: id, kind }]
+        : d.edges,
+    },
+  }
+}
+
+/**
+ * Remove a topic and the branch descendants beneath it, plus every link that
+ * touches a removed topic. Returns null when nothing would remain.
+ */
+export function removeBranch(d: Diagram, id: string): Diagram | null {
+  if (!d.nodes.some((n) => n.id === id)) return null
+  const children = new Map<string, string[]>()
+  d.edges
+    .filter((e) => e.kind === 'branch')
+    .forEach((e) =>
+      children.set(e.source, [...(children.get(e.source) || []), e.target]),
+    )
+  const removed = new Set([id]),
+    queue = [id]
+  while (queue.length)
+    (children.get(queue.pop()!) || []).forEach((child) => {
+      if (!removed.has(child)) {
+        removed.add(child)
+        queue.push(child)
+      }
+    })
+  if (removed.size >= d.nodes.length) return null
+  return {
+    ...d,
+    nodes: d.nodes.filter((n) => !removed.has(n.id)),
+    edges: d.edges.filter(
+      (e) => !removed.has(e.source) && !removed.has(e.target),
+    ),
+  }
+}
+
 export function download(name: string, text: string, type: string) {
   const url = URL.createObjectURL(new Blob([text], { type })),
     a = document.createElement('a')

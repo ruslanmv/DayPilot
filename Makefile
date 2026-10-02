@@ -18,7 +18,7 @@ WEB_PORT ?= 5173
 # gateway can pull in the orchestrator/knowledge/model packages directly.
 SERVICE_PYTHONPATH := services/api-gateway:services/orchestrator:services/knowledge-service:services/model-serving:services/observability:services/voice-gateway:services/mcp-host
 
-.PHONY: help install install-python install-python-all install-js run run-api run-web serve run-mobile test lint format typecheck build init-db migrate seed seed-reset sim ui-smoke compose compose-runtime clean preview-persona install-persona
+.PHONY: help install install-python install-python-all install-js run run-api run-web serve run-mobile test lint format typecheck build init-db migrate seed seed-reset sim ui-smoke dmind-e2e compose compose-runtime clean preview-persona install-persona
 
 define HELP_TEXT
 
@@ -52,6 +52,7 @@ DayPilot Enterprise commands
     typecheck            Run TypeScript typechecks
     build                Build all JavaScript workspace packages/apps
     ui-smoke             Build operator-web + run the Playwright UI smoke test
+    dmind-e2e            Build, start a throwaway gateway + SQLite and run the dmind browser E2E
 
   Ops
     sim                  Run the end-to-end 5-day week simulation
@@ -192,6 +193,9 @@ ui-smoke: ## Build operator-web and run the Playwright UI smoke test.
 	$(PNPM) --filter @daypilot/operator-web build
 	@echo "Serve dist and run: node tests/ui/smoke.mjs http://localhost:8890"
 	@echo "(requires playwright-core + a Chromium binary; set CHROMIUM_PATH if needed)"
+
+dmind-e2e: ## Run the dmind browser end-to-end test against a throwaway gateway and database.
+	UV="$(UV)" PNPM="$(PNPM)" scripts/dmind_e2e.sh
 
 compose: ## Start the Docker Compose development stack.
 	docker compose up --build

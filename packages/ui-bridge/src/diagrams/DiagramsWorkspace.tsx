@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { workspaceId } from '../env'
 import {
   diagramsApi,
@@ -6,28 +6,112 @@ import {
   type SavedDiagram,
 } from './diagramsClient'
 import {
-  clone,
+  addTopic,
+  commitHistory,
   download,
   fromBundle,
   fromOutline,
   graphAnalysis,
   layout,
   newId,
+  redoHistory,
+  removeBranch,
+  startHistory,
   toCodingBrief,
   toMarkdown,
   toMermaid,
   toShareHtml,
   toSvg,
+  undoHistory,
   validateDiagram,
   visibleNodes,
   type Diagram,
+  type DiagramEdge,
   type DiagramKind,
+  type DiagramNode,
   type EdgeKind,
+  type History,
 } from './dmind'
 import './diagrams.css'
 
-type History = { past: Diagram[]; present: Diagram; future: Diagram[] }
 type Revision = { revision: number; document: Diagram }
+type NodeViewProps = {
+  n: DiagramNode
+  x: number
+  y: number
+  selected: boolean
+  onSelect: (id: string) => void
+  onDragStart: (e: React.PointerEvent<SVGGElement>, n: DiagramNode) => void
+}
+// Memoised: during a drag only the moved topic receives new props.
+const NodeView = React.memo(function NodeView({
+  n,
+  x,
+  y,
+  selected,
+  onSelect,
+  onDragStart,
+}: NodeViewProps) {
+  return (
+    <g
+      data-node={n.id}
+      transform={`translate(${x},${y})`}
+      role="button"
+      tabIndex={0}
+      aria-label={n.label + (n.collapsed ? ', collapsed' : '')}
+      aria-pressed={selected}
+      onClick={() => onSelect(n.id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect(n.id)
+        }
+      }}
+      onPointerDown={(e) => onDragStart(e, n)}
+    >
+      <rect
+        width="200"
+        height="64"
+        rx="12"
+        className={selected ? 'is-selected' : ''}
+      />
+      <text x="12" y="37">
+        {n.label.length > 23 ? n.label.slice(0, 22) + '…' : n.label}
+        {n.collapsed ? ' ⊕' : ''}
+      </text>
+      <title>{n.label}</title>
+    </g>
+  )
+})
+const EdgesView = React.memo(function EdgesView({
+  edges,
+  byId,
+}: {
+  edges: DiagramEdge[]
+  byId: Map<string, DiagramNode>
+}) {
+  return (
+    <>
+      {edges.map((e) => {
+        const a = byId.get(e.source)!.position!,
+          b = byId.get(e.target)!.position!
+        return (
+          <g key={e.id}>
+            <path
+              d={`M${a.x + 100},${a.y + 32} L${b.x + 100},${b.y + 32}`}
+              className={`dmind-edge dmind-edge-${e.kind}`}
+              markerEnd={e.kind === 'branch' ? undefined : 'url(#dmind-arrow)'}
+            />
+            <text x={(a.x + b.x) / 2 + 100} y={(a.y + b.y) / 2 + 24}>
+              {e.label}
+            </text>
+          </g>
+        )
+      })}
+    </>
+  )
+})
+
 export function DiagramsWorkspace({
   accountKey = 'local',
 }: {
@@ -80,15 +164,40 @@ export function DiagramsWorkspace({
   const draftKey = `daypilot.dmind.draft:${workspaceId()}:${accountKey}`
   const diagram = history?.present || null
   const arranged = useMemo(() => (diagram ? layout(diagram) : null), [diagram])
-  const visible = arranged ? visibleNodes(arranged) : []
-  const byId = new Map(arranged?.nodes.map((n) => [n.id, n]) || [])
+  // Pointer moves re-render this component many times a second: keep derived data memoised
+  // so a drag only touches the dragged topic (measured: 1000 topics, see docs).
+  const visible = useMemo(
+    () => (arranged ? visibleNodes(arranged) : []),
+    [arranged],
+  )
+  const byId = useMemo(
+    () => new Map(arranged?.nodes.map((n) => [n.id, n]) || []),
+    [arranged],
+  )
+  const visibleEdges = useMemo(() => {
+    const ids = new Set(visible.map((n) => n.id))
+    return (arranged?.edges || []).filter(
+      (e) => ids.has(e.source) && ids.has(e.target),
+    )
+  }, [arranged, visible])
   const node = diagram?.nodes.find((n) => n.id === selected)
-  const analysis = diagram && graphAnalysis(diagram)
-  const minX = Math.min(0, ...visible.map((n) => n.position!.x - 30)),
-    minY = Math.min(0, ...visible.map((n) => n.position!.y - 30))
-  const width = Math.max(800, ...visible.map((n) => n.position!.x + 240)) - minX
-  const height =
-    Math.max(500, ...visible.map((n) => n.position!.y + 100)) - minY
+  const analysis = useMemo(
+    () => (diagram ? graphAnalysis(diagram) : null),
+    [diagram],
+  )
+  const { minX, minY, width, height } = useMemo(() => {
+    let x0 = 0,
+      y0 = 0,
+      x1 = 800,
+      y1 = 500
+    for (const n of visible) {
+      x0 = Math.min(x0, n.position!.x - 30)
+      y0 = Math.min(y0, n.position!.y - 30)
+      x1 = Math.max(x1, n.position!.x + 240)
+      y1 = Math.max(y1, n.position!.y + 100)
+    }
+    return { minX: x0, minY: y0, width: x1 - x0, height: y1 - y0 }
+  }, [visible])
 
   async function refresh() {
     const result = await diagramsApi.list()
@@ -143,13 +252,29 @@ export function DiagramsWorkspace({
       setSelected(diagram.nodes[0].id)
   }, [diagram, selected])
 
+  const startDrag = useCallback(
+    (e: React.PointerEvent<SVGGElement>, n: DiagramNode) => {
+      if (busy) return
+      e.stopPropagation()
+      setSelected(n.id)
+      drag.current = {
+        id: n.id,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        x: n.position!.x,
+        y: n.position!.y,
+      }
+      e.currentTarget.setPointerCapture(e.pointerId)
+    },
+    [busy],
+  )
   function open(
     d: Diagram,
     persisted: SavedDiagram | null = null,
     isDirty = true,
   ) {
     const safe = validateDiagram(d)
-    setHistory({ past: [], present: safe, future: [] })
+    setHistory(startHistory(safe))
     setSaved(persisted)
     setDirty(isDirty)
     setSelected(safe.nodes[0].id)
@@ -170,42 +295,18 @@ export function DiagramsWorkspace({
   function commit(d: Diagram) {
     try {
       const next = validateDiagram(d)
-      setHistory((h) =>
-        h
-          ? {
-              past: [...h.past, h.present].slice(-50),
-              present: next,
-              future: [],
-            }
-          : { past: [], present: next, future: [] },
-      )
+      setHistory((h) => commitHistory(h, next))
       setDirty(true)
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Invalid diagram')
     }
   }
   function undo() {
-    setHistory((h) =>
-      h?.past.length
-        ? {
-            past: h.past.slice(0, -1),
-            present: h.past[h.past.length - 1],
-            future: [h.present, ...h.future],
-          }
-        : h,
-    )
+    setHistory((h) => (h ? undoHistory(h) : h))
     setDirty(true)
   }
   function redo() {
-    setHistory((h) =>
-      h?.future.length
-        ? {
-            past: [...h.past, h.present],
-            present: h.future[0],
-            future: h.future.slice(1),
-          }
-        : h,
-    )
+    setHistory((h) => (h ? redoHistory(h) : h))
     setDirty(true)
   }
   function changeNode(patch: Partial<NonNullable<typeof node>>) {
@@ -219,52 +320,22 @@ export function DiagramsWorkspace({
   }
   function addChild(sibling = false) {
     if (!diagram || !node) return
-    const id = newId(),
-      parent = sibling
-        ? diagram.edges.find(
-            (e) => e.kind === 'branch' && e.target === selected,
-          )?.source
-        : selected
-    commit({
-      ...diagram,
-      nodes: [...diagram.nodes, { id, label: 'New idea', notes: '' }],
-      edges: parent
-        ? [
-            ...diagram.edges,
-            { id: newId(), source: parent, target: id, kind: 'branch' },
-          ]
-        : diagram.edges,
-    })
-    setSelected(id)
+    const added = addTopic(diagram, selected, sibling)
+    if (!added) return
+    commit(added.diagram)
+    setSelected(added.id)
   }
   function removeNode() {
-    if (!diagram || !node || diagram.nodes.length === 1) return
-    const removed = new Set([selected]),
-      queue = [selected]
-    while (queue.length) {
-      const id = queue.pop()!
-      diagram.edges
-        .filter((e) => e.kind === 'branch' && e.source === id)
-        .forEach((e) => {
-          removed.add(e.target)
-          queue.push(e.target)
-        })
-    }
-    if (removed.size === diagram.nodes.length) {
+    if (!diagram || !node) return
+    const next = removeBranch(diagram, selected)
+    if (!next) {
       setMessage('Keep at least one node. Create a new diagram to start again.')
       return
     }
-    const nodes = diagram.nodes.filter((n) => !removed.has(n.id))
-    commit({
-      ...diagram,
-      nodes,
-      edges: diagram.edges.filter(
-        (e) => !removed.has(e.source) && !removed.has(e.target),
-      ),
-    })
-    setSelected(nodes[0].id)
+    commit(next)
+    setSelected(next.nodes[0].id)
   }
-  async function save(copy = false, archive = false) {
+  async function save(copy = false, archive = saved?.archived ?? false) {
     if (!diagram) return
     setBusy(true)
     const result =
@@ -280,7 +351,7 @@ export function DiagramsWorkspace({
         /* Browser storage may be blocked; the server save succeeded. */
       }
       setMessage(
-        `Saved revision ${result.data.revision}${archive ? ' · archived' : ''}`,
+        `Saved revision ${result.data.revision}${result.data.archived ? ' · archived' : ''}`,
       )
       await refresh()
     } else
@@ -326,7 +397,7 @@ export function DiagramsWorkspace({
       if (file.name.toLowerCase().endsWith('.json')) {
         const value = JSON.parse(text)
         const d =
-          value.schema_version === 'matrix.designer.bundle/v1'
+          value?.schema_version === 'matrix.designer.bundle/v1'
             ? fromBundle(value)
             : validateDiagram(value)
         setPreview({ ...d, id: newId() })
@@ -443,6 +514,8 @@ export function DiagramsWorkspace({
             if (canLeave()) {
               setWizard(1)
               setPreview(null)
+              // Sending text to a provider is an opt-in for this run only.
+              setUseDesigner(false)
             }
           }}
         >
@@ -803,84 +876,20 @@ export function DiagramsWorkspace({
                       <path d="M0,0 L8,4 L0,8" fill="currentColor" />
                     </marker>
                   </defs>
-                  {arranged!.edges
-                    .filter(
-                      (e) =>
-                        visible.some((n) => n.id === e.source) &&
-                        visible.some((n) => n.id === e.target),
-                    )
-                    .map((e) => {
-                      const a = byId.get(e.source)!.position!,
-                        b = byId.get(e.target)!.position!
-                      return (
-                        <g key={e.id}>
-                          <path
-                            d={`M${a.x + 100},${a.y + 32} L${b.x + 100},${b.y + 32}`}
-                            className={`dmind-edge dmind-edge-${e.kind}`}
-                            markerEnd={
-                              e.kind === 'branch'
-                                ? undefined
-                                : 'url(#dmind-arrow)'
-                            }
-                          />
-                          <text
-                            x={(a.x + b.x) / 2 + 100}
-                            y={(a.y + b.y) / 2 + 24}
-                          >
-                            {e.label}
-                          </text>
-                        </g>
-                      )
-                    })}
+                  <EdgesView edges={visibleEdges} byId={byId} />
                   {visible.map((n) => {
                     const p =
                       dragPosition?.id === n.id ? dragPosition : n.position!
                     return (
-                      <g
+                      <NodeView
                         key={n.id}
-                        data-node={n.id}
-                        transform={`translate(${p.x},${p.y})`}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={
-                          n.label + (n.collapsed ? ', collapsed' : '')
-                        }
-                        aria-pressed={selected === n.id}
-                        onClick={() => setSelected(n.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            setSelected(n.id)
-                          }
-                        }}
-                        onPointerDown={(e) => {
-                          if (busy) return
-                          e.stopPropagation()
-                          setSelected(n.id)
-                          drag.current = {
-                            id: n.id,
-                            clientX: e.clientX,
-                            clientY: e.clientY,
-                            x: n.position!.x,
-                            y: n.position!.y,
-                          }
-                          e.currentTarget.setPointerCapture(e.pointerId)
-                        }}
-                      >
-                        <rect
-                          width="200"
-                          height="64"
-                          rx="12"
-                          className={selected === n.id ? 'is-selected' : ''}
-                        />
-                        <text x="12" y="37">
-                          {n.label.length > 23
-                            ? n.label.slice(0, 22) + '…'
-                            : n.label}
-                          {n.collapsed ? ' ⊕' : ''}
-                        </text>
-                        <title>{n.label}</title>
-                      </g>
+                        n={n}
+                        x={p.x}
+                        y={p.y}
+                        selected={selected === n.id}
+                        onSelect={setSelected}
+                        onDragStart={startDrag}
+                      />
                     )
                   })}
                 </svg>

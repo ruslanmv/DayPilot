@@ -1,0 +1,245 @@
+{
+  "contract": "dmind/v1",
+  "base": "order-system.dmind.json",
+  "_readme": "Shared by DayPilot (Python + TypeScript) and Matrix Designer (Python + JSON Schema). Each case mutates a deep copy of the base fixture with ordered ops: {set: path, value}, {delete: path}, {append: path, value}, {grow: 'nodes'|'edges', to: N}. A path is dot separated; numeric segments index arrays; delete on an array index removes that element. A value of {\"$repeat\": [text, n]} expands to text repeated n times. grow appends unique filler nodes (g<i>) or self-loop relationship edges (g<i>) until the total equals N. 'valid' cases must be accepted by every validator and by the JSON Schema. 'invalid' cases must be rejected by every validator; where schema_rejects is true the JSON Schema must reject them too (false marks rules a JSON Schema cannot express: references, uniqueness, forest shape, UTF-8 byte size, whitespace-only text). 'outlines' pin the deterministic outline parser so the editor and Matrix Designer build the same graph from the same text. Non-finite numbers cannot be written in JSON and are covered by language-specific tests. Keep this file byte-identical in both repositories: tests pin its digest.",
+  "valid": [
+    { "name": "golden fixture unchanged", "ops": [] },
+    {
+      "name": "single node and no links",
+      "ops": [
+        { "set": "nodes", "value": [{ "id": "only", "label": "Only topic" }] },
+        { "set": "edges", "value": [] }
+      ]
+    },
+    {
+      "name": "feedback loop on flow edges is allowed",
+      "ops": [
+        { "append": "edges", "value": { "id": "loop", "source": "confirm", "target": "validate", "kind": "flow", "label": "retry" } }
+      ]
+    },
+    {
+      "name": "dependency cycle is representable and left to review",
+      "ops": [
+        { "append": "edges", "value": { "id": "dep1", "source": "validate", "target": "payment", "kind": "dependency" } },
+        { "append": "edges", "value": { "id": "dep2", "source": "payment", "target": "validate", "kind": "dependency" } }
+      ]
+    },
+    {
+      "name": "unknown metadata and fields are retained",
+      "ops": [
+        { "set": "metadata.future", "value": { "a": [1, { "b": null }] } },
+        { "set": "nodes.0.metadata", "value": { "x": 1 } },
+        { "set": "x_extension", "value": "kept" }
+      ]
+    },
+    {
+      "name": "text exactly at every limit",
+      "ops": [
+        { "set": "id", "value": { "$repeat": ["i", 100] } },
+        { "set": "title", "value": { "$repeat": ["t", 200] } },
+        { "set": "nodes.0.label", "value": { "$repeat": ["x", 500] } },
+        { "set": "nodes.0.notes", "value": { "$repeat": ["n", 20000] } },
+        { "set": "edges.3.label", "value": { "$repeat": ["l", 500] } }
+      ]
+    },
+    {
+      "name": "limits count code points, not UTF-16 units",
+      "ops": [{ "set": "nodes.0.label", "value": { "$repeat": ["🚀", 500] } }]
+    },
+    {
+      "name": "unicode labels",
+      "ops": [{ "set": "nodes.1.label", "value": "Validación 订单 🚀" }]
+    },
+    {
+      "name": "positions at bounds, fractions and collapsed",
+      "ops": [
+        { "set": "nodes.0.position", "value": { "x": -100000, "y": 100000 } },
+        { "set": "nodes.0.collapsed", "value": true },
+        { "set": "nodes.1.position", "value": { "x": 12.5, "y": -3.25 } }
+      ]
+    },
+    {
+      "name": "ids differing only by case are distinct",
+      "ops": [{ "append": "nodes", "value": { "id": "ROOT", "label": "Upper case" } }]
+    },
+    { "name": "disconnected forest", "ops": [{ "delete": "edges.2" }] },
+    { "name": "exactly 1000 nodes", "ops": [{ "grow": "nodes", "to": 1000 }] },
+    { "name": "exactly 4000 edges", "ops": [{ "grow": "edges", "to": 4000 }] }
+  ],
+  "invalid": [
+    { "name": "unsupported version", "ops": [{ "set": "schema_version", "value": "dmind/v2" }], "schema_rejects": true },
+    { "name": "missing version", "ops": [{ "delete": "schema_version" }], "schema_rejects": true },
+    { "name": "other product's version", "ops": [{ "set": "schema_version", "value": "xmind/v1" }], "schema_rejects": true },
+    { "name": "unknown kind", "ops": [{ "set": "kind", "value": "tree" }], "schema_rejects": true },
+    { "name": "kind is not a string", "ops": [{ "set": "kind", "value": [] }], "schema_rejects": true },
+    { "name": "missing nodes", "ops": [{ "delete": "nodes" }], "schema_rejects": true },
+    { "name": "nodes is not a list", "ops": [{ "set": "nodes", "value": {} }], "schema_rejects": true },
+    { "name": "edges is not a list", "ops": [{ "set": "edges", "value": {} }], "schema_rejects": true },
+    { "name": "zero nodes", "ops": [{ "set": "nodes", "value": [] }, { "set": "edges", "value": [] }], "schema_rejects": true },
+    { "name": "1001 nodes", "ops": [{ "grow": "nodes", "to": 1001 }], "schema_rejects": true },
+    { "name": "4001 edges", "ops": [{ "grow": "edges", "to": 4001 }], "schema_rejects": true },
+    { "name": "node is not an object", "ops": [{ "set": "nodes.0", "value": "root" }], "schema_rejects": true },
+    { "name": "empty label", "ops": [{ "set": "nodes.0.label", "value": "" }], "schema_rejects": true },
+    { "name": "whitespace-only label", "ops": [{ "set": "nodes.0.label", "value": "   " }], "schema_rejects": false },
+    { "name": "label of 501 characters", "ops": [{ "set": "nodes.0.label", "value": { "$repeat": ["x", 501] } }], "schema_rejects": true },
+    { "name": "label of 501 code points", "ops": [{ "set": "nodes.0.label", "value": { "$repeat": ["🚀", 501] } }], "schema_rejects": true },
+    { "name": "notes of 20001 characters", "ops": [{ "set": "nodes.0.notes", "value": { "$repeat": ["n", 20001] } }], "schema_rejects": true },
+    { "name": "notes are not text", "ops": [{ "set": "nodes.0.notes", "value": 5 }], "schema_rejects": true },
+    { "name": "null notes", "ops": [{ "set": "nodes.0.notes", "value": null }], "schema_rejects": true },
+    { "name": "collapsed is not boolean", "ops": [{ "set": "nodes.0.collapsed", "value": "yes" }], "schema_rejects": true },
+    { "name": "null collapsed", "ops": [{ "set": "nodes.0.collapsed", "value": null }], "schema_rejects": true },
+    { "name": "empty title", "ops": [{ "set": "title", "value": "" }], "schema_rejects": true },
+    { "name": "whitespace-only title", "ops": [{ "set": "title", "value": "  " }], "schema_rejects": false },
+    { "name": "title of 201 characters", "ops": [{ "set": "title", "value": { "$repeat": ["t", 201] } }], "schema_rejects": true },
+    { "name": "document id of 101 characters", "ops": [{ "set": "id", "value": { "$repeat": ["i", 101] } }], "schema_rejects": true },
+    { "name": "empty document id", "ops": [{ "set": "id", "value": "" }], "schema_rejects": true },
+    { "name": "unsafe node id", "ops": [{ "append": "nodes", "value": { "id": "bad id", "label": "x" } }], "schema_rejects": true },
+    { "name": "path-like node id", "ops": [{ "append": "nodes", "value": { "id": "../x", "label": "x" } }], "schema_rejects": true },
+    { "name": "markup in node id", "ops": [{ "append": "nodes", "value": { "id": "<script>", "label": "x" } }], "schema_rejects": true },
+    { "name": "duplicate node ids", "ops": [{ "append": "nodes", "value": { "id": "root", "label": "duplicate" } }], "schema_rejects": false },
+    { "name": "unsafe edge id", "ops": [{ "set": "edges.0.id", "value": "bad id" }], "schema_rejects": true },
+    { "name": "duplicate edge ids", "ops": [{ "append": "edges", "value": { "id": "b1", "source": "root", "target": "validate", "kind": "flow" } }], "schema_rejects": false },
+    { "name": "edge to a missing node", "ops": [{ "set": "edges.0.target", "value": "ghost" }], "schema_rejects": false },
+    { "name": "edge from a missing node", "ops": [{ "set": "edges.0.source", "value": "ghost" }], "schema_rejects": false },
+    { "name": "edge source is not a string", "ops": [{ "set": "edges.0.source", "value": [] }], "schema_rejects": true },
+    { "name": "edge target is not a string", "ops": [{ "set": "edges.0.target", "value": [] }], "schema_rejects": true },
+    { "name": "unknown edge kind", "ops": [{ "set": "edges.0.kind", "value": "magic" }], "schema_rejects": true },
+    { "name": "edge kind is not a string", "ops": [{ "set": "edges.0.kind", "value": {} }], "schema_rejects": true },
+    { "name": "edge label of 501 characters", "ops": [{ "set": "edges.3.label", "value": { "$repeat": ["l", 501] } }], "schema_rejects": true },
+    { "name": "edge label is not text", "ops": [{ "set": "edges.3.label", "value": 7 }], "schema_rejects": true },
+    { "name": "null edge label", "ops": [{ "set": "edges.3.label", "value": null }], "schema_rejects": true },
+    { "name": "edge is not an object", "ops": [{ "set": "edges.0", "value": 1 }], "schema_rejects": true },
+    {
+      "name": "second branch parent",
+      "ops": [{ "append": "edges", "value": { "id": "b4", "source": "validate", "target": "confirm", "kind": "branch" } }],
+      "schema_rejects": false
+    },
+    {
+      "name": "branch cycle",
+      "ops": [{ "append": "edges", "value": { "id": "b5", "source": "validate", "target": "root", "kind": "branch" } }],
+      "schema_rejects": false
+    },
+    {
+      "name": "branch to itself",
+      "ops": [{ "append": "edges", "value": { "id": "b6", "source": "root", "target": "root", "kind": "branch" } }],
+      "schema_rejects": false
+    },
+    { "name": "position is text", "ops": [{ "set": "nodes.0.position", "value": "0,0" }], "schema_rejects": true },
+    { "name": "null position", "ops": [{ "set": "nodes.0.position", "value": null }], "schema_rejects": true },
+    { "name": "position without y", "ops": [{ "set": "nodes.0.position", "value": { "x": 1 } }], "schema_rejects": true },
+    { "name": "position beyond bounds", "ops": [{ "set": "nodes.0.position", "value": { "x": 100001, "y": 0 } }], "schema_rejects": true },
+    { "name": "boolean position", "ops": [{ "set": "nodes.0.position", "value": { "x": true, "y": 0 } }], "schema_rejects": true },
+    { "name": "document metadata is a list", "ops": [{ "set": "metadata", "value": [] }], "schema_rejects": true },
+    { "name": "null document metadata", "ops": [{ "set": "metadata", "value": null }], "schema_rejects": true },
+    { "name": "node metadata is text", "ops": [{ "set": "nodes.0.metadata", "value": "x" }], "schema_rejects": true },
+    { "name": "null node metadata", "ops": [{ "set": "nodes.0.metadata", "value": null }], "schema_rejects": true },
+    { "name": "document over 2 MB", "ops": [{ "set": "metadata.pad", "value": { "$repeat": ["x", 2100000] } }], "schema_rejects": false }
+  ],
+  "outlines": [
+    {
+      "name": "nested mind map",
+      "topic": "Order",
+      "content": "Receive\n  Validate\n  Reserve\nCharge",
+      "kind": "mindmap",
+      "nodes": ["Order", "Receive", "Validate", "Reserve", "Charge"],
+      "edges": [[0, 1, "branch"], [1, 2, "branch"], [1, 3, "branch"], [0, 4, "branch"]]
+    },
+    {
+      "name": "flowchart links lines in order",
+      "topic": "Flow",
+      "content": "A\n  B\nC",
+      "kind": "flowchart",
+      "nodes": ["Flow", "A", "B", "C"],
+      "edges": [[0, 1, "flow"], [1, 2, "flow"], [2, 3, "flow"]]
+    },
+    {
+      "name": "system uses branches",
+      "topic": "System",
+      "content": "API\n  Auth\nDatabase",
+      "kind": "system",
+      "nodes": ["System", "API", "Auth", "Database"],
+      "edges": [[0, 1, "branch"], [1, 2, "branch"], [0, 3, "branch"]]
+    },
+    {
+      "name": "list and heading prefixes are removed",
+      "topic": "Prefixes",
+      "content": "- bullet\n* star\n+ plus\n1. one\n2) two\n# H1\n### H3",
+      "kind": "mindmap",
+      "nodes": ["Prefixes", "bullet", "star", "plus", "one", "two", "H1", "H3"],
+      "edges": [[0, 1, "branch"], [0, 2, "branch"], [0, 3, "branch"], [0, 4, "branch"], [0, 5, "branch"], [0, 6, "branch"], [0, 7, "branch"]]
+    },
+    {
+      "name": "markers need following whitespace",
+      "topic": "Markers",
+      "content": "-dash\n1.5 ratio\n#hash",
+      "kind": "mindmap",
+      "nodes": ["Markers", "-dash", "1.5 ratio", "#hash"],
+      "edges": [[0, 1, "branch"], [0, 2, "branch"], [0, 3, "branch"]]
+    },
+    {
+      "name": "blank lines and CRLF",
+      "topic": "Windows",
+      "content": "A\r\n\r\n  B\r\nC",
+      "kind": "mindmap",
+      "nodes": ["Windows", "A", "B", "C"],
+      "edges": [[0, 1, "branch"], [1, 2, "branch"], [0, 3, "branch"]]
+    },
+    {
+      "name": "lone carriage returns separate lines",
+      "topic": "Classic",
+      "content": "A\r  B",
+      "kind": "mindmap",
+      "nodes": ["Classic", "A", "B"],
+      "edges": [[0, 1, "branch"], [1, 2, "branch"]]
+    },
+    {
+      "name": "tabs count as two columns",
+      "topic": "Tabs",
+      "content": "A\n\tB\n\t\tC\nD",
+      "kind": "mindmap",
+      "nodes": ["Tabs", "A", "B", "C", "D"],
+      "edges": [[0, 1, "branch"], [1, 2, "branch"], [2, 3, "branch"], [0, 4, "branch"]]
+    },
+    {
+      "name": "tab stops follow expandtabs(2)",
+      "topic": "Mixed",
+      "content": "A\n \tB\n   C",
+      "kind": "mindmap",
+      "nodes": ["Mixed", "A", "B", "C"],
+      "edges": [[0, 1, "branch"], [1, 2, "branch"], [2, 3, "branch"]]
+    },
+    {
+      "name": "dedent returns to the matching level",
+      "topic": "Levels",
+      "content": "A\n  B\n    C\n  D\nE",
+      "kind": "mindmap",
+      "nodes": ["Levels", "A", "B", "C", "D", "E"],
+      "edges": [[0, 1, "branch"], [1, 2, "branch"], [2, 3, "branch"], [1, 4, "branch"], [0, 5, "branch"]]
+    },
+    {
+      "name": "indent jumps attach to the nearest parent",
+      "topic": "Jump",
+      "content": "A\n      B",
+      "kind": "mindmap",
+      "nodes": ["Jump", "A", "B"],
+      "edges": [[0, 1, "branch"], [1, 2, "branch"]]
+    },
+    {
+      "name": "topic is trimmed and content may be empty",
+      "topic": "  Spaced  ",
+      "content": "",
+      "kind": "mindmap",
+      "nodes": ["Spaced"],
+      "edges": []
+    }
+  ],
+  "invalid_outlines": [
+    { "name": "empty topic", "topic": "", "content": "A", "kind": "mindmap" },
+    { "name": "blank topic", "topic": "   ", "content": "A", "kind": "mindmap" },
+    { "name": "topic of 201 characters", "topic": { "$repeat": ["t", 201] }, "content": "", "kind": "mindmap" },
+    { "name": "unknown kind", "topic": "T", "content": "A", "kind": "tree" },
+    { "name": "line of 501 characters", "topic": "T", "content": { "$repeat": ["x", 501] }, "kind": "mindmap" },
+    { "name": "1000 lines make 1001 nodes", "topic": "T", "content": { "$repeat": ["x\n", 1000] }, "kind": "mindmap" },
+    { "name": "source of 100001 characters", "topic": "T", "content": { "$repeat": ["x", 100001] }, "kind": "mindmap" }
+  ]
+}
