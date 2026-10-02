@@ -1,24 +1,9 @@
 /** Pure graph/export checks. Run with node tests/ui/dmind.mjs. */
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
-const require = createRequire(
-  new URL('../../packages/ui-bridge/package.json', import.meta.url),
-)
-const ts = require('typescript')
-const source = fs.readFileSync(
-  new URL('../../packages/ui-bridge/src/diagrams/dmind.ts', import.meta.url),
-  'utf8',
-)
-const code = ts.transpileModule(source, {
-  compilerOptions: {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-  },
-}).outputText
-const dmind = await import(
-  'data:text/javascript;base64,' + Buffer.from(code).toString('base64')
-)
+import { loadDiagramModules } from './_load.mjs'
+
+const { dmind } = await loadDiagramModules()
 const contractDir = new URL('../../packages/dmind-contract/', import.meta.url)
 const fixture = JSON.parse(
   fs.readFileSync(new URL('order-system.dmind.json', contractDir)),

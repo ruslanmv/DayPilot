@@ -308,3 +308,100 @@
   width: auto;
   margin-left: 0.5rem;
 }
+
+.dmind-canvas rect.dmind-accent {
+  stroke: none;
+}
+.dmind-canvas rect.is-primary {
+  stroke-width: 4;
+}
+.dmind-canvas text.dmind-glyphs {
+  font-size: 13px;
+  opacity: 0.9;
+}
+.dmind-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 200px;
+  padding: 0.3rem;
+  border: 1px solid var(--dmind-border);
+  border-radius: 10px;
+  background: var(--dp-surface, #172033);
+  box-shadow: 0 10px 30px #0008;
+}
+.dmind .dmind-menu button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  text-align: left;
+  border: 0;
+  border-radius: 6px;
+}
+.dmind .dmind-menu button[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+.dmind .dmind-menu button:focus-visible,
+.dmind .dmind-menu button:hover {
+  background: #4f46e544;
+}
+.dmind-outline ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0;
+  max-height: 320px;
+  overflow: auto;
+}
+.dmind-outline li {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0.15rem 0;
+}
+.dmind-outline li input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.3rem 0.45rem;
+}
+.dmind-outline .dmind-fold {
+  width: 1.4rem;
+  flex: 0 0 1.4rem;
+  padding: 0;
+  text-align: center;
+  background: none;
+  border: 0;
+}
+.dmind-rowtools {
+  display: inline-flex;
+  gap: 0.15rem;
+}
+.dmind .dmind-rowtools button {
+  padding: 0.15rem 0.4rem;
+  min-width: 1.8rem;
+}
+.dmind-swatches,
+.dmind-markers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.4rem 0;
+}
+.dmind .dmind-swatches button,
+.dmind .dmind-markers button {
+  display: inline-block;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+.dmind .dmind-swatches button[aria-pressed='true'],
+.dmind .dmind-markers button[aria-pressed='true'] {
+  outline: 2px solid #a5b4fc;
+  outline-offset: 2px;
+}
+.dmind-keys ul {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  padding-left: 1.1rem;
+}

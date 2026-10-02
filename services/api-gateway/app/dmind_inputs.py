@@ -70,7 +70,7 @@ def sha256(data: bytes) -> str:
 def finish(text: str, extractor: str, **extra: Any) -> Extraction:
     """Clean extracted text, wrap over-long lines (never truncate), and enforce the size limit."""
     warnings: list[str] = list(extra.pop("warnings", []))
-    text = text.replace("﻿", "").replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\ufeff", "").replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
     lines: list[str] = []
     wrapped = 0

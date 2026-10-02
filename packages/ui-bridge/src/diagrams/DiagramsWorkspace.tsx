@@ -11,6 +11,14 @@ import { diffDiagrams } from './diff'
 import type { DraftRecord } from './draftStore'
 import { relativeTime } from './format'
 import { SourcePanel } from './SourcePanel'
+import { ContextMenu, type MenuItem } from './ContextMenu'
+import { NodeStyleControls } from './NodeStyleControls'
+import { OutlineEditor } from './OutlineEditor'
+import { applyLayout, defaultLayout, edgePath, LAYOUTS, isLayoutName } from './layouts'
+import { moveNodes, nearestInDirection, patchNodes, reparent, removeBranches } from './edit'
+import { safeHref } from './links'
+import { accentById, cleanMarkers, markerById, markerNames } from './style'
+import { addSiblingAfter, moveSibling, indentNode, outdentNode } from './outline'
 import {
   attachProvenance,
   citationsFor,
@@ -28,7 +36,6 @@ import {
   layout,
   newId,
   redoHistory,
-  removeBranch,
   startHistory,
   toCodingBrief,
   toMarkdown,
@@ -59,31 +66,53 @@ type NodeViewProps = {
   x: number
   y: number
   selected: boolean
-  onSelect: (id: string) => void
+  primary: boolean
+  onSelect: (id: string, additive: boolean) => void
   onDragStart: (e: React.PointerEvent<SVGGElement>, n: DiagramNode) => void
+  onMenu: (id: string, at: { x: number; y: number }) => void
 }
-// Memoised: during a drag only the moved topic receives new props.
+// Memoised: during a drag only the moved topics receive new props.
 const NodeView = React.memo(function NodeView({
   n,
   x,
   y,
   selected,
+  primary,
   onSelect,
   onDragStart,
+  onMenu,
 }: NodeViewProps) {
+  const accent = accentById(n.metadata?.accent)
+  const marks = cleanMarkers(n.metadata?.markers)
+  const href = safeHref(n.metadata?.link)
+  const names = markerNames(n.metadata?.markers)
+  const name =
+    n.label +
+    (n.collapsed ? ', collapsed' : '') +
+    (names ? `, ${names}` : '') +
+    (href ? ', has a link' : '')
   return (
     <g
       data-node={n.id}
       transform={`translate(${x},${y})`}
       role="button"
       tabIndex={0}
-      aria-label={n.label + (n.collapsed ? ', collapsed' : '')}
+      aria-label={name}
       aria-pressed={selected}
-      onClick={() => onSelect(n.id)}
+      aria-keyshortcuts="Shift+F10"
+      onClick={(e) => onSelect(n.id, e.shiftKey || e.ctrlKey || e.metaKey)}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        onMenu(n.id, { x: e.clientX, y: e.clientY })
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          onSelect(n.id)
+          onSelect(n.id, e.shiftKey || e.ctrlKey || e.metaKey)
+        } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+          e.preventDefault()
+          const r = e.currentTarget.getBoundingClientRect()
+          onMenu(n.id, { x: r.left + 20, y: r.bottom })
         }
       }}
       onPointerDown={(e) => onDragStart(e, n)}
@@ -92,12 +121,22 @@ const NodeView = React.memo(function NodeView({
         width="200"
         height="64"
         rx="12"
-        className={selected ? 'is-selected' : ''}
+        className={selected ? (primary ? 'is-selected is-primary' : 'is-selected') : ''}
+        style={accent ? { stroke: accent.hex, strokeWidth: selected ? 4 : 2.5 } : undefined}
       />
-      <text x="12" y="37">
-        {n.label.length > 23 ? n.label.slice(0, 22) + '…' : n.label}
+      {accent && (
+        <rect className="dmind-accent" width="7" height="64" rx="3" style={{ fill: accent.hex }} />
+      )}
+      <text x="14" y="28">
+        {n.label.length > 24 ? n.label.slice(0, 23) + '…' : n.label}
         {n.collapsed ? ' ⊕' : ''}
       </text>
+      {(marks.length > 0 || href) && (
+        <text className="dmind-glyphs" x="14" y="52" aria-hidden="true">
+          {marks.map((m) => markerById(m)!.glyph).join(' ')}
+          {href ? ' ↗' : ''}
+        </text>
+      )}
       <title>{n.label}</title>
     </g>
   )
@@ -112,18 +151,19 @@ const EdgesView = React.memo(function EdgesView({
   return (
     <>
       {edges.map((e) => {
-        const a = byId.get(e.source)!.position!,
-          b = byId.get(e.target)!.position!
+        const g = edgePath(byId.get(e.source)!.position!, byId.get(e.target)!.position!)
         return (
           <g key={e.id}>
             <path
-              d={`M${a.x + 100},${a.y + 32} L${b.x + 100},${b.y + 32}`}
+              d={g.d}
               className={`dmind-edge dmind-edge-${e.kind}`}
               markerEnd={e.kind === 'branch' ? undefined : 'url(#dmind-arrow)'}
             />
-            <text x={(a.x + b.x) / 2 + 100} y={(a.y + b.y) / 2 + 24}>
-              {e.label}
-            </text>
+            {e.label && (
+              <text x={g.mid.x} y={g.mid.y - 6} textAnchor="middle">
+                {e.label}
+              </text>
+            )}
           </g>
         )
       })}
@@ -173,18 +213,22 @@ export function DiagramsWorkspace({
     string,
     unknown
   > | null>(null)
-  const [dragPosition, setDragPosition] = useState<{
-    id: string
-    x: number
-    y: number
+  const [extra, setExtra] = useState<string[]>([]),
+    [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null),
+    [outlineFocus, setOutlineFocus] = useState('')
+  const [dragDelta, setDragDelta] = useState<{
+    ids: Set<string>
+    dx: number
+    dy: number
   } | null>(null)
   const drag = useRef<{
     id: string
+    ids: string[]
     clientX: number
     clientY: number
-    x: number
-    y: number
   } | null>(null)
+  const ignoreClick = useRef(false)
+  const labelInput = useRef<HTMLInputElement>(null)
   const pan = useRef<{
     x: number
     y: number
@@ -213,6 +257,12 @@ export function DiagramsWorkspace({
     )
   }, [arranged, visible])
   const node = diagram?.nodes.find((n) => n.id === selected)
+  const group = useMemo(
+    () => [selected, ...extra.filter((id) => id !== selected)].filter((id) => diagram?.nodes.some((n) => n.id === id)),
+    [selected, extra, diagram],
+  )
+  const groupSet = useMemo(() => new Set(group), [group])
+  const visibleIds = useMemo(() => new Set(visible.map((n) => n.id)), [visible])
   const analysis = useMemo(
     () => (diagram ? graphAnalysis(diagram) : null),
     [diagram],
@@ -224,7 +274,7 @@ export function DiagramsWorkspace({
       y1 = 500
     for (const n of visible) {
       x0 = Math.min(x0, n.position!.x - 30)
-      y0 = Math.min(y0, n.position!.y - 30)
+      y0 = Math.min(y0, n.position!.y - 100)
       x1 = Math.max(x1, n.position!.x + 240)
       y1 = Math.max(y1, n.position!.y + 100)
     }
@@ -335,23 +385,50 @@ export function DiagramsWorkspace({
   useEffect(() => {
     if (diagram && !diagram.nodes.some((n) => n.id === selected))
       setSelected(diagram.nodes[0].id)
-  }, [diagram, selected])
+    if (diagram && extra.some((id) => !diagram.nodes.some((n) => n.id === id)))
+      setExtra(extra.filter((id) => diagram.nodes.some((n) => n.id === id)))
+  }, [diagram, selected, extra])
 
+  const chooseNode = useCallback(
+    (id: string, additive: boolean) => {
+      if (ignoreClick.current) return // the click that ends a drag is not a selection
+      if (!additive) {
+        setSelected(id)
+        setExtra([])
+        return
+      }
+      const all = [selected, ...extra.filter((x) => x !== selected)]
+      if (all.includes(id)) {
+        if (all.length === 1) return
+        const rest = all.filter((x) => x !== id)
+        setSelected(rest[rest.length - 1])
+        setExtra(rest.slice(0, -1))
+      } else {
+        setExtra(all)
+        setSelected(id)
+      }
+    },
+    [selected, extra],
+  )
   const startDrag = useCallback(
     (e: React.PointerEvent<SVGGElement>, n: DiagramNode) => {
-      if (busy) return
+      if (busy || e.button !== 0) return
       e.stopPropagation()
-      setSelected(n.id)
+      if (e.shiftKey || e.ctrlKey || e.metaKey) return // modifiers select on click
+      const inGroup = n.id === selected || extra.includes(n.id)
+      if (!inGroup) {
+        setSelected(n.id)
+        setExtra([])
+      }
       drag.current = {
         id: n.id,
+        ids: inGroup ? [selected, ...extra.filter((x) => x !== selected)] : [n.id],
         clientX: e.clientX,
         clientY: e.clientY,
-        x: n.position!.x,
-        y: n.position!.y,
       }
       e.currentTarget.setPointerCapture(e.pointerId)
     },
-    [busy],
+    [busy, selected, extra],
   )
   function open(
     d: Diagram,
@@ -381,10 +458,10 @@ export function DiagramsWorkspace({
       )
     )
   }
-  function commit(d: Diagram) {
+  function commit(d: Diagram, key?: string) {
     try {
       const next = validateDiagram(d)
-      setHistory((h) => commitHistory(h, next))
+      setHistory((h) => commitHistory(h, next, key))
       setDirty(true)
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Invalid diagram')
@@ -405,7 +482,7 @@ export function DiagramsWorkspace({
         nodes: diagram.nodes.map((n) =>
           n.id === node.id ? { ...n, ...patch } : n,
         ),
-      })
+      }, 'label' in patch || 'notes' in patch ? `${Object.keys(patch)[0]}:${node.id}` : undefined)
   }
   function addChild(sibling = false) {
     if (!diagram || !node) return
@@ -416,13 +493,38 @@ export function DiagramsWorkspace({
   }
   function removeNode() {
     if (!diagram || !node) return
-    const next = removeBranch(diagram, selected)
+    const next = removeBranches(diagram, group)
     if (!next) {
       setMessage('Keep at least one node. Create a new diagram to start again.')
       return
     }
     commit(next)
     setSelected(next.nodes[0].id)
+    setExtra([])
+  }
+  function focusNode(id: string) {
+    requestAnimationFrame(() =>
+      document.querySelector<SVGGElement>(`[data-node="${CSS.escape(id)}"]`)?.focus(),
+    )
+  }
+  function menuItems(id: string): MenuItem[] {
+    if (!diagram) return []
+    const n = diagram.nodes.find((x) => x.id === id)!
+    const members = groupSet.has(id) ? group : [id]
+    return [
+      { label: 'Add child', onSelect: () => addChild(false) },
+      { label: 'Add sibling', onSelect: () => addChild(true) },
+      { label: 'Rename', onSelect: () => labelInput.current?.focus() },
+      {
+        label: n.collapsed ? 'Expand branch' : 'Collapse branch',
+        onSelect: () => commit(patchNodes(diagram, members, { collapsed: !n.collapsed })),
+      },
+      { label: 'Move up', disabled: !moveSibling(diagram, id, -1), onSelect: () => commit(moveSibling(diagram, id, -1)!) },
+      { label: 'Move down', disabled: !moveSibling(diagram, id, 1), onSelect: () => commit(moveSibling(diagram, id, 1)!) },
+      { label: 'Indent', disabled: !indentNode(diagram, id), onSelect: () => commit(indentNode(diagram, id)!) },
+      { label: 'Outdent', disabled: !outdentNode(diagram, id), onSelect: () => commit(outdentNode(diagram, id)!) },
+      { label: members.length > 1 ? `Delete ${members.length} topics` : 'Delete', disabled: members.length >= diagram.nodes.length, onSelect: removeNode },
+    ]
   }
   async function save(copy = false, archive = saved?.archived ?? false) {
     if (!diagram) return
@@ -638,30 +740,104 @@ export function DiagramsWorkspace({
       )
     } else setMessage(r.error)
   }
+  // Stable wrappers around the latest handlers, so memoised panels are not re-rendered by drags.
+  const latest = useRef({
+    commit,
+    choose: chooseNode,
+    addSibling: (_id: string) => {},
+  })
+  latest.current = {
+    commit,
+    choose: chooseNode,
+    addSibling: (id: string) => {
+      if (!diagram) return
+      const added =
+        diagram.kind === 'flowchart' ? addTopic(diagram, id, true) : addSiblingAfter(diagram, id)
+      if (!added) return
+      commit(added.diagram)
+      setSelected(added.id)
+      setExtra([])
+      setOutlineFocus(added.id)
+    },
+  }
+  const outlineHandlers = useMemo(
+    () => ({
+      onSelect: (id: string) => latest.current.choose(id, false),
+      onChange: (next: Diagram, key?: string) => latest.current.commit(next, key),
+      onAddSibling: (id: string) => latest.current.addSibling(id),
+    }),
+    [],
+  )
+  const onStyleChange = outlineHandlers.onChange
+  const clearOutlineFocus = useCallback(() => setOutlineFocus(''), [])
   function keyDown(e: React.KeyboardEvent) {
     e.stopPropagation() // Keep canvas shortcuts within dmind; shell F opens Focus Mode.
+    const target = e.target as HTMLElement
     if (
       busy ||
       wizard ||
       !diagram ||
-      (e.target as HTMLElement).matches('input,textarea,select')
+      target.matches('input,textarea,select')
     )
       return
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    const mod = e.ctrlKey || e.metaKey
+    if (mod && e.key.toLowerCase() === 'z') {
       e.preventDefault()
       e.shiftKey ? redo() : undo()
     }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    if (mod && e.key.toLowerCase() === 's') {
       e.preventDefault()
       void save()
     }
+    const onTopic = !!target.closest?.('[data-node]')
+    if (e.key === 'Escape') {
+      if (menu) setMenu(null)
+      else if (extra.length) setExtra([])
+    }
     if (e.key === 'Insert') {
       e.preventDefault()
-      addChild()
+      addChild(e.shiftKey)
     }
     if (e.key === 'Delete') {
       e.preventDefault()
       removeNode()
+    }
+    if (!onTopic) return
+    if (e.key === 'F2') {
+      e.preventDefault()
+      labelInput.current?.focus()
+    } else if (mod && e.key.toLowerCase() === 'a') {
+      e.preventDefault()
+      const all = visible.map((n) => n.id)
+      setSelected(selected)
+      setExtra(all.filter((id) => id !== selected))
+    } else if (e.key === '-' || e.key === '+' || e.key === '=') {
+      e.preventDefault()
+      commit(patchNodes(diagram, group, { collapsed: e.key === '-' }))
+    } else if (e.key.startsWith('Arrow')) {
+      e.preventDefault()
+      const dir = ({ ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' } as const)[
+        e.key as 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown'
+      ]
+      if (e.altKey) {
+        const step = e.shiftKey ? 50 : 10
+        commit(
+          moveNodes(
+            diagram,
+            group,
+            dir === 'left' ? -step : dir === 'right' ? step : 0,
+            dir === 'up' ? -step : dir === 'down' ? step : 0,
+          ),
+        )
+      } else {
+        const positions = new Map(visible.map((n) => [n.id, n.position!]))
+        const from = target.closest('[data-node]')!.getAttribute('data-node')!
+        const next = nearestInDirection(positions, from, dir, visibleIds)
+        if (next) {
+          chooseNode(next, false)
+          focusNode(next)
+        }
+      }
     }
   }
   return (
@@ -1011,9 +1187,28 @@ export function DiagramsWorkspace({
                 <button disabled={!history?.future.length} onClick={redo}>
                   Redo
                 </button>
-                <button onClick={() => commit(layout(diagram, true))}>
+                <button
+                  onClick={() => commit(applyLayout(diagram, defaultLayout(diagram)))}
+                >
                   Auto-layout
                 </button>
+                <label>
+                  Layout
+                  <select
+                    aria-label="Layout"
+                    value={defaultLayout(diagram)}
+                    onChange={(e) =>
+                      isLayoutName(e.target.value) &&
+                      commit(applyLayout(diagram, e.target.value))
+                    }
+                  >
+                    {LAYOUTS.map((l) => (
+                      <option key={l.id} value={l.id} title={l.hint}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label>
                   Zoom
                   <input
@@ -1138,36 +1333,43 @@ export function DiagramsWorkspace({
                   onPointerMove={(e) => {
                     if (!drag.current) return
                     const a = drag.current
-                    setDragPosition({
-                      id: a.id,
-                      x: a.x + (e.clientX - a.clientX) / zoom,
-                      y: a.y + (e.clientY - a.clientY) / zoom,
+                    setDragDelta({
+                      ids: new Set(a.ids),
+                      dx: (e.clientX - a.clientX) / zoom,
+                      dy: (e.clientY - a.clientY) / zoom,
                     })
                   }}
                   onPointerUp={(e) => {
                     if (!drag.current) return
                     const a = drag.current
                     drag.current = null
-                    setDragPosition(null)
-                    const position = {
-                      x: a.x + (e.clientX - a.clientX) / zoom,
-                      y: a.y + (e.clientY - a.clientY) / zoom,
+                    setDragDelta(null)
+                    const dx = (e.clientX - a.clientX) / zoom,
+                      dy = (e.clientY - a.clientY) / zoom
+                    if (Math.abs(e.clientX - a.clientX) + Math.abs(e.clientY - a.clientY) <= 3) return
+                    ignoreClick.current = true // the click that follows a drag is not a selection
+                    setTimeout(() => (ignoreClick.current = false), 0)
+                    if (e.altKey && diagram.kind !== 'flowchart') {
+                      // Alt-drop onto another topic moves the dragged topic and its branch under it.
+                      const target = document
+                        .elementsFromPoint(e.clientX, e.clientY)
+                        .map((el) => el.closest('[data-node]')?.getAttribute('data-node'))
+                        .find((id) => id && id !== a.id)
+                      if (target) {
+                        const r = reparent(diagram, a.id, target)
+                        if ('error' in r) setMessage(r.error)
+                        else {
+                          commit(r.diagram)
+                          setMessage('Moved under ' + (diagram.nodes.find((n) => n.id === target)?.label ?? 'the topic') + '.')
+                        }
+                        return
+                      }
                     }
-                    if (
-                      Math.abs(e.clientX - a.clientX) +
-                        Math.abs(e.clientY - a.clientY) >
-                      3
-                    )
-                      commit({
-                        ...diagram,
-                        nodes: arranged!.nodes.map((n) =>
-                          n.id === a.id ? { ...n, position } : n,
-                        ),
-                      })
+                    commit(moveNodes(diagram, a.ids, dx, dy))
                   }}
                   onPointerCancel={() => {
                     drag.current = null
-                    setDragPosition(null)
+                    setDragDelta(null)
                   }}
                 >
                   <defs>
@@ -1184,35 +1386,43 @@ export function DiagramsWorkspace({
                   </defs>
                   <EdgesView edges={visibleEdges} byId={byId} />
                   {visible.map((n) => {
-                    const p =
-                      dragPosition?.id === n.id ? dragPosition : n.position!
+                    const moving = dragDelta?.ids.has(n.id)
                     return (
                       <NodeView
                         key={n.id}
                         n={n}
-                        x={p.x}
-                        y={p.y}
-                        selected={selected === n.id}
-                        onSelect={setSelected}
+                        x={n.position!.x + (moving ? dragDelta!.dx : 0)}
+                        y={n.position!.y + (moving ? dragDelta!.dy : 0)}
+                        selected={groupSet.has(n.id)}
+                        primary={selected === n.id}
+                        onSelect={chooseNode}
                         onDragStart={startDrag}
+                        onMenu={(id, at) => {
+                          if (!groupSet.has(id)) chooseNode(id, false)
+                          setMenu({ id, ...at })
+                        }}
                       />
                     )
                   })}
                 </svg>
               </div>
-              <details>
-                <summary>Outline · keyboard-friendly node selection</summary>
+              <OutlineEditor
+                diagram={diagram}
+                selected={selected}
+                group={groupSet}
+                focusId={outlineFocus}
+                onFocused={clearOutlineFocus}
+                handlers={outlineHandlers}
+              />
+              <details className="dmind-keys">
+                <summary>Keyboard shortcuts</summary>
                 <ul>
-                  {diagram.nodes.map((n) => (
-                    <li key={n.id}>
-                      <button
-                        aria-pressed={selected === n.id}
-                        onClick={() => setSelected(n.id)}
-                      >
-                        {n.label}
-                      </button>
-                    </li>
-                  ))}
+                  <li>Arrow keys: move between topics. Alt+Arrow: nudge (Shift for more).</li>
+                  <li>Enter or Space: select. Shift or Ctrl/⌘ with Enter or click: add to the selection.</li>
+                  <li>Insert: add a child. Shift+Insert: add a sibling. Delete: remove the selection.</li>
+                  <li>F2: rename. − and +: collapse and expand. Ctrl/⌘ A: select all visible topics.</li>
+                  <li>Shift+F10 or the menu key: topic menu. Alt-drag a topic onto another to move it under it.</li>
+                  <li>Ctrl/⌘ Z and Shift+Z: undo and redo. Ctrl/⌘ S: save.</li>
                 </ul>
               </details>
             </div>
@@ -1220,9 +1430,15 @@ export function DiagramsWorkspace({
           {diagram && node && (
             <aside className="dmind-inspector">
               <h3>Topic details</h3>
+              {group.length > 1 && (
+                <p role="status" className="dmind-hint">
+                  {group.length} topics selected. Colour, markers, collapse and delete apply to all of them.
+                </p>
+              )}
               <label>
                 Label
                 <input
+                  ref={labelInput}
                   value={node.label}
                   maxLength={500}
                   onChange={(e) => changeNode({ label: e.target.value })}
@@ -1247,10 +1463,19 @@ export function DiagramsWorkspace({
                   </ul>
                 </>
               )}
+              <NodeStyleControls
+                diagram={diagram}
+                ids={group}
+                primary={selected}
+                onChange={onStyleChange}
+                onError={setMessage}
+              />
               <button onClick={() => addChild()}>Add child · Insert</button>
               <button onClick={() => addChild(true)}>Add sibling</button>
               <button
-                onClick={() => changeNode({ collapsed: !node.collapsed })}
+                onClick={() =>
+                  commit(patchNodes(diagram, group, { collapsed: !node.collapsed }))
+                }
               >
                 {node.collapsed ? 'Expand' : 'Collapse'} branch
               </button>
@@ -1438,6 +1663,18 @@ export function DiagramsWorkspace({
           )}
         </div>
       </fieldset>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          label="Topic menu"
+          items={menuItems(menu.id)}
+          onClose={() => {
+            setMenu(null)
+            focusNode(menu.id)
+          }}
+        />
+      )}
     </section>
   )
 }

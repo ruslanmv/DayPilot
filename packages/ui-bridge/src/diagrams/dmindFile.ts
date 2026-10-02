@@ -88,7 +88,7 @@ export function describeUnknown(report: UnknownReport): string {
 
 function decode(bytes: Uint8Array): string {
   try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^﻿/, '')
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes).replace(/^\uFEFF/, '')
   } catch {
     throw new Error('This file is not valid UTF-8 text.')
   }

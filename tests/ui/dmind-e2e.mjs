@@ -685,6 +685,231 @@ await step(withUrlFetch ? 'inputs: URL fetching refuses private addresses end to
   }
 })
 
+// ---------------------------------------------------------------- B4 layouts and rich editing
+const boxes = (p = page) =>
+  p.evaluate(() =>
+    [...document.querySelectorAll('.dmind-canvas [data-node]')].map((g) => {
+      const [x, y] = g.getAttribute('transform').match(/-?[\d.]+/g).map(Number)
+      return { id: g.dataset.node, label: g.getAttribute('aria-label'), x, y }
+    }),
+  )
+const overlapsIn = (bs) => {
+  const hits = []
+  for (let i = 0; i < bs.length; i++)
+    for (let j = i + 1; j < bs.length; j++)
+      if (Math.abs(bs[i].x - bs[j].x) < 200 && Math.abs(bs[i].y - bs[j].y) < 64) hits.push([bs[i].label, bs[j].label])
+  return hits
+}
+const topic = (name) => page.locator(`[data-node][aria-label="${name}"]`)
+const levelOf = (name) =>
+  page.evaluate((n) => [...document.querySelectorAll('[role=treeitem]')].find((li) => li.querySelector('input').value === n)?.getAttribute('aria-level'), name)
+const centre = async (name) => {
+  await topic(name).scrollIntoViewIfNeeded()
+  const b = await topic(name).boundingBox()
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 }
+}
+const PROJECT = 'Plan\n  Research\n    Interviews\n    Survey\n  Build\n    API\n    UI\n  Launch\n    Docs\n    Announce\nRisks\n  Schedule\n  Budget'
+
+await step('layouts: every layout is free of overlaps, recorded, and undoable', async () => {
+  await wizard(page, { topic: 'Project', outline: PROJECT })
+  await useDiagram(page)
+  const seen = new Set()
+  for (const id of ['tree', 'orgchart', 'radial', 'fishbone', 'layered', 'grid', 'columns']) {
+    await page.getByLabel('Layout', { exact: true }).selectOption(id)
+    const bs = await boxes()
+    assert.equal(bs.length, 14)
+    assert.deepEqual(overlapsIn(bs), [], id)
+    seen.add(JSON.stringify(bs.map((b) => [b.x, b.y])))
+    assert.equal(JSON.parse((await exportAs(page, 'json')).text).metadata.layout, id)
+  }
+  // 'Flow (top down)' follows flow links; with branches only it matches the org chart, so 6 differ.
+  assert.equal(seen.size, 6, 'each layout arranges the topics differently')
+  await button(page, 'Undo').click()
+  assert.equal(await page.getByLabel('Layout', { exact: true }).inputValue(), 'grid')
+  // A flowchart reads top to bottom by default and keeps its loop out of the way.
+  await wizard(page, { topic: 'Retry flow', outline: 'Start\nCharge\nConfirm', kind: 'flowchart' })
+  await useDiagram(page)
+  const flow = await boxes()
+  const y = Object.fromEntries(flow.map((b) => [b.label, b.y]))
+  assert.ok(y.Start < y.Charge && y.Charge < y.Confirm, 'steps run downward')
+  assert.equal(await page.getByLabel('Layout', { exact: true }).inputValue(), 'layered')
+  await wizard(page, { topic: 'Project', outline: PROJECT })
+  await useDiagram(page)
+})
+
+await step('selection: several topics move, style and delete together', async () => {
+  await topic('Interviews').click()
+  await topic('Survey').click({ modifiers: ['Control'] })
+  await page.getByText(/2 topics selected/).waitFor()
+  const before = Object.fromEntries((await boxes()).map((b) => [b.label, b]))
+  const from = await centre('Interviews')
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(from.x + 40, from.y + 20, { steps: 6 })
+  await page.mouse.up()
+  const after = Object.fromEntries((await boxes()).map((b) => [b.label, b]))
+  for (const name of ['Interviews', 'Survey']) assert.ok(Math.abs(after[name].x - before[name].x - 40) < 2 && Math.abs(after[name].y - before[name].y - 20) < 2, name)
+  assert.equal(after.API.x, before.API.x, 'unselected topics stay put')
+  assert.match(await page.locator('.dmind-inspector').innerText(), /2 topics selected/, 'dragging a group keeps it selected')
+  await page.getByRole('button', { name: 'Accent Red' }).click()
+  for (const name of ['Interviews', 'Survey'])
+    assert.equal(await topic(name).locator('rect').first().evaluate((r) => getComputedStyle(r).stroke), 'rgb(220, 38, 38)', name)
+  await page.getByRole('button', { name: 'Star', exact: true }).click()
+  assert.ok((await topic('Interviews, Star').count()) + (await page.locator('[data-node][aria-label*="Star"]').count()) >= 2)
+  await page.getByRole('button', { name: 'Star', exact: true }).click()
+  assert.equal(await page.locator('[data-node][aria-label*="Star"]').count(), 0, 'toggling again clears the marker for the whole selection')
+  const count = (await boxes()).length
+  await page.keyboard.press('Delete')
+  assert.equal((await boxes()).length, count - 2)
+  await button(page, 'Undo').click()
+  assert.equal((await boxes()).length, count)
+  await topic('Plan').focus()
+  await page.keyboard.press('Control+a')
+  const total = (await boxes()).length
+  await page.getByText(new RegExp(`${total} topics selected`)).waitFor()
+  await page.keyboard.press('Escape')
+  await topic('Plan').click()
+})
+
+await step('structure: move under, Alt-drag and cycle protection', async () => {
+  await topic('Budget').click()
+  await page.getByLabel('Move under').selectOption({ label: 'Research' })
+  assert.equal(await levelOf('Budget'), '4') // Project > Plan > Research > Budget
+  await topic('Research').click()
+  const options = await page.getByLabel('Move under').locator('option').allTextContents()
+  for (const forbidden of ['Research', 'Interviews', 'Survey', 'Budget'])
+    assert.ok(!options.includes(forbidden), `${forbidden} cannot be a parent of Research`)
+  assert.ok(options.includes('Risks'))
+  assert.equal(await levelOf('Docs'), '4')
+  await page.getByLabel('Canvas zoom').fill('0.6') // both topics in view; dragging scales with zoom
+  const docs = await centre('Docs'), api = await centre('API')
+  await page.keyboard.down('Alt')
+  await page.mouse.move(docs.x, docs.y)
+  await page.mouse.down()
+  await page.mouse.move(api.x, api.y, { steps: 8 })
+  await page.mouse.up()
+  await page.keyboard.up('Alt')
+  await page.getByText(/Moved under API/).waitFor()
+  assert.equal(await levelOf('Docs'), '5')
+  await button(page, 'Undo').click()
+  assert.equal(await levelOf('Docs'), '4')
+  await page.getByLabel('Canvas zoom').fill('1')
+})
+
+await step('context menu: right-click and keyboard, with focus returned', async () => {
+  const before = (await boxes()).length
+  await topic('Docs').click({ button: 'right' })
+  const menu = page.getByRole('menu', { name: 'Topic menu' })
+  await menu.waitFor()
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Add child')
+  await page.keyboard.press('ArrowDown')
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent), 'Add sibling')
+  await page.keyboard.press('Enter')
+  assert.equal(await menu.count(), 0)
+  assert.equal((await boxes()).length, before + 1)
+  await button(page, 'Undo').click()
+  await topic('Docs').focus()
+  await page.keyboard.press('Shift+F10')
+  await menu.waitFor()
+  await page.keyboard.press('Escape')
+  await menu.waitFor({ state: 'detached' })
+  await poll(async () => (await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Docs', 'focus back on the topic')
+})
+
+await step('appearance: markers, accents and links are safe and portable', async () => {
+  await topic('Announce').click()
+  const link = page.locator('.dmind-inspector').getByLabel('Link', { exact: true })
+  for (const bad of ['javascript:alert(1)', 'data:text/html,<b>x', 'https://user:pw@example.org/', 'https://exa mple.org/', 'ftp://example.org/']) {
+    await link.fill(bad)
+    await link.press('Enter')
+    await page.locator('.dmind-inspector').getByRole('alert').filter({ hasText: /Only http and https/ }).waitFor()
+    assert.equal(await page.getByRole('link', { name: /Open link/ }).count(), 0, bad)
+  }
+  await link.fill('https://example.org/spec')
+  await link.press('Enter')
+  const open = page.getByRole('link', { name: /Open link/ })
+  assert.equal(await open.getAttribute('href'), 'https://example.org/spec')
+  assert.match(await open.getAttribute('rel'), /noopener/)
+  assert.equal(await open.getAttribute('target'), '_blank')
+  await page.getByRole('button', { name: 'Warning', exact: true }).click()
+  await page.locator('[data-node][aria-label="Announce, Warning, has a link"]').waitFor()
+  assert.match((await topic('Announce, Warning, has a link').textContent()) || '', /⚠ ↗/)
+  const md = (await exportAs(page, 'md')).text
+  assert.ok(md.includes('Announce') && md.includes('[Warning] <https://example.org/spec>'), md)
+  const svg = (await exportAs(page, 'svg')).text
+  assert.ok(svg.includes('⚠') && svg.includes('↗') && !svg.includes('javascript:'))
+  const saved = JSON.parse((await exportAs(page, 'json')).text)
+  const node = saved.nodes.find((n) => n.label === 'Announce')
+  assert.deepEqual([node.metadata.markers, node.metadata.link], [['warning'], 'https://example.org/spec'])
+})
+
+await step('outline: edits stay in sync, typing is one undo step, structure is keyboard-editable', async () => {
+  const input = (name) => page.locator('input[data-outline]').evaluateAll((els, n) => els.findIndex((e) => e.value === n), name)
+  const row = async (name) => page.locator('input[data-outline]').nth(await input(name))
+  const survey = await row('Survey')
+  await survey.fill('Survey v2')
+  await survey.press('End')
+  await survey.pressSequentially('abc', { delay: 25 })
+  await topic('Survey v2abc').waitFor()
+  await button(page, 'Undo').click()
+  await topic('Survey').waitFor() // one undo undoes the whole burst of typing
+  await button(page, 'Redo').click()
+  await topic('Survey v2abc').waitFor()
+  const r = await row('Survey v2abc')
+  assert.equal(await levelOf('Survey v2abc'), '4', 'start level')
+  await r.focus()
+  await page.keyboard.press('Alt+ArrowRight') // under the previous sibling, Interviews
+  assert.equal(await levelOf('Survey v2abc'), '5', 'after indent')
+  await page.keyboard.press('Alt+ArrowLeft')
+  assert.equal(await levelOf('Survey v2abc'), '4', 'after outdent')
+  await page.keyboard.press('Alt+ArrowUp')
+  const order = await page.locator('input[data-outline]').evaluateAll((els) => els.map((e) => e.value))
+  assert.ok(order.indexOf('Survey v2abc') < order.indexOf('Interviews'), 'moved above its sibling')
+  const count = (await boxes()).length
+  await page.keyboard.press('Enter') // a sibling below, focused for typing
+  await poll(async () => (await page.evaluate(() => document.activeElement?.value)) === 'New idea', 'the new row to take focus')
+  await page.keyboard.type('Fresh topic')
+  await topic('Fresh topic').waitFor()
+  assert.equal((await boxes()).length, count + 1)
+  assert.equal(await levelOf('Fresh topic'), '4', 'new sibling level')
+  const rows = await page.locator('input[data-outline]').evaluateAll((els) => els.map((e) => e.value))
+  assert.equal(rows[rows.indexOf('Survey v2abc') + 1], 'Fresh topic', 'directly below the topic it was added from')
+  await page.keyboard.press('ArrowUp')
+  assert.equal(await page.evaluate(() => document.activeElement?.value), 'Survey v2abc')
+})
+
+await step('keyboard: arrows navigate, Alt+arrows nudge, F2 renames, minus and plus fold', async () => {
+  await topic('Plan').focus()
+  await page.keyboard.press('ArrowRight')
+  await poll(async () => (await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) !== 'Plan', 'focus to move to a neighbouring topic')
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-pressed')), 'true')
+  await topic('Build').focus()
+  const before = (await boxes()).find((b) => b.label === 'Build')
+  await page.keyboard.press('Alt+ArrowRight')
+  await page.keyboard.press('Shift+Alt+ArrowDown')
+  const after = (await boxes()).find((b) => b.label === 'Build')
+  assert.deepEqual([after.x - before.x, after.y - before.y], [10, 50])
+  const total = (await boxes()).length
+  await page.keyboard.press('-')
+  assert.equal((await boxes()).length, total - 2, 'Build hides API and UI')
+  await page.locator('[data-node][aria-label="Build, collapsed"]').focus()
+  await page.keyboard.press('+')
+  assert.equal((await boxes()).length, total)
+  await topic('Build').focus()
+  await page.keyboard.press('F2')
+  assert.equal(await page.evaluate(() => document.activeElement?.closest('.dmind-inspector') !== null), true)
+})
+
+await step('layout engine: a 420-level chain opens (it used to fail validation)', async () => {
+  const chain = Array.from({ length: 420 }, (_, i) => '\t'.repeat(i + 1) + 'L' + i).join('\n')
+  await wizard(page, { topic: 'Deep chain', outline: chain })
+  await page.locator('.dmind-preview').waitFor()
+  await useDiagram(page)
+  assert.equal((await boxes()).length, 421)
+  const bs = await boxes()
+  assert.ok(bs.every((b) => Math.abs(b.x) <= 100000 && Math.abs(b.y) <= 100000))
+})
+
 await step('layout: usable at phone width without horizontal page scroll', async () => {
   const phone = watch(await (await browser.newContext({ viewport: { width: 390, height: 800 }, storageState: await ctx.storageState() })).newPage())
   await phone.goto(base + '/#/diagrams', { waitUntil: 'networkidle' })

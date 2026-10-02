@@ -1,4 +1,7 @@
 /** Portable, bounded dmind graph. Keep in sync with the Python contract in both repos. */
+import { computeLayout, edgePath } from './layouts'
+import { safeHref } from './links'
+import { accentById, cleanMarkers, markerById, markerNames } from './style'
 export type DiagramKind = 'mindmap' | 'flowchart' | 'system'
 export type EdgeKind = 'branch' | 'flow' | 'dependency' | 'relationship'
 export type DiagramNode = {
@@ -284,27 +287,19 @@ export function visibleNodes(d: Diagram): DiagramNode[] {
   return d.nodes.filter((n) => byId.has(n.id) && !hidden.has(n.id))
 }
 
+/**
+ * Positions for every topic: saved positions are kept, the rest come from the diagram's chosen
+ * layout (see layouts.ts). `clearPositions` re-lays out everything ("Auto-layout").
+ */
 export function layout(d: Diagram, clearPositions = false): Diagram {
-  const parents = new Map(
-    d.edges.filter((e) => e.kind === 'branch').map((e) => [e.target, e.source]),
-  )
-  let row = 0
+  const computed =
+    clearPositions || d.nodes.some((n) => !n.position) ? computeLayout(d) : null
   return {
     ...clone(d),
-    nodes: d.nodes.map((n) => {
-      let depth = 0,
-        current = n.id
-      while (parents.has(current)) {
-        depth++
-        current = parents.get(current)!
-      }
-      const x = d.kind === 'flowchart' ? 80 : 80 + depth * 260
-      const y = 60 + row++ * 100
-      return {
-        ...n,
-        position: !clearPositions && n.position ? n.position : { x, y },
-      }
-    }),
+    nodes: d.nodes.map((n) => ({
+      ...n,
+      position: !clearPositions && n.position ? n.position : computed!.get(n.id)!,
+    })),
   }
 }
 
@@ -389,8 +384,10 @@ export function toMarkdown(d: Diagram): string {
       depth++
       cursor = parents.get(cursor)!
     }
+    const marks = markerNames(n.metadata?.markers)
+    const href = safeHref(n.metadata?.link)
     lines.push(
-      `${'  '.repeat(depth)}- ${n.label.replace(/[\r\n]/g, ' ')} (${n.id})`,
+      `${'  '.repeat(depth)}- ${n.label.replace(/[\r\n]/g, ' ')} (${n.id})${marks ? ` [${marks}]` : ''}${href ? ` <${href}>` : ''}`,
     )
     if (n.notes)
       lines.push(
@@ -408,31 +405,52 @@ export function toMarkdown(d: Diagram): string {
   )
   return lines.join('\n')
 }
+const edgeStyle: Record<string, string> = {
+  branch: 'stroke="#64748b"',
+  flow: 'stroke="#334155" stroke-width="1.6"',
+  dependency: 'stroke="#6366f1" stroke-dasharray="6 4"',
+  relationship: 'stroke="#64748b" stroke-dasharray="3 4"',
+}
 export function toSvg(input: Diagram): string {
   const d = layout(input),
     visible = visibleNodes(d),
     ids = new Set(visible.map((n) => n.id)),
     byId = new Map(d.nodes.map((n) => [n.id, n]))
-  const minX = Math.min(0, ...visible.map((n) => n.position!.x - 30)),
-    minY = Math.min(0, ...visible.map((n) => n.position!.y - 30))
-  const width =
-      Math.max(800, ...visible.map((n) => n.position!.x + 240)) - minX,
-    height = Math.max(500, ...visible.map((n) => n.position!.y + 100)) - minY
+  let x0 = 0,
+    y0 = 0,
+    x1 = 800,
+    y1 = 500
+  for (const n of visible) {
+    x0 = Math.min(x0, n.position!.x - 30)
+    y0 = Math.min(y0, n.position!.y - 100)
+    x1 = Math.max(x1, n.position!.x + 240)
+    y1 = Math.max(y1, n.position!.y + 100)
+  }
+  const width = x1 - x0,
+    height = y1 - y0
   const edges = d.edges
     .filter((e) => ids.has(e.source) && ids.has(e.target))
     .map((e) => {
-      const a = byId.get(e.source)!.position!,
-        b = byId.get(e.target)!.position!
-      return `<path d="M${a.x + 100},${a.y + 32} L${b.x + 100},${b.y + 32}" stroke="#64748b" fill="none" marker-end="url(#arrow)"/><text x="${(a.x + b.x) / 2 + 100}" y="${(a.y + b.y) / 2 + 26}" font-size="12" fill="#334155">${xml(e.label || '')}</text>`
+      const g = edgePath(byId.get(e.source)!.position!, byId.get(e.target)!.position!)
+      const label = e.label
+        ? `<text x="${g.mid.x}" y="${g.mid.y - 6}" font-size="12" text-anchor="middle" fill="#334155">${xml(e.label)}</text>`
+        : ''
+      return `<path d="${g.d}" ${edgeStyle[e.kind]} fill="none"${e.kind === 'branch' ? '' : ' marker-end="url(#arrow)"'}/>${label}`
     })
     .join('')
   const nodes = visible
-    .map(
-      (n) =>
-        `<g transform="translate(${n.position!.x},${n.position!.y})"><rect width="200" height="64" rx="12" fill="#eef2ff" stroke="#6366f1"/><text x="12" y="37" fill="#18223b" font-size="14">${xml(n.label.length > 23 ? n.label.slice(0, 22) + '…' : n.label)}</text><title>${xml(n.label + (n.notes ? '\n' + n.notes : ''))}</title></g>`,
-    )
+    .map((n) => {
+      const accent = accentById(n.metadata?.accent)
+      const marks = cleanMarkers(n.metadata?.markers)
+        .map((m) => markerById(m)!.glyph)
+        .join(' ')
+      const href = safeHref(n.metadata?.link)
+      const names = markerNames(n.metadata?.markers)
+      const tip = n.label + (names ? `\n[${names}]` : '') + (n.notes ? '\n' + n.notes : '') + (href ? '\n' + href : '')
+      return `<g transform="translate(${n.position!.x},${n.position!.y})"><rect width="200" height="64" rx="12" fill="#eef2ff" stroke="${accent?.hex ?? '#6366f1'}" stroke-width="${accent ? 2.5 : 1.5}"/>${accent ? `<rect width="7" height="64" rx="3" fill="${accent.hex}"/>` : ''}<text x="14" y="28" fill="#18223b" font-size="14">${xml(n.label.length > 24 ? n.label.slice(0, 23) + '…' : n.label)}${n.collapsed ? ' ⊕' : ''}</text>${marks || href ? `<text x="14" y="52" fill="#334155" font-size="13">${xml(marks)}${href ? ' ↗' : ''}</text>` : ''}<title>${xml(tip)}</title></g>`
+    })
     .join('')
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${minX} ${minY} ${width} ${height}" role="img" aria-label="${xml(d.title)}"><title>${xml(d.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#64748b"/></marker></defs><rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="white"/>${edges}${nodes}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x0} ${y0} ${width} ${height}" role="img" aria-label="${xml(d.title)}"><title>${xml(d.title)}</title><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#475569"/></marker></defs><rect x="${x0}" y="${y0}" width="${width}" height="${height}" fill="white"/>${edges}${nodes}</svg>`
 }
 export function toShareHtml(d: Diagram): string {
   // No scripts or external resources; complete notes and graph accompany the SVG.
@@ -466,18 +484,33 @@ export function toCodingBrief(d: Diagram): string {
 }
 /** In-memory edit session: bounded undo/redo of whole, validated documents. */
 export const HISTORY_LIMIT = 50
-export type History = { past: Diagram[]; present: Diagram; future: Diagram[] }
+export type History = {
+  past: Diagram[]
+  present: Diagram
+  future: Diagram[]
+  /** Set by a typing edit so the next keystroke on the same field joins the same undo step. */
+  coalesce?: { key: string; at: number }
+}
+export const COALESCE_MS = 1000
 export const startHistory = (present: Diagram): History => ({
   past: [],
   present,
   future: [],
 })
-export function commitHistory(h: History | null, next: Diagram): History {
-  if (!h) return startHistory(next)
+export function commitHistory(
+  h: History | null,
+  next: Diagram,
+  key?: string,
+  now = Date.now(),
+): History {
+  if (!h) return { ...startHistory(next), coalesce: key ? { key, at: now } : undefined }
+  if (key && h.coalesce?.key === key && now - h.coalesce.at < COALESCE_MS && !h.future.length)
+    return { ...h, present: next, coalesce: { key, at: now } }
   return {
     past: [...h.past, h.present].slice(-HISTORY_LIMIT),
     present: next,
     future: [],
+    coalesce: key ? { key, at: now } : undefined,
   }
 }
 export function undoHistory(h: History): History {

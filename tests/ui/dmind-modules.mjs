@@ -322,4 +322,467 @@ section('B3 provenance', () => {
   })
 })
 
+
+// ---------------------------------------------------------------- B4 layouts
+section('B4 layouts', () => {
+  const { layouts: L, dmind } = m
+  const NAMES = L.LAYOUTS.map((l) => l.id)
+  const rng = (seed) => () => {
+    seed |= 0
+    seed = (seed + 0x6d2b79f5) | 0
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  /** A random tree of n topics: each topic hangs under an earlier one (biased towards recent ones). */
+  const tree = (n, seed, kind = 'mindmap', extraLinks = 0) => {
+    const r = rng(seed)
+    const nodes = [{ id: 'n0', label: 'Root' }]
+    const edges = []
+    for (let i = 1; i < n; i++) {
+      const parent = Math.max(0, i - 1 - Math.floor(r() * r() * Math.min(i, 8)))
+      nodes.push({ id: 'n' + i, label: 'Topic ' + i })
+      edges.push({ id: 'b' + i, source: 'n' + parent, target: 'n' + i, kind: kind === 'flowchart' ? 'flow' : 'branch' })
+    }
+    for (let k = 0; k < extraLinks; k++)
+      edges.push({ id: 'x' + k, source: 'n' + Math.floor(r() * n), target: 'n' + Math.floor(r() * n), kind: r() < 0.5 ? 'flow' : 'dependency' })
+    return { schema_version: 'dmind/v1', id: 't', title: 'T', kind, nodes, edges }
+  }
+  const star = (n) => ({
+    schema_version: 'dmind/v1', id: 's', title: 'S', kind: 'mindmap',
+    nodes: Array.from({ length: n }, (_, i) => ({ id: 'n' + i, label: 'Topic ' + i })),
+    edges: Array.from({ length: n - 1 }, (_, i) => ({ id: 'b' + i, source: 'n0', target: 'n' + (i + 1), kind: 'branch' })),
+  })
+  const kary = (k, levels) => {
+    const nodes = [{ id: 'n0', label: 'Root' }], edges = []
+    let frontier = ['n0']
+    for (let l = 0; l < levels; l++) {
+      const next = []
+      for (const p of frontier) for (let c = 0; c < k; c++) {
+        const id = 'n' + nodes.length
+        nodes.push({ id, label: id }); edges.push({ id: 'b' + edges.length, source: p, target: id, kind: 'branch' }); next.push(id)
+      }
+      frontier = next
+    }
+    return { schema_version: 'dmind/v1', id: 'k', title: 'K', kind: 'mindmap', nodes, edges }
+  }
+  const overlaps = (pos) => {
+    const boxes = [...pos].map(([id, p]) => ({ id, ...p }))
+    const hits = []
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++)
+        if (Math.abs(boxes[i].x - boxes[j].x) < L.NODE_W && Math.abs(boxes[i].y - boxes[j].y) < L.NODE_H) hits.push([boxes[i].id, boxes[j].id])
+    return hits
+  }
+  ok(() => {
+    for (const name of NAMES)
+      for (const [n, seed] of [[1, 1], [2, 2], [7, 3], [30, 4], [90, 5], [150, 6]]) {
+        const d = tree(n, seed, 'mindmap', n > 3 ? 4 : 0)
+        const pos = L.computeLayout(d, name)
+        assert.equal(pos.size, n, `${name} positions every topic`)
+        for (const p of pos.values()) {
+          assert.ok(Number.isInteger(p.x) && Number.isInteger(p.y) && Math.abs(p.x) <= 100000 && Math.abs(p.y) <= 100000, `${name} stays in bounds`)
+        }
+        assert.deepEqual(overlaps(pos), [], `${name} with ${n} topics (seed ${seed}) must not overlap`)
+        assert.deepEqual([...L.computeLayout(d, name)], [...pos], `${name} is deterministic`)
+        dmind.validateDiagram(L.applyLayout(d, name))
+      }
+  })
+  ok(() => {
+    // Wide trees are where spacing matters: a 60-way star and balanced 3-ary and 5-ary trees.
+    for (const name of NAMES)
+      for (const [label, d] of [['star', star(61)], ['3-ary', kary(3, 4)], ['5-ary', kary(5, 3)]]) {
+        const pos = L.computeLayout(d, name)
+        assert.deepEqual(overlaps(pos), [], `${name} on a ${label} tree`)
+        for (const p of pos.values()) assert.ok(Math.abs(p.x) <= 100000 && Math.abs(p.y) <= 100000)
+      }
+  })
+  ok(() => {
+    // Disconnected pieces, isolated topics, self links and pure cycles all lay out.
+    const d = {
+      schema_version: 'dmind/v1', id: 'x', title: 'X', kind: 'system',
+      nodes: ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id, label: id })),
+      edges: [
+        { id: '1', source: 'a', target: 'b', kind: 'flow' }, { id: '2', source: 'b', target: 'a', kind: 'flow' },
+        { id: '3', source: 'c', target: 'c', kind: 'relationship' }, { id: '4', source: 'd', target: 'e', kind: 'dependency' },
+      ],
+    }
+    for (const name of NAMES) {
+      const pos = L.computeLayout(d, name)
+      assert.equal(pos.size, 6)
+      assert.deepEqual(overlaps(pos), [], name)
+    }
+  })
+  ok(() => {
+    // Very deep chains stay inside the position bound (the old column layout did not past ~385 levels).
+    for (const depth of [100, 450, 1000]) {
+      const nodes = Array.from({ length: depth }, (_, i) => ({ id: 'n' + i, label: 'L' + i }))
+      const edges = nodes.slice(1).map((n, i) => ({ id: 'e' + i, source: 'n' + i, target: n.id, kind: 'branch' }))
+      const chain = { schema_version: 'dmind/v1', id: 'c', title: 'C', kind: 'mindmap', nodes, edges }
+      for (const name of NAMES) {
+        const pos = L.computeLayout(chain, name)
+        for (const p of pos.values()) assert.ok(Math.abs(p.x) <= 100000 && Math.abs(p.y) <= 100000 && Number.isFinite(p.x + p.y), `${name} depth ${depth}`)
+      }
+      dmind.validateDiagram(dmind.layout(chain, true))
+    }
+    const tabs = dmind.fromOutline('Deep', Array.from({ length: 440 }, (_, i) => '\t'.repeat(i + 1) + 'L' + i).join('\n'), 'mindmap')
+    dmind.validateDiagram(dmind.layout(tabs)) // a reachable input that used to fail validation after layout
+  })
+  ok(() => {
+    const t = tree(40, 9)
+    const tr = L.computeLayout(t, 'tree'), h = L.hierarchy(t)
+    for (const [child, parent] of h.parent) {
+      assert.ok(tr.get(parent).x < tr.get(child).x, 'children are to the right of their parent')
+      const org = L.computeLayout(t, 'orgchart')
+      assert.ok(org.get(parent).y < org.get(child).y, 'org chart children are below their parent')
+    }
+    const org = L.computeLayout(t, 'orgchart')
+    for (const [id, kids] of h.children)
+      if (kids.length) {
+        const xs = kids.map((k) => org.get(k).x)
+        assert.ok(Math.abs(org.get(id).x - (Math.min(...xs) + Math.max(...xs)) / 2) <= 1, 'a parent is centred over its children')
+      }
+    const rad = L.computeLayout(t, 'radial')
+    const centre = rad.get('n0')
+    const dist = (id) => Math.hypot(rad.get(id).x - centre.x, rad.get(id).y - centre.y)
+    for (const [child, parent] of h.parent) assert.ok(dist(child) > dist(parent), 'radial rings grow outward')
+  })
+  ok(() => {
+    const fish = { schema_version: 'dmind/v1', id: 'f', title: 'F', kind: 'mindmap',
+      nodes: ['head', 'c1', 'c2', 'c3', 'r1', 'r2'].map((id) => ({ id, label: id })),
+      edges: [['head', 'c1'], ['head', 'c2'], ['head', 'c3'], ['c1', 'r1'], ['c1', 'r2']].map(([s, t], i) => ({ id: 'e' + i, source: s, target: t, kind: 'branch' })) }
+    const p = L.computeLayout(fish, 'fishbone')
+    for (const c of ['c1', 'c2', 'c3']) assert.ok(p.get(c).x < p.get('head').x, 'causes sit left of the head')
+    assert.ok(p.get('c1').y < p.get('head').y && p.get('c2').y > p.get('head').y && p.get('c3').y < p.get('head').y, 'categories alternate above and below the spine')
+    assert.ok(p.get('r1').y < p.get('c1').y && p.get('r2').y < p.get('r1').y, 'ribs move away from the spine')
+  })
+  ok(() => {
+    const flow = { schema_version: 'dmind/v1', id: 'l', title: 'L', kind: 'flowchart',
+      nodes: ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, label: id })),
+      edges: [['a', 'b'], ['b', 'c'], ['c', 'a'], ['a', 'd'], ['d', 'c'], ['c', 'e']].map(([s, t], i) => ({ id: 'e' + i, source: s, target: t, kind: 'flow' })) }
+    const p = L.computeLayout(flow, 'layered')
+    assert.ok(p.get('a').y < p.get('b').y && p.get('b').y < p.get('c').y && p.get('c').y < p.get('e').y, 'the loop does not reverse the flow')
+    assert.equal(p.get('b').y, p.get('d').y, 'alternatives share a layer')
+    assert.deepEqual(overlaps(p), [])
+    assert.equal(L.defaultLayout(flow), 'layered')
+    assert.equal(L.defaultLayout(tree(3, 1)), 'tree')
+    assert.equal(L.defaultLayout({ ...tree(3, 1), metadata: { layout: 'radial' } }), 'radial')
+    assert.equal(L.defaultLayout({ ...tree(3, 1), metadata: { layout: 'nonsense' } }), 'tree')
+    assert.equal(L.isLayoutName('grid'), true)
+    assert.equal(L.isLayoutName('__proto__'), false)
+  })
+  ok(() => {
+    const d = tree(20, 3)
+    const applied = L.applyLayout(d, 'radial')
+    assert.equal(applied.metadata.layout, 'radial')
+    assert.ok(applied.nodes.every((n) => n.position))
+    assert.equal(d.nodes[0].position, undefined, 'applying a layout never mutates its input')
+    // layout() keeps saved positions and fills only the missing ones with the chosen layout.
+    const partial = structuredClone(d)
+    partial.metadata = { layout: 'grid' }
+    partial.nodes[3].position = { x: 5, y: 6 }
+    const filled = dmind.layout(partial)
+    assert.deepEqual(filled.nodes[3].position, { x: 5, y: 6 })
+    assert.ok(filled.nodes.every((n) => n.position))
+    assert.notDeepEqual(dmind.layout(partial, true).nodes[3].position, { x: 5, y: 6 })
+  })
+  ok(() => {
+    for (const [a, b] of [[{ x: 0, y: 0 }, { x: 400, y: 20 }], [{ x: 400, y: 20 }, { x: 0, y: 0 }], [{ x: 0, y: 0 }, { x: 30, y: 300 }], [{ x: 30, y: 300 }, { x: 0, y: 0 }], [{ x: 10, y: 10 }, { x: 10, y: 10 }]]) {
+      const g = L.edgePath(a, b)
+      assert.match(g.d, /^M-?[\d.]+,-?[\d.]+ C/)
+      assert.ok(!/NaN|Infinity/.test(g.d) && Number.isFinite(g.mid.x + g.mid.y))
+    }
+    assert.match(L.edgePath({ x: 0, y: 0 }, { x: 400, y: 0 }).d, /^M200,32 /) // leaves through the right side
+    assert.match(L.edgePath({ x: 0, y: 0 }, { x: 0, y: 300 }).d, /^M100,64 /) // or the bottom
+  })
+  ok(() => {
+    // 1000 topics lay out quickly in every engine.
+    const big = tree(1000, 11, 'mindmap', 300)
+    for (const name of NAMES) {
+      const t0 = performance.now()
+      const pos = L.computeLayout(big, name)
+      const ms = performance.now() - t0
+      assert.equal(pos.size, 1000)
+      assert.ok(ms < 3000, `${name} took ${Math.round(ms)} ms`)
+    }
+  })
+})
+
+
+// ---------------------------------------------------------------- B4 editing, styles, outline
+section('B4 editing', () => {
+  const { edit: E, style: S, outline: O, dmind } = m
+  const doc = () => dmind.fromOutline('Root', 'A\n  A1\n  A2\n    A2x\nB\n  B1\nC', 'mindmap')
+  // ids: root, n1=A, n2=A1, n3=A2, n4=A2x, n5=B, n6=B1, n7=C
+  const label = (d, id) => d.nodes.find((n) => n.id === id)?.label
+  const parents = (d) => Object.fromEntries(d.edges.filter((e) => e.kind === 'branch').map((e) => [e.target, e.source]))
+  ok(() => {
+    const d = doc()
+    assert.deepEqual([...E.descendants(d, 'n1')].sort(), ['n2', 'n3', 'n4'])
+    assert.deepEqual([...E.descendants(d, 'n7')], [])
+    assert.deepEqual(E.validParents(d, 'n1').sort(), ['n5', 'n6', 'n7', 'root'])
+    assert.equal(E.parentOf(d, 'n4'), 'n3')
+    assert.equal(E.parentOf(d, 'root'), null)
+    const moved = E.reparent(d, 'n1', 'n5')
+    assert.equal(parents(moved.diagram).n1, 'n5')
+    assert.equal(parents(moved.diagram).n3, 'n1', 'the branch travels with its topic')
+    dmind.validateDiagram(moved.diagram)
+    assert.equal(d.edges.length, moved.diagram.edges.length)
+    assert.equal(parents(d).n1, 'root', 'the input is never mutated')
+    const orphan = E.reparent(d, 'n2', null)
+    assert.equal(parents(orphan.diagram).n2, undefined)
+    assert.equal(E.reparent(d, 'n2', 'n1').diagram, d, 'moving under the current parent changes nothing')
+    for (const [id, to] of [['n1', 'n1'], ['n1', 'n4'], ['root', 'n6'], ['n3', 'n4']]) assert.match(E.reparent(d, id, to).error, /itself or one of its own branches/)
+    assert.match(E.reparent(d, 'ghost', 'n1').error, /no longer exists/)
+    assert.match(E.reparent(d, 'n1', 'ghost').error, /no longer exists/)
+  })
+  ok(() => {
+    const d = doc()
+    const out = E.removeBranches(d, ['n1', 'n3', 'n5']) // overlapping subtrees are fine
+    assert.deepEqual(out.nodes.map((n) => n.id), ['root', 'n7'])
+    assert.deepEqual(out.edges.map((e) => e.target), ['n7'])
+    dmind.validateDiagram(out)
+    assert.equal(E.removeBranches(d, d.nodes.map((n) => n.id)), null)
+    assert.equal(E.removeBranches(d, ['root']), null)
+    assert.equal(E.removeBranches(d, []), null)
+    assert.equal(E.removeBranches(d, ['ghost']), null)
+    const linked = structuredClone(d)
+    linked.edges.push({ id: 'x', source: 'n7', target: 'n2', kind: 'flow' })
+    assert.ok(!E.removeBranches(linked, ['n1']).edges.some((e) => e.id === 'x'), 'links to removed topics go too')
+  })
+  ok(() => {
+    const d = doc()
+    const moved = E.moveNodes(d, ['n1', 'n2'], 30, -10)
+    const before = dmind.layout(d)
+    for (const n of moved.nodes) {
+      const was = before.nodes.find((x) => x.id === n.id).position
+      const shift = ['n1', 'n2'].includes(n.id) ? { x: 30, y: -10 } : { x: 0, y: 0 }
+      assert.deepEqual(n.position, { x: was.x + shift.x, y: was.y + shift.y }, n.id)
+    }
+    assert.equal(d.nodes[1].position, undefined)
+    const far = E.moveNodes(d, ['n1'], 1e9, -1e9)
+    assert.deepEqual(far.nodes[1].position, { x: 99000, y: -99000 })
+    dmind.validateDiagram(far)
+    assert.deepEqual(E.moveNodes(d, [], 5, 5).nodes.map((n) => n.position), before.nodes.map((n) => n.position))
+  })
+  ok(() => {
+    const d = doc()
+    const a = E.setNodeMeta(d, ['n1', 'n2'], 'accent', 'sky')
+    assert.equal(a.nodes[1].metadata.accent, 'sky')
+    assert.equal(a.nodes[3].metadata, undefined)
+    const b = E.setNodeMeta(a, ['n1'], 'accent', undefined)
+    assert.equal(b.nodes[1].metadata, undefined, 'removing the last key removes the empty object')
+    const withTwo = E.setNodeMeta(E.setNodeMeta(d, ['n1'], 'a', 1), ['n1'], 'b', { deep: [1] })
+    assert.deepEqual(E.setNodeMeta(withTwo, ['n1'], 'a', undefined).nodes[1].metadata, { b: { deep: [1] } })
+    const value = { shared: [1] }
+    const c = E.setNodeMeta(d, ['n1'], 'k', value)
+    value.shared.push(2)
+    assert.deepEqual(c.nodes[1].metadata.k, { shared: [1] }, 'values are copied')
+    assert.equal(E.patchNodes(d, ['n7'], { collapsed: true }).nodes[7].collapsed, true)
+    assert.equal(d.nodes[7].collapsed, undefined)
+  })
+  ok(() => {
+    const d = doc()
+    const one = E.toggleMarker(d, ['n1'], 'star')
+    assert.deepEqual(one.nodes[1].metadata.markers, ['star'])
+    assert.equal(E.toggleMarker(one, ['n1'], 'star').nodes[1].metadata, undefined, 'toggling off cleans up')
+    const mixed = E.toggleMarker(one, ['n1', 'n2'], 'star') // not all have it: add to the rest
+    assert.deepEqual([mixed.nodes[1], mixed.nodes[2]].map((n) => n.metadata.markers), [['star'], ['star']])
+    assert.equal(E.toggleMarker(mixed, ['n1', 'n2'], 'star').nodes[2].metadata, undefined)
+    let many = d
+    for (const id of ['flag', 'star', 'check', 'warning', 'question', 'idea', 'clock']) many = E.toggleMarker(many, ['n1'], id)
+    assert.deepEqual(many.nodes[1].metadata.markers, ['flag', 'star', 'check', 'warning', 'question'], `at most ${S.MAX_MARKERS}`)
+    assert.equal(E.toggleMarker(d, ['n1'], 'nonsense'), d)
+    assert.deepEqual(S.cleanMarkers(['star', 'star', 'x', 7, 'flag', 'check', 'warning', 'idea', 'clock']), ['star', 'flag', 'check', 'warning', 'idea'])
+    assert.deepEqual(S.cleanMarkers('star'), [])
+    assert.equal(S.markerNames(['flag', 'priority-1']), 'Flag, Priority 1')
+    assert.equal(S.markerById('star').glyph, '★')
+    assert.equal(S.accentById('nope'), undefined)
+  })
+  ok(() => {
+    for (const bg of ['#172033', '#ffffff'])
+      for (const a of S.ACCENTS) assert.ok(S.contrast(a.hex, bg) >= 3, `${a.id} on ${bg}: ${S.contrast(a.hex, bg).toFixed(2)}`)
+    assert.ok(Math.abs(S.contrast('#000000', '#ffffff') - 21) < 1e-9)
+    assert.ok(Math.abs(S.contrast('#777777', '#777777') - 1) < 1e-9)
+    assert.equal(new Set(S.ACCENTS.map((a) => a.id)).size, S.ACCENTS.length)
+    assert.equal(new Set(S.MARKERS.map((a) => a.glyph)).size, S.MARKERS.length)
+  })
+  ok(() => {
+    for (const good of ['http://a.b', 'https://example.org/path?x=1&y=2#frag', '  https://example.org/x  ', 'HTTPS://EXAMPLE.ORG/', 'http://[::1]:8080/x', 'https://例え.jp/パス'])
+      assert.ok(E.safeHref(good), good)
+    assert.equal(E.safeHref(' https://example.org/a '), 'https://example.org/a')
+    assert.equal(E.safeHref('https://例え.jp/'), 'https://xn--r8jz45g.jp/')
+    for (const bad of ['javascript:alert(1)', 'JaVaScRiPt:alert(1)', 'java\nscript:alert(1)', 'data:text/html,<script>', 'vbscript:x', 'file:///etc/passwd', 'blob:http://x/1', '//evil.example', 'ftp://x.org', 'mailto:a@b.c',
+      'http://user:pw@x.org/', 'http://user@x.org/', 'http://', 'https://exa mple.org', 'http://x.org/a\nb', 'http://x.org/a\tb', 'http://x.org/a\x00b', 'http://x.org/a\x7fb', 'http://x.org/a\u2028b', 'x'.repeat(10), 'http://x.org/' + 'a'.repeat(2100), '', '   ', null, undefined, 5, {}, ['http://x.org']])
+      assert.equal(E.safeHref(bad), null, String(bad))
+  })
+  ok(() => {
+    const grid = new Map([['a', { x: 0, y: 0 }], ['b', { x: 300, y: 10 }], ['c', { x: 600, y: 0 }], ['d', { x: 10, y: 200 }], ['e', { x: 320, y: 220 }], ['far', { x: 900, y: 900 }]])
+    assert.equal(E.nearestInDirection(grid, 'a', 'right'), 'b')
+    assert.equal(E.nearestInDirection(grid, 'b', 'right'), 'c')
+    assert.equal(E.nearestInDirection(grid, 'a', 'down'), 'd')
+    assert.equal(E.nearestInDirection(grid, 'd', 'up'), 'a')
+    assert.equal(E.nearestInDirection(grid, 'e', 'left'), 'd')
+    assert.equal(E.nearestInDirection(grid, 'a', 'left'), null)
+    assert.equal(E.nearestInDirection(grid, 'a', 'up'), null)
+    assert.equal(E.nearestInDirection(grid, 'ghost', 'up'), null)
+    assert.equal(E.nearestInDirection(grid, 'a', 'right', new Set(['c', 'e'])), 'c', 'hidden topics are skipped')
+    const tie = new Map([['o', { x: 0, y: 0 }], ['p', { x: 100, y: 0 }], ['q', { x: 100, y: 0 }]])
+    assert.equal(E.nearestInDirection(tie, 'o', 'right'), 'p', 'ties resolve the same way every time')
+  })
+  ok(() => {
+    const d = doc()
+    assert.deepEqual(O.outlineRows(d).map((r) => [r.label, r.depth]), [['Root', 0], ['A', 1], ['A1', 2], ['A2', 2], ['A2x', 3], ['B', 1], ['B1', 2], ['C', 1]])
+    const folded = E.patchNodes(d, ['n1'], { collapsed: true })
+    assert.deepEqual(O.outlineRows(folded).map((r) => r.label), ['Root', 'A', 'B', 'B1', 'C'])
+    assert.equal(O.outlineRows(folded)[1].hasChildren, true)
+    assert.equal(O.outlineRows(folded, true).length, 8)
+    assert.deepEqual(O.outlineRows({ ...d, edges: [] }).map((r) => r.depth), new Array(8).fill(0))
+  })
+  ok(() => {
+    const d = doc()
+    assert.equal(O.indentNode(d, 'n2'), null, 'the first child has nothing to indent under')
+    assert.equal(O.indentNode(d, 'root'), null)
+    assert.equal(O.indentNode(d, 'ghost'), null)
+    const out = O.indentNode(d, 'n3') // A2 becomes the last child of A1
+    assert.equal(parents(out)['n3'], 'n2')
+    assert.deepEqual(O.outlineRows(out).map((r) => [r.label, r.depth]).slice(1, 6), [['A', 1], ['A1', 2], ['A2', 3], ['A2x', 4], ['B', 1]])
+    const into = O.indentNode(d, 'n5') // B goes under A, after A's existing children
+    assert.deepEqual(O.outlineRows(into).map((r) => r.label), ['Root', 'A', 'A1', 'A2', 'A2x', 'B', 'B1', 'C'])
+    assert.equal(parents(into).n5, 'n1')
+    assert.deepEqual(O.outlineRows(into).map((r) => r.depth), [0, 1, 2, 2, 3, 2, 3, 1])
+    const out2 = O.outdentNode(d, 'n4') // A2x becomes a sibling of A2, right after it
+    assert.equal(parents(out2).n4, 'n1')
+    assert.deepEqual(O.outlineRows(out2).map((r) => [r.label, r.depth]).slice(1, 6), [['A', 1], ['A1', 2], ['A2', 2], ['A2x', 2], ['B', 1]])
+    const top = O.outdentNode(d, 'n1') // a child of the root becomes a root, after it
+    assert.equal(parents(top).n1, undefined)
+    assert.equal(O.outdentNode(top, 'n1'), null)
+    assert.equal(O.outdentNode(d, 'root'), null)
+    for (const r of [out, into, out2, top]) dmind.validateDiagram(r)
+  })
+  ok(() => {
+    const d = doc()
+    assert.equal(O.moveSibling(d, 'n2', -1), null)
+    assert.equal(O.moveSibling(d, 'n7', 1), null)
+    const down = O.moveSibling(d, 'n1', 1) // A below B, taking its branch with it
+    assert.deepEqual(O.outlineRows(down).map((r) => r.label), ['Root', 'B', 'B1', 'A', 'A1', 'A2', 'A2x', 'C'])
+    const up = O.moveSibling(down, 'n1', -1)
+    assert.deepEqual(O.outlineRows(up).map((r) => r.label), O.outlineRows(d).map((r) => r.label))
+    assert.equal(d.nodes[1].id, 'n1', 'the input is never mutated')
+    dmind.validateDiagram(down)
+  })
+  ok(() => {
+    // The flags a row carries must match what the operations do, for any shape of outline.
+    let seed = 99
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296)
+    for (let round = 0; round < 25; round++) {
+      let d = dmind.fromOutline('Root', Array.from({ length: 30 }, (_, i) => '  '.repeat(Math.floor(rnd() * 5)) + 'T' + i).join('\\n'), 'mindmap')
+      for (let k = 0; k < 5; k++) {
+        const pick = d.nodes[Math.floor(rnd() * d.nodes.length)].id
+        d = O.moveSibling(d, pick, rnd() < 0.5 ? -1 : 1) ?? d
+      }
+      for (const r of O.outlineRows(d, true)) {
+        assert.equal(r.canIndent, O.indentNode(d, r.id) !== null, 'indent ' + r.id)
+        assert.equal(r.canOutdent, O.outdentNode(d, r.id) !== null, 'outdent ' + r.id)
+        assert.equal(r.canMoveUp, O.moveSibling(d, r.id, -1) !== null, 'up ' + r.id)
+        assert.equal(r.canMoveDown, O.moveSibling(d, r.id, 1) !== null, 'down ' + r.id)
+      }
+    }
+    const rows = O.outlineRows(doc())
+    assert.deepEqual(rows.map((r) => [r.label, r.canIndent, r.canOutdent, r.canMoveUp, r.canMoveDown]).slice(0, 3), [
+      ['Root', false, false, false, false],
+      ['A', false, true, false, true],
+      ['A1', false, true, false, true],
+    ])
+  })
+  ok(() => {
+    const d = doc()
+    const mid = O.addSiblingAfter(d, 'n2', 'Between') // A1 -> new -> A2, all children of A
+    assert.deepEqual(O.outlineRows(mid.diagram).map((r) => r.label).slice(1, 7), ['A', 'A1', 'Between', 'A2', 'A2x', 'B'])
+    assert.equal(parents(mid.diagram)[mid.id], 'n1')
+    const top = O.addSiblingAfter(d, 'n1') // after A's whole branch, still a child of the root
+    assert.deepEqual(O.outlineRows(top.diagram).map((r) => r.label), ['Root', 'A', 'A1', 'A2', 'A2x', 'New idea', 'B', 'B1', 'C'])
+    assert.equal(parents(top.diagram)[top.id], 'root')
+    const afterRoot = O.addSiblingAfter(d, 'root') // the root has no parent: a second top-level topic
+    assert.equal(parents(afterRoot.diagram)[afterRoot.id], undefined)
+    assert.equal(O.addSiblingAfter(d, 'ghost'), null)
+    for (const r of [mid, top, afterRoot]) dmind.validateDiagram(r.diagram)
+    assert.equal(d.nodes.length, 8, 'the input is never mutated')
+  })
+  ok(() => {
+    // 300 random operations in a row: the result is always a valid forest with the same topics.
+    let seed = 7
+    const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296)
+    let d = dmind.fromOutline('Root', Array.from({ length: 40 }, (_, i) => '  '.repeat(Math.floor(rnd() * 4)) + 'T' + i).join('\n'), 'mindmap')
+    const ids = d.nodes.map((n) => n.id).sort()
+    for (let i = 0; i < 300; i++) {
+      const pick = d.nodes[Math.floor(rnd() * d.nodes.length)].id
+      const op = Math.floor(rnd() * 5)
+      const next = op === 0 ? O.indentNode(d, pick) : op === 1 ? O.outdentNode(d, pick) : op === 2 ? O.moveSibling(d, pick, rnd() < 0.5 ? -1 : 1)
+        : op === 3 ? (() => { const t = d.nodes[Math.floor(rnd() * d.nodes.length)].id; const r = E.reparent(d, pick, rnd() < 0.1 ? null : t); return r.diagram ?? null })()
+        : E.moveNodes(d, [pick], 10, 10)
+      if (next) d = dmind.validateDiagram(next)
+      assert.deepEqual(d.nodes.map((n) => n.id).sort(), ids)
+      assert.equal(O.outlineRows(d, true).length, ids.length, 'every topic appears exactly once in the outline')
+    }
+  })
+})
+
+
+section('B4 typing history and styled exports', () => {
+  const { dmind, edit: E } = m
+  const base = dmind.fromOutline('Root', 'A', 'mindmap')
+  const titled = (n) => ({ ...base, title: 'T' + n })
+  ok(() => {
+    let h = dmind.startHistory(base)
+    h = dmind.commitHistory(h, titled(1), 'label:a', 1000)
+    h = dmind.commitHistory(h, titled(2), 'label:a', 1400)
+    h = dmind.commitHistory(h, titled(3), 'label:a', 1900)
+    assert.equal(h.past.length, 1, 'keystrokes within a second share one undo step')
+    assert.equal(h.present.title, 'T3')
+    assert.equal(dmind.undoHistory(h).present.title, base.title, 'undo returns to before the first keystroke')
+    h = dmind.commitHistory(h, titled(4), 'label:a', 3500) // a pause starts a new step
+    assert.equal(h.past.length, 2)
+    h = dmind.commitHistory(h, titled(5), 'notes:a', 3600) // another field is a separate step
+    assert.equal(h.past.length, 3)
+    h = dmind.commitHistory(h, titled(6), undefined, 3700) // untyped edits never merge
+    h = dmind.commitHistory(h, titled(7), undefined, 3700)
+    assert.equal(h.past.length, 5)
+    let u = dmind.undoHistory(h)
+    u = dmind.commitHistory(u, titled(8), 'notes:a', 3800)
+    assert.equal(u.future.length, 0)
+    assert.equal(dmind.undoHistory(u).present.title, 'T6', 'redo state is never merged into')
+    assert.equal(dmind.commitHistory(null, titled(1), 'k', 5).coalesce.key, 'k')
+    assert.equal(dmind.undoHistory(h).coalesce, undefined)
+  })
+  ok(() => {
+    let d = dmind.fromOutline('Root', 'Plan', 'mindmap')
+    d = E.setNodeMeta(d, ['n1'], 'accent', 'red')
+    d = E.toggleMarker(d, ['n1'], 'star')
+    d = E.toggleMarker(d, ['n1'], 'priority-2')
+    d = E.setNodeMeta(d, ['n1'], 'link', 'https://example.org/spec?a=1&b=2')
+    const svg = dmind.toSvg(d)
+    assert.ok(svg.includes('#dc2626') && svg.includes('★ ②') && svg.includes('↗'))
+    assert.ok(svg.includes('[Star, Priority 2]') && svg.includes('https://example.org/spec?a=1&amp;b=2'))
+    const md = dmind.toMarkdown(d)
+    assert.ok(md.includes('- Plan (n1) [Star, Priority 2] <https://example.org/spec?a=1&b=2>'), md)
+    const hostile = E.setNodeMeta(E.setNodeMeta(d, ['n1'], 'link', 'javascript:alert(1)'), ['n1'], 'accent', '"><script>')
+    const bad = E.setNodeMeta(hostile, ['n1'], 'markers', ['x', '<b>'])
+    assert.ok(!dmind.toSvg(bad).includes('↗'), 'an unsafe link is never offered')
+    assert.ok(!dmind.toMarkdown(bad).includes('<javascript'))
+    assert.ok(!dmind.toSvg(bad).includes('<script>') && !dmind.toSvg(bad).includes('<b>'))
+    assert.ok(dmind.toSvg(bad).includes('stroke="#6366f1"'), 'an unknown accent falls back to the default')
+    assert.ok(!dmind.toShareHtml(bad).includes('<script>'))
+  })
+  ok(() => {
+    // Connectors in exports follow the layout: no straight centre-to-centre lines remain.
+    const d = dmind.fromOutline('Root', 'A\n  B\nC', 'mindmap')
+    const svg = dmind.toSvg(d)
+    assert.equal((svg.match(/<path d="M[^"]* C/g) || []).length, d.edges.length)
+    assert.ok(!/<path d="M[\d.]+,[\d.]+ L[^"]*" stroke/.test(svg))
+    const loop = { ...d, edges: [...d.edges, { id: 'self', source: 'n1', target: 'n1', kind: 'flow', label: 'retry' }] }
+    assert.ok(dmind.toSvg(loop).includes('retry'))
+  })
+})
+
 console.log(`dmind modules: ${checks} checks passed`)

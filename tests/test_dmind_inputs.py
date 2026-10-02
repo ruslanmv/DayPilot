@@ -79,7 +79,7 @@ def pdf(lines):
 
 def test_text_and_markdown_files():
     c = client()
-    raw = "﻿- one\n  - two\r\nthree\n".encode()
+    raw = "\ufeff- one\n  - two\r\nthree\n".encode()
     r = upload(c, "notes.md", raw)
     assert r.status_code == 200, r.text
     body = r.json()
