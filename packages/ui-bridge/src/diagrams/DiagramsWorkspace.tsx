@@ -57,7 +57,7 @@ import {
   DMIND_MIME,
   describeUnknown,
   dmindFileName,
-  importFile,
+  importAny,
   serializeDmind,
 } from './dmindFile'
 import './diagrams.css'
@@ -677,8 +677,8 @@ export function DiagramsWorkspace({
   async function readFile(file?: File) {
     if (!file) return
     try {
-      if (file.size > 2_000_000) throw new Error('Use a file smaller than 2 MB.')
-      const result = importFile(file.name, new Uint8Array(await file.arrayBuffer()))
+      if (file.size > 62_000_000) throw new Error('Use a file smaller than 62 MB.')
+      const result = await importAny(file.name, new Uint8Array(await file.arrayBuffer()))
       if (result.kind === 'text') {
         setContent(result.text)
         if (!topic) setTopic(result.name.replace(/\.[^.]+$/, '').slice(0, 200))
@@ -690,7 +690,7 @@ export function DiagramsWorkspace({
         setPreview({ ...d, id: newId() })
         setTopic(d.title)
         setWizard(3)
-        setMessage(describeUnknown(result.report))
+        setMessage([describeUnknown(result.report), ...(result.warnings ?? [])].filter(Boolean).join(' '))
       }
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Import failed')
@@ -900,7 +900,7 @@ export function DiagramsWorkspace({
         ref={input}
         className="dmind-file"
         type="file"
-        accept=".txt,.md,.markdown,.json,.dmind"
+        accept=".txt,.md,.markdown,.json,.dmind,.opml,.xmind"
         aria-label="Import source or diagram"
         onChange={(e) => void readFile(e.target.files?.[0])}
       />
@@ -946,7 +946,7 @@ export function DiagramsWorkspace({
                   topics.
                 </p>
                 <button onClick={() => input.current?.click()}>
-                  Attach text or open a .dmind file
+                  Attach text or open a .dmind, .opml or .xmind file
                 </button>
                 <SourcePanel
                   sources={sources}

@@ -6,10 +6,10 @@ Recorded on branch `claude/dmind-batches`; a sandbox (4 vCPU, no GPU, headless C
 |---|---|
 | DayPilot Python suite (whole repo) | 879 passed |
 | DayPilot `ruff check .` | clean |
-| `tests/ui/dmind-modules.mjs` | 401 checks passed (zip, bundle, archive corpus, patches, handoff) |
+| `tests/ui/dmind-modules.mjs` | 443 checks passed (zip, bundle, archive corpus, patches, handoff, OPML/XMind import) |
 | `tests/ui/dmind.mjs` | 135 checks incl. shared contract corpus |
 | Type check (`ui-bridge`, `tsc --noEmit`) | clean |
-| Browser E2E (`make dmind-e2e`, incl. axe: no serious/critical violations in the editor; phone width without horizontal scroll) | 31/31 passed after B6 (B7 and B8 add no UI) |
+| Browser E2E (`make dmind-e2e`, incl. axe: no serious/critical violations in the editor; phone width without horizontal scroll) | 32/32 passed |
 | Matrix Designer pytest | 277 passed + B8 handoff (44) ; `ruff check` clean |
 | Migrations on PostgreSQL 16 | upgrade to head `0026_dmind_shares`; downgrade to 0025 and to 0023 and back both succeed |
 | dmind API suites against PostgreSQL 16 (diagrams, workspace, sharing, concurrency) | 43 passed |

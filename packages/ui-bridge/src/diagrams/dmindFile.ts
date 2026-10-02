@@ -8,6 +8,7 @@
 import { allAttachments, type AssetStore, type Attachment } from './assets'
 import { packBundle, unpackBundle, missingAssets } from './bundle'
 import { fromBundle, validateDiagram, type Diagram } from './dmind'
+import { describeFidelity, importOpml, importXmind } from './importers'
 import { ZipError } from './zip'
 
 export const DMIND_EXTENSION = '.dmind'
@@ -155,6 +156,16 @@ export const MAX_BUNDLE_FILE_BYTES = 62_000_000
  * unpacked strictly: see zip.ts and bundle.ts for what is refused.
  */
 export async function importAny(name: string, bytes: Uint8Array): Promise<ImportResult> {
+  // Other tools' files are import-only and always report what did not come across (batch B10).
+  if (/\.opml$/i.test(name)) {
+    if (bytes.length > 10_000_000) throw new Error('Use an OPML file smaller than 10 MB.')
+    const r = importOpml(decode(bytes))
+    return { kind: 'diagram', diagram: r.diagram, via: 'dmind', report: unknownFields(r.diagram), warnings: [describeFidelity(r.fidelity)] }
+  }
+  if (/\.xmind$/i.test(name)) {
+    const r = await importXmind(bytes)
+    return { kind: 'diagram', diagram: r.diagram, via: 'dmind', report: unknownFields(r.diagram), warnings: [describeFidelity(r.fidelity)] }
+  }
   if (detectForm(bytes) !== 'zip') return importFile(name, bytes)
   if (!/\.dmind$/i.test(name)) throw new Error('Only .dmind files can be opened as bundles.')
   if (bytes.length > MAX_BUNDLE_FILE_BYTES) throw new Error('Use a bundle smaller than 62 MB.')

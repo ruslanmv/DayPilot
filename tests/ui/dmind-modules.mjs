@@ -1106,4 +1106,61 @@ await asyncSection('B8 coder handoff', async () => {
   checks += 9
 })
 
+await asyncSection('B10 OPML and XMind import', async () => {
+  const { importers: im } = m
+  const dropOf = (r, what) => r.fidelity.dropped.find(([w]) => w === what)?.[1]
+  // OPML: hierarchy, notes, entities, losses reported
+  const opml = `<?xml version="1.0"?><opml version="2.0"><head><title>Plan &amp; Do</title></head><body>
+    <outline text="Root" _note="line1&#10;line2" type="rss" xmlUrl="http://x"><outline text="A &lt;b&gt;"/><outline text="B"><outline text="B1"/></outline></outline></body></opml>`
+  let r = im.importOpml(opml)
+  assert.equal(r.diagram.title, 'Plan & Do'); assert.equal(r.diagram.nodes.length, 4)
+  assert.equal(r.diagram.nodes[0].notes, 'line1\nline2'); assert.equal(r.diagram.nodes[1].label, 'A <b>')
+  assert.deepEqual(r.diagram.edges.map((e) => [e.source, e.target]), [['root', 'n1'], ['root', 'n2'], ['n2', 'n3']])
+  assert.equal(dropOf(r, 'attribute type'), 1); assert.equal(dropOf(r, 'attribute xmlUrl'), 1)
+  assert.match(im.describeFidelity(r.fidelity), /Not carried over/); checks += 7
+  // several top-level outlines are joined under a new root
+  r = im.importOpml('<opml><head><title>Two</title></head><body><outline text="X"><outline text="X1"/></outline><outline text="Y"/></body></opml>')
+  assert.equal(r.diagram.nodes[0].label, 'Two'); assert.equal(r.diagram.nodes.length, 4)
+  assert.equal(r.diagram.edges.filter((e) => e.source === 'root').length, 2); checks += 3
+  // hostile OPML: DOCTYPE/entities refused, not OPML, no body, too many topics, text bounds, deep nesting
+  for (const bad of ['<!DOCTYPE opml [<!ENTITY x SYSTEM "file:///etc/passwd">]><opml><body><outline text="&x;"/></body></opml>',
+    '<html/>', '<opml><head/></opml>', '<opml><body></body></opml>',
+    '<opml><body>' + '<outline text="a"/>'.repeat(1001) + '</body></opml>'])
+    assert.throws(() => im.importOpml(bad))
+  assert.throws(() => im.importOpml('x'.repeat(10_000_001)))
+  r = im.importOpml('<opml><body><outline text="' + 'z'.repeat(600) + '"/></body></opml>')
+  assert.equal([...r.diagram.nodes[0].label].length, 500); assert.equal(dropOf(r, 'text cut to the size limit'), 1)
+  r = im.importOpml('<opml><body>' + '<outline text="d">'.repeat(150) + '</outline>'.repeat(150) + '</body></opml>')
+  assert.equal(r.diagram.nodes.length, 100); assert.equal(dropOf(r, 'outlines nested deeper than 100'), 50)
+  r = im.importOpml('<opml><body><outline text="&#0;&#xD800;&unknown;ok"/></body></opml>')
+  assert.equal(r.diagram.nodes[0].label, '&unknown;ok'); checks += 9
+  // XMind Zen: deflated content.json
+  const sheets = [{ title: 'Sheet 1', rootTopic: { id: 'r', title: 'Central', notes: { plain: { content: 'hello' } }, markers: [{ markerId: 'x' }],
+    children: { attached: [{ id: 'a', title: 'One', labels: ['l'], href: 'https://x', children: { attached: [{ id: 'a1', title: 'One.1' }] } }, { id: 'b', title: 'Two', image: { src: 'x' } }],
+      detached: [{ title: 'floating' }], summary: [{}] } },
+    relationships: [{ end1Id: 'a1', end2Id: 'b', title: 'feeds' }, { end1Id: 'a', end2Id: 'ghost' }] }, { title: 'Sheet 2', rootTopic: { title: 'x' } }]
+  const xm = (entries) => craft(entries)
+  const zen = xm([{ name: 'content.json', data: JSON.stringify(sheets), method: 8 }, { name: 'metadata.json', data: '{}', method: 8 }])
+  r = await im.importXmind(zen)
+  assert.deepEqual(r.diagram.nodes.map((n) => n.label), ['Central', 'One', 'One.1', 'Two'])
+  assert.equal(r.diagram.nodes[0].notes, 'hello')
+  assert.deepEqual(r.diagram.edges.map((e) => e.kind), ['branch', 'branch', 'branch', 'relationship'])
+  assert.equal(r.diagram.edges.at(-1).label, 'feeds')
+  assert.equal(dropOf(r, 'markers'), 1); assert.equal(dropOf(r, 'labels'), 1); assert.equal(dropOf(r, 'links'), 1); assert.equal(dropOf(r, 'images'), 1)
+  assert.equal(dropOf(r, 'floating topics'), 1); assert.equal(dropOf(r, 'summaries'), 1); assert.equal(dropOf(r, 'extra sheets'), 1)
+  assert.equal(dropOf(r, 'relationships with a missing end'), 1); checks += 14
+  // refused: old format, not xmind, damaged json, empty, ZIP bomb, traversal
+  await assert.rejects(() => im.importXmind(xm([{ name: 'content.xml', data: '<x/>' }])), /older XMind/)
+  await assert.rejects(() => im.importXmind(xm([{ name: 'a.txt', data: 'x' }])), /not an XMind/)
+  await assert.rejects(() => im.importXmind(xm([{ name: 'content.json', data: '{not json' }])), /could not be read/)
+  await assert.rejects(() => im.importXmind(xm([{ name: 'content.json', data: '[]' }])), /no topics/)
+  await assert.rejects(() => im.importXmind(xm([{ name: 'content.json', data: JSON.stringify([{ rootTopic: { title: 'x' } }]) + ' '.repeat(5_000_000), method: 8 }])), /bomb/)
+  await assert.rejects(() => im.importXmind(xm([{ name: '../content.json', data: '[]' }])))
+  const wide = [{ rootTopic: { title: 'r', children: { attached: Array.from({ length: 1000 }, (_, i) => ({ title: 't' + i })) } } }]
+  await assert.rejects(() => im.importXmind(xm([{ name: 'content.json', data: JSON.stringify(wide), method: 8 }])), /more than 1000/)
+  const deep = (n) => { let t = { title: 'leaf' }; for (let i = 0; i < n; i++) t = { title: 'p' + i, children: { attached: [t] } }; return t }
+  r = await im.importXmind(xm([{ name: 'content.json', data: JSON.stringify([{ rootTopic: deep(300) }]), method: 8 }]))
+  assert.equal(r.diagram.nodes.length, 101); assert.ok(dropOf(r, 'topics nested deeper than 100') >= 1); checks += 9
+})
+
 console.log(`dmind modules: ${checks} checks passed`)

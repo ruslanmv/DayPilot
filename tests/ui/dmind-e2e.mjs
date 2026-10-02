@@ -994,6 +994,19 @@ await step('refine: solver checks are shown; a patch for another state or a malf
   assert.equal(await page.getByRole('button', { name: 'Apply', exact: true }).count(), 0)
 })
 
+await step('import-only adapters: OPML opens as a preview and reports what was not carried over; old XMind is refused clearly', async () => {
+  const file = page.getByLabel('Import source or diagram')
+  await button(page, 'New diagram').click()
+  const opml = '<opml version="2.0"><head><title>From OPML</title></head><body><outline text="Root" type="rss"><outline text="Child one"/><outline text="Child two"/></outline></body></opml>'
+  await file.setInputFiles({ name: 'plan.opml', mimeType: 'text/x-opml', buffer: Buffer.from(opml) })
+  await page.locator('.dmind-preview').waitFor()
+  assert.equal(await page.locator('.dmind-preview li').count(), 3)
+  await page.getByText(/Not carried over: attribute type \(1\)/).waitFor()
+  await button(page, 'New diagram').click()
+  await file.setInputFiles({ name: 'old.xmind', mimeType: 'application/octet-stream', buffer: Buffer.from('not a zip') })
+  await page.getByText(/XMind|ZIP|archive/i).first().waitFor()
+})
+
 await step('no uncaught script errors during the whole run', async () => {
   assert.deepEqual(pageErrors, [])
 })
