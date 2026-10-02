@@ -422,3 +422,10 @@
 .dmind-quick { display: grid; gap: 0.6rem; margin: 0.75rem 0; padding: 0.75rem; border: 1px solid var(--dp-border, #2a3347); border-radius: 10px }
 .dmind-quick label { display: grid; gap: 0.25rem }
 .dmind-quick-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap }
+
+.dmind-tasks-body { display: grid; gap: 0.6rem; padding-top: 0.5rem }
+.dmind-tasks-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end }
+.dmind-task-edit { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; border: 1px solid var(--dp-border, #2a3347); border-radius: 8px }
+.dmind-task-edit label { display: grid; gap: 0.2rem }
+.dmind-gantt { overflow-x: auto; max-width: 100% }
+.dmind-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }

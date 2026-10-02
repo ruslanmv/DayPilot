@@ -14,6 +14,7 @@ import { SourcePanel } from './SourcePanel'
 import { RefinePanel } from './RefinePanel'
 import { AssistPanel, type AssistTrigger } from './AssistPanel'
 import { QuickStart } from './QuickStart'
+import { TasksPanel } from './TasksPanel'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { NodeStyleControls } from './NodeStyleControls'
 import { OutlineEditor } from './OutlineEditor'
@@ -1308,6 +1309,7 @@ export function DiagramsWorkspace({
                 )}
               </div>
               <AssistPanel diagram={diagram} focus={group} onApply={(next) => commit(next)} trigger={aiTrigger} />
+              <TasksPanel diagram={diagram} selected={selected} savedId={saved?.id} onChange={(next) => commit(next)} onMessage={setMessage} />
               <RefinePanel diagram={diagram} onApply={(next) => commit(next)} />
               <p>
                 {diagram.nodes.length} topics · {diagram.edges.length} links ·{' '}

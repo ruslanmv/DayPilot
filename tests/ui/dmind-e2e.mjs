@@ -1037,6 +1037,31 @@ await step('quick start: a template and a brainstorming method fill the outline 
   assert.ok((await page.locator('.dmind-preview li').count()) > 15)
 })
 
+await step('tasks: leaf topics become tasks, schedule into a timeline, and open tasks reach the task list once', async () => {
+  await wizard(page, { topic: 'Launch', outline: 'Plan\n  Scope\n  Budget\nBuild\n  Backend\n  Frontend\nShip\n  Release' })
+  await page.locator('.dmind-preview').waitFor()
+  await useDiagram(page)
+  await page.locator('.dmind-tasks > summary').click()
+  await button(page, 'Make tasks from leaf topics').click()
+  await page.getByText(/Leaf topics are now tasks/).waitFor()
+  await page.getByLabel('Start date').fill('2026-03-02')
+  await button(page, 'Schedule').click()
+  await page.getByText(/^Scheduled\./).waitFor()
+  await button(page, 'Show timeline').click()
+  await page.getByRole('img', { name: /Gantt chart of 5 tasks from 2026-03-02/ }).waitFor()
+  assert.equal(await page.locator('.dmind-gantt tbody tr').count(), 5)
+  await save(page).click()
+  await page.getByText(/Saved revision 1/).waitFor()
+  await button(page, 'Send open tasks to Tasks').click()
+  await page.getByText(/Added 5 task\(s\) to your task list/).waitFor()
+  await button(page, 'Send open tasks to Tasks').click()
+  await page.getByText(/Added 0 task\(s\).*5 were already there/).waitFor()
+  // the first task is selected via its topic; marking it done removes it from what is sent
+  await nodes(page).filter({ hasText: 'Scope' }).first().click()
+  await page.locator('.dmind-task-edit').getByLabel('Status').selectOption('done')
+  assert.match(await page.locator('.dmind-tasks > summary').innerText(), /1\/5 done/)
+})
+
 await step('no uncaught script errors during the whole run', async () => {
   assert.deepEqual(pageErrors, [])
 })

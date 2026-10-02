@@ -1192,4 +1192,67 @@ section('C3 templates, brainstorming and dictation', () => {
   assert.equal(vc.startDictation('en-US', () => {}, () => {}), null); checks += 5
 })
 
+section('C4 tasks, schedule and gantt', () => {
+  const { tasks: tk, dmind: dm } = m
+  // dates
+  assert.equal(tk.dayNumber('2026-02-30'), null); assert.equal(tk.dayNumber('2026-13-01'), null); assert.equal(tk.dayNumber('26-1-1'), null)
+  assert.equal(tk.dayNumber('1960-01-01'), null); assert.equal(tk.dayNumber('2028-02-29') !== null, true); assert.equal(tk.dayNumber('2027-02-29'), null)
+  assert.equal(tk.dateOf(tk.dayNumber('2026-12-31') + 1), '2027-01-01'); checks += 7
+  const base = dm.fromOutline('Launch', 'Plan\n  Scope\n  Budget\nBuild\n  Backend\n  Frontend\nShip\n  Release', 'mindmap')
+  const ids = Object.fromEntries(base.nodes.map((n) => [n.label, n.id]))
+  assert.deepEqual(tk.breakdown(base).map((r) => r.label), ['Scope', 'Budget', 'Backend', 'Frontend', 'Release'])
+  assert.deepEqual(tk.breakdown(base)[2].path, ['Launch', 'Build']); assert.equal(tk.breakdown(base)[2].phase, 'Build'); checks += 3
+  // making tasks keeps existing ones and is immutable
+  let d = tk.setTask(base, ids.Scope, { status: 'doing', days: 5, owner: ' Sam ', priority: 'high' })
+  assert.equal(base.nodes.find((n) => n.id === ids.Scope).metadata, undefined)
+  assert.deepEqual(tk.readTask(d.nodes.find((n) => n.id === ids.Scope)), { status: 'doing', days: 5, owner: 'Sam', priority: 'high' })
+  const made = tk.makeTasks(d, { days: 3 }); assert.equal(made.added, 4)
+  assert.equal(tk.readTask(made.diagram.nodes.find((n) => n.id === ids.Scope)).days, 5) // kept
+  assert.equal(tk.readTask(made.diagram.nodes.find((n) => n.id === ids.Budget)).days, 3)
+  dm.validateDiagram(made.diagram); checks += 6
+  // guards
+  for (const bad of [{ status: 'x' }, { status: 'todo', start: '2026-02-30' }, { status: 'todo', days: 0 }, { status: 'todo', days: 1.5 }, { status: 'todo', days: 4000 },
+    { status: 'todo', owner: 'x'.repeat(81) }, { status: 'todo', priority: 'urgent' }])
+    assert.throws(() => tk.setTask(base, ids.Scope, bad))
+  assert.throws(() => tk.setTask(base, 'ghost', { status: 'todo' }))
+  assert.equal(tk.setTask(d, ids.Scope, null).nodes.find((n) => n.id === ids.Scope).metadata, undefined); checks += 9
+  // tampered metadata is read defensively
+  const odd = structuredClone(base); odd.nodes[1].metadata = { task: { status: 'weird', start: 'nope', days: -3, owner: 7, priority: 'x' } }
+  assert.deepEqual(tk.readTask(odd.nodes[1]), { status: 'todo' }); checks++
+  // schedule: phases in sequence, parallel inside a phase, dependencies respected
+  let t = tk.makeTasks(base, { days: 2 }).diagram
+  t = tk.setTask(t, ids.Backend, { status: 'todo', days: 4 })
+  let s = tk.schedule(t, '2026-03-02')
+  const at = (label) => tk.readTask(s.nodes.find((n) => n.id === ids[label])).start
+  assert.equal(at('Scope'), '2026-03-02'); assert.equal(at('Budget'), '2026-03-02')
+  assert.equal(at('Backend'), '2026-03-04'); assert.equal(at('Frontend'), '2026-03-04')
+  assert.equal(at('Release'), '2026-03-08'); checks += 5
+  const dep = structuredClone(t); dep.edges.push({ id: 'dep1', source: ids.Backend, target: ids.Frontend, kind: 'dependency' })
+  s = tk.schedule(dep, '2026-03-02'); assert.equal(at('Frontend'), '2026-03-08'); checks++
+  const cyc = structuredClone(dep); cyc.edges.push({ id: 'dep2', source: ids.Frontend, target: ids.Backend, kind: 'dependency' })
+  assert.throws(() => tk.schedule(cyc, '2026-03-02'), /loop through/)
+  assert.throws(() => tk.schedule(t, '2026-02-30'), /real start date/); assert.throws(() => tk.schedule(base, '2026-03-02'), /Mark some topics/); checks += 3
+  const fixed = tk.setTask(t, ids.Release, { status: 'todo', days: 1, start: '2026-06-01' })
+  s = tk.schedule(fixed, '2026-03-02'); assert.equal(at('Release'), '2026-06-01'); checks++ // an explicit start is respected
+  // gantt rows and progress
+  const g = tk.gantt(s)
+  assert.equal(g.rows.length, 5); checks += 1; assert.ok(g.rows.every((r, i) => i === 0 || g.rows[i - 1].start <= r.start))
+  assert.equal(g.first, tk.dayNumber('2026-03-02')); assert.equal(g.unscheduled.length, 0)
+  assert.deepEqual(g.rows.find((r) => r.id === ids.Frontend).waitsFor, [])
+  assert.deepEqual(tk.gantt(tk.schedule(dep, '2026-03-02')).rows.find((r) => r.id === ids.Frontend).waitsFor, [ids.Backend])
+  assert.equal(tk.gantt(t).unscheduled.length, 5); assert.equal(tk.gantt(base).rows.length, 0)
+  let pr = tk.progress(setDone(s, ids.Scope)); assert.deepEqual(pr, { total: 5, done: 1, doing: 0, percent: 20 }); checks += 7
+  function setDone(x, id) { return tk.setTask(x, id, { ...tk.readTask(x.nodes.find((n) => n.id === id)), status: 'done' }) }
+  // export: open tasks only, due = last day, path as context
+  const ex = tk.exportable(setDone(s, ids.Scope))
+  assert.equal(ex.length, 4); assert.ok(!ex.some((e) => e.id === ids.Scope))
+  const be = ex.find((e) => e.id === ids.Backend); assert.equal(be.due, '2026-03-07'); assert.equal(be.context, 'Launch › Build'); checks += 4
+  // limits: a deep chain schedules without recursion trouble, and the task cap is enforced
+  const chain = dm.fromOutline('Chain', Array.from({ length: 400 }, (_, i) => '\t'.repeat(i + 1) + 'L' + i).join('\n'), 'flowchart')
+  const ct = tk.makeTasks(chain).diagram
+  assert.equal(tk.schedule(ct, '2026-01-01').nodes.filter((n) => tk.readTask(n)?.start).length, tk.breakdown(chain).length); checks++
+  const wide = dm.fromOutline('Wide', Array.from({ length: 600 }, (_, i) => 'T' + i).join('\n'), 'mindmap')
+  assert.throws(() => tk.makeTasks(wide), /at most 500/); checks++
+})
+
 console.log(`dmind modules: ${checks} checks passed`)

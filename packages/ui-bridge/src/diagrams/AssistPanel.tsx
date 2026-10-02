@@ -13,6 +13,7 @@ const CHIPS: { label: string; action: AssistAction; options?: AssistTrigger['opt
   { label: 'Tidy structure', action: 'reorganize', needsTopic: false },
   { label: 'Polish wording', action: 'refine', options: { mode: 'polish' }, needsTopic: true },
   { label: 'Shorten', action: 'refine', options: { mode: 'shorten' }, needsTopic: true },
+  { label: 'Break into tasks', action: 'chat', needsTopic: true, prompt: 'Break the selected topic into concrete, actionable to-do tasks as child topics. Start each with a verb and keep each small enough to finish in a day or two.' },
   { label: 'Find gaps and risks', action: 'chat', needsTopic: false, prompt: 'What is missing from this map? Add the most important missing topics, including risks.' },
 ]
 

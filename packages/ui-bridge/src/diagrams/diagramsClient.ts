@@ -153,6 +153,15 @@ export const diagramsApi = {
     }>('/v1/diagrams/design-bundle', { document, candidateId }, headers()),
   assistStatus: () => api.get<{ available: boolean; actions: string[]; credits: CreditSummary }>('/v1/diagrams/assist/status'),
   assist: (body: AssistRequest) => api.post<AssistReply>('/v1/diagrams/assist', body, headers()),
+  pushTasks: (
+    id: string,
+    items: { id: string; title: string; context: string; due: string | null; priority: string }[],
+  ) =>
+    api.post<{ created: number; skipped: number }>(
+      `/v1/diagrams/${encodeURIComponent(id)}/tasks`,
+      { items: items.map((i) => ({ ...i, due: i.due ?? undefined })) },
+      headers(),
+    ),
   inputCapabilities: () => api.get<InputCapabilities>('/v1/diagram-inputs/capabilities'),
   extract: (file: File) => {
     const form = new FormData()
