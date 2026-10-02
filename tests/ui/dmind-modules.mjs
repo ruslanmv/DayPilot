@@ -1255,4 +1255,25 @@ section('C4 tasks, schedule and gantt', () => {
   assert.throws(() => tk.makeTasks(wide), /at most 500/); checks++
 })
 
+section('C5 present', () => {
+  const { present: pr, dmind: dm } = m
+  const d = dm.fromOutline('Launch', 'Plan\n  Scope\n    Must have\n  Budget\nBuild\n  Backend\nShip', 'mindmap')
+  d.nodes.find((n) => n.label === 'Budget').notes = 'Cap at 10k'
+  const s = pr.toSlides(d)
+  assert.deepEqual(s.map((x) => x.title), ['Launch', 'Plan', 'Build', 'Ship'])
+  assert.deepEqual(s[1].bullets, [{ text: 'Scope', level: 0 }, { text: 'Must have', level: 1 }, { text: 'Budget', level: 0 }])
+  assert.deepEqual(s[1].notes, ['Budget: Cap at 10k']); assert.equal(s[0].branch, false); assert.equal(s[3].bullets.length, 0)
+  const folded = structuredClone(d); folded.nodes.find((n) => n.label === 'Scope').collapsed = true
+  assert.equal(pr.toSlides(folded)[1].bullets.length, 2); checks += 6 // a collapsed topic hides its children
+  const flow = dm.fromOutline('Flow', Array.from({ length: 23 }, (_, i) => 'Step ' + i).join('\n'), 'flowchart')
+  const fs = pr.toSlides(flow); assert.equal(fs.length, 4); assert.equal(fs[1].bullets[0].text, '1. Step 0'); assert.equal(fs[3].bullets.length, 3); checks += 3
+  const wide = dm.fromOutline('W', Array.from({ length: 200 }, (_, i) => 'B' + i).join('\n'), 'mindmap')
+  assert.equal(pr.toSlides(wide).length, pr.MAX_SLIDES)
+  const many = dm.fromOutline('M', 'Branch\n' + Array.from({ length: 100 }, (_, i) => '  c' + i).join('\n'), 'mindmap')
+  assert.equal(pr.toSlides(many)[1].bullets.length, pr.MAX_BULLETS)
+  const one = dm.fromOutline('Only', '', 'mindmap'); assert.equal(pr.toSlides(one).length, 1); checks += 3
+  const deep = dm.fromOutline('D', Array.from({ length: 300 }, (_, i) => '\t'.repeat(i + 1) + 'L' + i).join('\n'), 'mindmap')
+  assert.ok(pr.toSlides(deep)[1].bullets.every((b) => b.level <= 3)); checks++
+})
+
 console.log(`dmind modules: ${checks} checks passed`)

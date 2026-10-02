@@ -704,4 +704,12 @@ Open **Diagrams** to turn topics, brainstorms and text attachments into editable
 4. **Check and refine.** Open **Check and refine** for solver findings (loops without an exit, unreachable or unconnected topics) and to review a pasted `dmind-patch/v1` proposal as a diff before applying it.
 5. **Save and share.** **Save** keeps revision history; **Save a copy** forks. **Export / share…** gives `.dmind` (a ZIP bundle when attachments are present), Markdown, Mermaid, SVG, a read-only HTML snapshot and a Claude Code / Codex brief. Read-only expiring links exist but are off unless `DAYPILOT_DMIND_SHARING=true`.
 
+<img src="docs/assets/screenshots/dmind/5-tasks-timeline.png" alt="dmind tasks and Gantt timeline" width="49%" /> <img src="docs/assets/screenshots/dmind/6-present.png" alt="dmind presentation mode" width="49%" />
+
+**Faster starts, no AI needed.** In step 1 pick one of 14 templates (project plan, SWOT, OKRs, user journey, system design…) or a brainstorming method (SCAMPER, 5 Whys, pros/cons, six hats, pre-mortem, stakeholders), or press **Dictate** to speak your ideas. All of them only fill the outline box; you still review the preview.
+
+**Ask AI (your own models).** The **Ask AI** panel and the right-click menu (`AI: Suggest subtopics`, `Explain`, `Polish wording`) chat, grow, explain, tidy, shorten, translate or break a topic into tasks using the provider you connected in Settings. The AI only proposes: you see the differences and press **Apply suggestions**; Undo brings the old map back. Set `DAYPILOT_AI_CREDITS=true` to meter usage in credits (monthly allowance, owner top-ups, ledger); see [the AI plan](docs/dmind-ai-parity-plan.md).
+
+**Plan and present.** **Tasks and timeline** turns leaf topics into tasks, schedules phases and dependencies, draws a Gantt chart and sends open tasks to your DayPilot task list (once each). **Present** walks the map as slides with the keyboard. For scripts and AI tools see [dmind agent tools](docs/dmind-agent-tools.md).
+
 Screenshots are regenerated with `scripts/dmind_screenshots.sh`.

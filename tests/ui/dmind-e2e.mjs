@@ -1062,6 +1062,26 @@ await step('tasks: leaf topics become tasks, schedule into a timeline, and open 
   assert.match(await page.locator('.dmind-tasks > summary').innerText(), /1\/5 done/)
 })
 
+await step('present: keyboard walk-through, notes toggle and Esc return to the editor', async () => {
+  await wizard(page, { topic: 'Pitch', outline: 'Problem\n  Slow onboarding\nSolution\n  One-click start' })
+  await page.locator('.dmind-preview').waitFor()
+  await useDiagram(page)
+  await button(page, 'Present').click()
+  const dlg = page.getByRole('dialog', { name: 'Presenting Pitch' })
+  await dlg.getByRole('heading', { name: 'Pitch' }).waitFor()
+  await page.keyboard.press('ArrowRight')
+  await dlg.getByRole('heading', { name: 'Problem' }).waitFor()
+  await dlg.getByText('Slow onboarding').waitFor()
+  await page.keyboard.press('ArrowRight')
+  await dlg.getByRole('heading', { name: 'Solution' }).waitFor()
+  assert.ok(await dlg.getByRole('button', { name: 'Next' }).isDisabled())
+  await page.keyboard.press('Home')
+  await dlg.getByText('1 / 3').waitFor()
+  await page.keyboard.press('Escape')
+  await dlg.waitFor({ state: 'detached' })
+  await page.locator('.dmind-editor').waitFor()
+})
+
 await step('no uncaught script errors during the whole run', async () => {
   assert.deepEqual(pageErrors, [])
 })

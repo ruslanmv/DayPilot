@@ -15,6 +15,7 @@ import { RefinePanel } from './RefinePanel'
 import { AssistPanel, type AssistTrigger } from './AssistPanel'
 import { QuickStart } from './QuickStart'
 import { TasksPanel } from './TasksPanel'
+import { PresentMode } from './PresentMode'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { NodeStyleControls } from './NodeStyleControls'
 import { OutlineEditor } from './OutlineEditor'
@@ -198,6 +199,7 @@ export function DiagramsWorkspace({
   const [dirty, setDirty] = useState(false),
     [selected, setSelected] = useState(''),
     [aiTrigger, setAiTrigger] = useState<AssistTrigger | null>(null),
+    [presenting, setPresenting] = useState(false),
     [busy, setBusy] = useState(false)
   const [dropping, setDropping] = useState(false)
   const [sources, setSources] = useState<SourceText[]>([])
@@ -1200,6 +1202,7 @@ export function DiagramsWorkspace({
                   Save{saved ? ` · r${saved.revision}` : ''}
                 </button>
                 <button onClick={() => void save(true)}>Save a copy</button>
+                <button onClick={() => setPresenting(true)}>Present</button>
                 <button disabled={!history?.past.length} onClick={undo}>
                   Undo
                 </button>
@@ -1308,6 +1311,7 @@ export function DiagramsWorkspace({
                   </label>
                 )}
               </div>
+              {presenting && <PresentMode diagram={diagram} onClose={() => setPresenting(false)} />}
               <AssistPanel diagram={diagram} focus={group} onApply={(next) => commit(next)} trigger={aiTrigger} />
               <TasksPanel diagram={diagram} selected={selected} savedId={saved?.id} onChange={(next) => commit(next)} onMessage={setMessage} />
               <RefinePanel diagram={diagram} onApply={(next) => commit(next)} />

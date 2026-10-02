@@ -55,3 +55,16 @@ AI actions run on the models the workspace connected in Settings (the provider t
 - `DAYPILOT_AI_MONTHLY_CREDITS` (default 100) sets each workspace's monthly allowance; balances refill to it at the start of each month and never shrink (granted credits carry over).
 - Credits are taken atomically before the model is called (concurrent requests cannot overspend; out of credits returns 402 before any model call); failures and "no provider" answers cost nothing.
 - Owners add credits or change the allowance at `POST /v1/diagrams/assist/credits/grant`; `GET .../credits` shows the balance and a ledger of actions and amounts (never prompt text). The panel shows the balance and each button's cost.
+
+## Delivery status (branch `claude/dmind-batches`)
+
+| Batch | Status |
+|---|---|
+| C1 AI assist service | done (`/v1/diagrams/assist`, 23 tests) |
+| C2 AI in the editor + credits | done (Ask AI panel, topic actions, credits ledger, 9 tests) |
+| C3 Start simply | done (14 templates, 7 brainstorming methods, dictation, AI draft) |
+| C4 Tasks and Gantt | done (task fields, breakdown, dependency-aware schedule, timeline, push to task list) |
+| C5 Present | done (keyboard walk-through, notes) |
+| C6 Agent tools | documented in `docs/dmind-agent-tools.md` (no new server surface) |
+
+Not built, on purpose: pitch video, image/sticker generation, background removal, YouTube transcript fetching. AI quality was verified with scripted model replies, not against a live model in this environment.

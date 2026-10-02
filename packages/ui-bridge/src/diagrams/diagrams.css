@@ -429,3 +429,10 @@
 .dmind-task-edit label { display: grid; gap: 0.2rem }
 .dmind-gantt { overflow-x: auto; max-width: 100% }
 .dmind-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+
+.dmind-present { position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-rows: 1fr auto; background: #0b1020; color: #f2f5ff; outline: none }
+.dmind-present-slide { padding: 6vh 8vw; overflow: auto }
+.dmind-present-slide h1 { font-size: clamp(2rem, 5vw, 3.5rem); margin: 0 0 1rem }
+.dmind-present-slide ul { list-style: disc; font-size: clamp(1.1rem, 2.4vw, 1.9rem); line-height: 1.6 }
+.dmind-present-sub, .dmind-present-notes { opacity: 0.75; font-size: 1.1rem; white-space: pre-wrap }
+.dmind-present-bar { display: flex; gap: 0.75rem; align-items: center; justify-content: center; padding: 0.75rem; border-top: 1px solid #2a3347 }

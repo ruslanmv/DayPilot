@@ -42,15 +42,12 @@ await page.getByRole('heading', { name: 'Turn ideas into diagrams' }).waitFor()
 
 // 1. Start: topic and outline
 await button('New diagram').click()
-await page.getByLabel('Topic', { exact: true }).fill('Order process')
-await page.getByLabel('Brainstorm or outline').fill(
-  'Receive order\n  Validate items\n  Reserve stock\nCharge payment\n  Success\n  Retry or cancel\nShip\n  Pick and pack\n  Hand to carrier\nNotify customer',
-)
+await page.getByLabel('Start from a template').selectOption('product-launch')
+await page.waitForTimeout(300)
 await shot('1-start')
 
 // 2. Preview
 await button('Next: structure').click()
-await page.getByLabel('Diagram type').selectOption('mindmap')
 await button('Generate preview').click()
 await page.locator('.dmind-preview').waitFor()
 await shot('2-preview')
@@ -68,5 +65,19 @@ await page.locator('.dmind-refine > summary').click()
 await page.waitForTimeout(200)
 await page.evaluate(() => { document.querySelectorAll('*').forEach((e) => { if (e.scrollTop) e.scrollTop = 0 }); window.scrollTo(0, 0) })
 await shot('4-check-and-refine')
+// 5. Tasks and timeline
+await page.locator('.dmind-tasks > summary').click()
+await button('Make tasks from leaf topics').click()
+await page.getByLabel('Start date').fill('2026-03-02')
+await button('Schedule').click()
+await button('Show timeline').click()
+await page.locator('.dmind-gantt svg').waitFor()
+await page.locator('.dmind-tasks').screenshot({ path: new URL('5-tasks-timeline.png', out).pathname })
+
+// 6. Present
+await button('Present').click()
+await page.keyboard.press('ArrowRight')
+await page.waitForTimeout(300)
+await shot('6-present')
 await browser.close()
 console.log('screenshots written to docs/assets/screenshots/dmind/')
