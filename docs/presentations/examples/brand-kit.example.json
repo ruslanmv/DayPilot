@@ -1,0 +1,81 @@
+{
+  "schema_version": "daypilot.brand-kit/v1",
+  "fixture_only": true,
+  "id": "brand_example",
+  "company_id": "company_example",
+  "version": 1,
+  "slide_size": {
+    "width_inches": 13.333,
+    "height_inches": 7.5
+  },
+  "palette": {
+    "background": "#FFFFFF",
+    "foreground": "#14213D",
+    "primary": "#1B4D89",
+    "accent": "#007F86",
+    "muted": "#475569",
+    "positive": "#147D45",
+    "warning": "#A15C00",
+    "negative": "#B3261E"
+  },
+  "typography": {
+    "deck_title": {
+      "family": "Arial",
+      "minimum_pt": 40,
+      "preferred_pt": 44,
+      "fallbacks": []
+    },
+    "slide_title": {
+      "family": "Arial",
+      "minimum_pt": 32,
+      "preferred_pt": 34,
+      "fallbacks": []
+    },
+    "body": {
+      "family": "Arial",
+      "minimum_pt": 18,
+      "preferred_pt": 20,
+      "fallbacks": []
+    },
+    "data": {
+      "family": "Arial",
+      "minimum_pt": 16,
+      "preferred_pt": 18,
+      "fallbacks": []
+    },
+    "footnote": {
+      "family": "Arial",
+      "minimum_pt": 12,
+      "preferred_pt": 12,
+      "fallbacks": []
+    }
+  },
+  "logos": [
+    {
+      "asset_id": "logo_example_placeholder",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "variant": "universal",
+      "aspect_ratio": 3,
+      "minimum_width_inches": 1.2,
+      "clear_space_ratio": 0.2,
+      "rights": "fixture_placeholder"
+    }
+  ],
+  "allowed_fonts": [
+    "Arial"
+  ],
+  "chart_style": {
+    "series_colors": [
+      "#1B4D89",
+      "#007F86"
+    ],
+    "minimum_label_pt": 16,
+    "allow_3d": false
+  },
+  "footer": {
+    "text": "Example Company \u2022 FICTIONAL DATA \u2022 Internal draft",
+    "required": true,
+    "show_page_number": true
+  },
+  "activation_policy": "sample_review_required"
+}

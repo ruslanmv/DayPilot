@@ -1,0 +1,60 @@
+{
+  "schema_version": "daypilot.weekly-series/v1",
+  "fixture_only": true,
+  "id": "series_example",
+  "workspace_id": "workspace_example",
+  "company_id": "company_example",
+  "version": 1,
+  "owner_user_id": "user_example",
+  "name": "Example weekly delivery review",
+  "timezone": "Europe/Rome",
+  "brand_ref": {
+    "id": "brand_example",
+    "version": 1,
+    "sha256": "7363d3638578fff5ed76beb2205bbe07f12a13cbd9e71d25490f0b825e43642a"
+  },
+  "template_ref": {
+    "id": "template_weekly_example",
+    "version": 1,
+    "sha256": "03412edfa1361a07a734885d49c9c3f2e21be1a8ef04cd96a8804aa112818246"
+  },
+  "reporting_rule": {
+    "kind": "previous_full_week",
+    "week_starts_on": 0,
+    "cutoff_local_time": "08:00",
+    "max_source_age_hours": 24,
+    "missing_source_policy": "visible_gap",
+    "late_recovery": "latest_only",
+    "catch_up_hours": 24
+  },
+  "schedule": {
+    "enabled": false,
+    "weekday": 0,
+    "local_time": "08:30",
+    "gap_policy": "first_valid_instant",
+    "fold_policy": "first_occurrence"
+  },
+  "output_mode": "draft_only",
+  "source_ids": [
+    "source_metrics_example",
+    "source_dmind_example"
+  ],
+  "sections": [
+    {
+      "id": "progress",
+      "purpose": "Accepted work evidence",
+      "required": true,
+      "carry_forward": "locked_structure_only"
+    },
+    {
+      "id": "decision",
+      "purpose": "Review scope and next actions",
+      "required": true,
+      "carry_forward": "none"
+    }
+  ],
+  "slide_count": {
+    "minimum": 6,
+    "maximum": 12
+  }
+}

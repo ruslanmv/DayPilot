@@ -1,0 +1,357 @@
+{
+  "schema_version": "daypilot.template/v1",
+  "fixture_only": true,
+  "id": "template_weekly_example",
+  "company_id": "company_example",
+  "version": 1,
+  "brand_ref": {
+    "id": "brand_example",
+    "version": 1,
+    "sha256": "7363d3638578fff5ed76beb2205bbe07f12a13cbd9e71d25490f0b825e43642a"
+  },
+  "slide_size": {
+    "width_inches": 13.333,
+    "height_inches": 7.5
+  },
+  "mode": "curated",
+  "layouts": [
+    {
+      "id": "cover",
+      "name": "Cover",
+      "max_body_words": 90,
+      "placeholders": [
+        {
+          "id": "cover_title",
+          "role": "title",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "required": true,
+          "minimum_font_pt": 32
+        },
+        {
+          "id": "cover_main",
+          "role": "body",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "required": true,
+          "minimum_font_pt": 18
+        },
+        {
+          "id": "cover_footer",
+          "role": "footer",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.91,
+            "w": 0.72,
+            "h": 0.04
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        },
+        {
+          "id": "cover_logo",
+          "role": "logo",
+          "bounds": {
+            "x": 0.8,
+            "y": 0.89,
+            "w": 0.15,
+            "h": 0.065
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        }
+      ]
+    },
+    {
+      "id": "evidence_chart",
+      "name": "Evidence Chart",
+      "max_body_words": 90,
+      "placeholders": [
+        {
+          "id": "evidence_chart_title",
+          "role": "title",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "required": true,
+          "minimum_font_pt": 32
+        },
+        {
+          "id": "evidence_chart_main",
+          "role": "chart",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "required": true,
+          "minimum_font_pt": 16
+        },
+        {
+          "id": "evidence_chart_footer",
+          "role": "footer",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.91,
+            "w": 0.72,
+            "h": 0.04
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        },
+        {
+          "id": "evidence_chart_logo",
+          "role": "logo",
+          "bounds": {
+            "x": 0.8,
+            "y": 0.89,
+            "w": 0.15,
+            "h": 0.065
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        }
+      ]
+    },
+    {
+      "id": "evidence_table",
+      "name": "Evidence Table",
+      "max_body_words": 90,
+      "placeholders": [
+        {
+          "id": "evidence_table_title",
+          "role": "title",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "required": true,
+          "minimum_font_pt": 32
+        },
+        {
+          "id": "evidence_table_main",
+          "role": "table",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "required": true,
+          "minimum_font_pt": 16
+        },
+        {
+          "id": "evidence_table_footer",
+          "role": "footer",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.91,
+            "w": 0.72,
+            "h": 0.04
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        },
+        {
+          "id": "evidence_table_logo",
+          "role": "logo",
+          "bounds": {
+            "x": 0.8,
+            "y": 0.89,
+            "w": 0.15,
+            "h": 0.065
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        }
+      ]
+    },
+    {
+      "id": "systems_flow",
+      "name": "Systems Flow",
+      "max_body_words": 90,
+      "placeholders": [
+        {
+          "id": "systems_flow_title",
+          "role": "title",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "required": true,
+          "minimum_font_pt": 32
+        },
+        {
+          "id": "systems_flow_main",
+          "role": "diagram",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "required": true,
+          "minimum_font_pt": 16
+        },
+        {
+          "id": "systems_flow_footer",
+          "role": "footer",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.91,
+            "w": 0.72,
+            "h": 0.04
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        },
+        {
+          "id": "systems_flow_logo",
+          "role": "logo",
+          "bounds": {
+            "x": 0.8,
+            "y": 0.89,
+            "w": 0.15,
+            "h": 0.065
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        }
+      ]
+    },
+    {
+      "id": "decision",
+      "name": "Decision",
+      "max_body_words": 90,
+      "placeholders": [
+        {
+          "id": "decision_title",
+          "role": "title",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "required": true,
+          "minimum_font_pt": 32
+        },
+        {
+          "id": "decision_main",
+          "role": "decision",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "required": true,
+          "minimum_font_pt": 18
+        },
+        {
+          "id": "decision_footer",
+          "role": "footer",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.91,
+            "w": 0.72,
+            "h": 0.04
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        },
+        {
+          "id": "decision_logo",
+          "role": "logo",
+          "bounds": {
+            "x": 0.8,
+            "y": 0.89,
+            "w": 0.15,
+            "h": 0.065
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        }
+      ]
+    },
+    {
+      "id": "summary",
+      "name": "Summary",
+      "max_body_words": 90,
+      "placeholders": [
+        {
+          "id": "summary_title",
+          "role": "title",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "required": true,
+          "minimum_font_pt": 32
+        },
+        {
+          "id": "summary_main",
+          "role": "body",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "required": true,
+          "minimum_font_pt": 18
+        },
+        {
+          "id": "summary_footer",
+          "role": "footer",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.91,
+            "w": 0.72,
+            "h": 0.04
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        },
+        {
+          "id": "summary_logo",
+          "role": "logo",
+          "bounds": {
+            "x": 0.8,
+            "y": 0.89,
+            "w": 0.15,
+            "h": 0.065
+          },
+          "required": true,
+          "minimum_font_pt": 12
+        }
+      ]
+    }
+  ],
+  "original_asset_id": null,
+  "fidelity": {
+    "status": "not_applicable",
+    "report_artifact_id": null,
+    "limitations": [
+      "Fictional contract only; no logo bytes, renderer or activated template is included."
+    ]
+  }
+}

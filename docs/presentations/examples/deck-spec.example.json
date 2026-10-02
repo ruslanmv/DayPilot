@@ -1,0 +1,523 @@
+{
+  "schema_version": "daypilot.deck-spec/v1",
+  "fixture_only": true,
+  "id": "deck_weekly_example",
+  "workspace_id": "workspace_example",
+  "company_id": "company_example",
+  "title": "Weekly delivery review \u2014 fictional fixture",
+  "language": "en",
+  "purpose": "Illustrate editable evidence and the weekly review boundary.",
+  "audience": "Example Company internal reviewers",
+  "brand_ref": {
+    "id": "brand_example",
+    "version": 1,
+    "sha256": "7363d3638578fff5ed76beb2205bbe07f12a13cbd9e71d25490f0b825e43642a"
+  },
+  "template_ref": {
+    "id": "template_weekly_example",
+    "version": 1,
+    "sha256": "03412edfa1361a07a734885d49c9c3f2e21be1a8ef04cd96a8804aa112818246"
+  },
+  "slide_size": {
+    "width_inches": 13.333,
+    "height_inches": 7.5
+  },
+  "slide_count": {
+    "exact": 6
+  },
+  "period": {
+    "start": "2026-09-20T22:00:00Z",
+    "end_exclusive": "2026-09-27T22:00:00Z",
+    "key": "2026-W39-Europe-Rome"
+  },
+  "sources": [
+    {
+      "id": "snapshot_metrics",
+      "source_id": "source_metrics_example",
+      "kind": "metric_extract",
+      "sha256": "04f2f176b241340b16eeb0723cc6e025a549b407014fee3a921172ad68d8ab8f",
+      "captured_at": "2026-09-28T06:00:00Z",
+      "period": {
+        "start": "2026-09-20T22:00:00Z",
+        "end_exclusive": "2026-09-27T22:00:00Z",
+        "key": "2026-W39-Europe-Rome"
+      },
+      "fixture_only": true,
+      "metrics": [
+        {
+          "id": "completed_mon",
+          "value": 4,
+          "unit": "items",
+          "definition": "Accepted work items; fictional illustrative data, not company evidence.",
+          "period_key": "2026-W39-Europe-Rome",
+          "locator": "fixture:/weekly-metrics/completed_mon"
+        },
+        {
+          "id": "completed_tue",
+          "value": 5,
+          "unit": "items",
+          "definition": "Accepted work items; fictional illustrative data, not company evidence.",
+          "period_key": "2026-W39-Europe-Rome",
+          "locator": "fixture:/weekly-metrics/completed_tue"
+        },
+        {
+          "id": "completed_wed",
+          "value": 3,
+          "unit": "items",
+          "definition": "Accepted work items; fictional illustrative data, not company evidence.",
+          "period_key": "2026-W39-Europe-Rome",
+          "locator": "fixture:/weekly-metrics/completed_wed"
+        },
+        {
+          "id": "completed_thu",
+          "value": 6,
+          "unit": "items",
+          "definition": "Accepted work items; fictional illustrative data, not company evidence.",
+          "period_key": "2026-W39-Europe-Rome",
+          "locator": "fixture:/weekly-metrics/completed_thu"
+        },
+        {
+          "id": "completed_fri",
+          "value": 7,
+          "unit": "items",
+          "definition": "Accepted work items; fictional illustrative data, not company evidence.",
+          "period_key": "2026-W39-Europe-Rome",
+          "locator": "fixture:/weekly-metrics/completed_fri"
+        },
+        {
+          "id": "accepted_total",
+          "value": 25,
+          "unit": "items",
+          "definition": "Accepted work items; fictional illustrative data, not company evidence.",
+          "period_key": "2026-W39-Europe-Rome",
+          "locator": "fixture:/weekly-metrics/accepted_total"
+        }
+      ]
+    },
+    {
+      "id": "snapshot_flow",
+      "source_id": "source_dmind_example",
+      "kind": "dmind_snapshot",
+      "sha256": "17f9b88a8bcf93531e82a22f0635be4edaa4f4016558162a5a3a36300eaf5fda",
+      "captured_at": "2026-09-28T06:00:00Z",
+      "period": {
+        "start": "2026-09-20T22:00:00Z",
+        "end_exclusive": "2026-09-27T22:00:00Z",
+        "key": "2026-W39-Europe-Rome"
+      },
+      "fixture_only": true,
+      "metrics": []
+    }
+  ],
+  "slides": [
+    {
+      "id": "slide_cover",
+      "layout_id": "cover",
+      "purpose": "State the period and review purpose.",
+      "title": "Weekly delivery review \u2014 fictional example",
+      "notes": {
+        "speaker_text": "All data and asset IDs are fictional. This is a contract example, not a generated presentation.",
+        "source_snapshot_ids": []
+      },
+      "claims": [],
+      "elements": [
+        {
+          "id": "slide_cover_title",
+          "kind": "text",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "role": "slide_title",
+          "text": "Weekly delivery review \u2014 fictional example",
+          "claim_ids": []
+        },
+        {
+          "id": "cover_body",
+          "kind": "text",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "role": "body",
+          "text": "Example Company\nReporting week: 21\u201327 September 2026\nFICTIONAL DATA \u2022 discussion draft",
+          "claim_ids": []
+        }
+      ]
+    },
+    {
+      "id": "slide_progress",
+      "layout_id": "evidence_chart",
+      "purpose": "Show daily throughput without inventing a comparison.",
+      "title": "25 work items accepted this week",
+      "notes": {
+        "speaker_text": "All data and asset IDs are fictional. This is a contract example, not a generated presentation.",
+        "source_snapshot_ids": [
+          "snapshot_metrics"
+        ]
+      },
+      "claims": [
+        {
+          "id": "claim_accepted_total",
+          "classification": "observed",
+          "text": "25 work items accepted in the reporting week (fictional fixture).",
+          "metric_ref": {
+            "source_snapshot_id": "snapshot_metrics",
+            "metric_id": "accepted_total"
+          },
+          "numeric_value": 25,
+          "unit": "items"
+        }
+      ],
+      "elements": [
+        {
+          "id": "slide_progress_title",
+          "kind": "text",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "role": "slide_title",
+          "text": "25 work items accepted this week",
+          "claim_ids": []
+        },
+        {
+          "id": "progress_chart",
+          "kind": "chart",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "chart_type": "column",
+          "title": "Daily accepted work items (fictional)",
+          "unit": "items",
+          "categories": [
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri"
+          ],
+          "series": [
+            {
+              "name": "Accepted",
+              "points": [
+                {
+                  "value": 4,
+                  "metric_ref": {
+                    "source_snapshot_id": "snapshot_metrics",
+                    "metric_id": "completed_mon"
+                  }
+                },
+                {
+                  "value": 5,
+                  "metric_ref": {
+                    "source_snapshot_id": "snapshot_metrics",
+                    "metric_id": "completed_tue"
+                  }
+                },
+                {
+                  "value": 3,
+                  "metric_ref": {
+                    "source_snapshot_id": "snapshot_metrics",
+                    "metric_id": "completed_wed"
+                  }
+                },
+                {
+                  "value": 6,
+                  "metric_ref": {
+                    "source_snapshot_id": "snapshot_metrics",
+                    "metric_id": "completed_thu"
+                  }
+                },
+                {
+                  "value": 7,
+                  "metric_ref": {
+                    "source_snapshot_id": "snapshot_metrics",
+                    "metric_id": "completed_fri"
+                  }
+                }
+              ]
+            }
+          ],
+          "alt_text": "Fictional daily accepted item counts: 4, 5, 3, 6 and 7. Total 25.",
+          "axis_zero_baseline": true
+        }
+      ]
+    },
+    {
+      "id": "slide_status",
+      "layout_id": "evidence_table",
+      "purpose": "Present exact status with a clear reporting context.",
+      "title": "Delivery evidence and next review",
+      "notes": {
+        "speaker_text": "All data and asset IDs are fictional. This is a contract example, not a generated presentation.",
+        "source_snapshot_ids": [
+          "snapshot_metrics"
+        ]
+      },
+      "claims": [],
+      "elements": [
+        {
+          "id": "slide_status_title",
+          "kind": "text",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "role": "slide_title",
+          "text": "Delivery evidence and next review",
+          "claim_ids": []
+        },
+        {
+          "id": "status_table",
+          "kind": "table",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "headers": [
+            "Metric",
+            "Value",
+            "Context"
+          ],
+          "rows": [
+            [
+              {
+                "value": "Accepted work items"
+              },
+              {
+                "value": 25,
+                "metric_ref": {
+                  "source_snapshot_id": "snapshot_metrics",
+                  "metric_id": "accepted_total"
+                }
+              },
+              {
+                "value": "Fictional reporting-week total"
+              }
+            ],
+            [
+              {
+                "value": "Prior-week comparison"
+              },
+              {
+                "value": "Unavailable"
+              },
+              {
+                "value": "No comparable source supplied"
+              }
+            ]
+          ],
+          "alt_text": "25 accepted work items; prior-week comparison unavailable."
+        }
+      ]
+    },
+    {
+      "id": "slide_flow",
+      "layout_id": "systems_flow",
+      "purpose": "Explain the review boundary as editable system objects.",
+      "title": "Drafts stay separate from delivery",
+      "notes": {
+        "speaker_text": "All data and asset IDs are fictional. This is a contract example, not a generated presentation.",
+        "source_snapshot_ids": [
+          "snapshot_flow"
+        ]
+      },
+      "claims": [],
+      "elements": [
+        {
+          "id": "slide_flow_title",
+          "kind": "text",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "role": "slide_title",
+          "text": "Drafts stay separate from delivery",
+          "claim_ids": []
+        },
+        {
+          "id": "review_flow",
+          "kind": "diagram",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "source_snapshot_id": "snapshot_flow",
+          "nodes": [
+            {
+              "id": "node_source",
+              "label": "Source snapshot",
+              "bounds": {
+                "x": 0.08,
+                "y": 0.12,
+                "w": 0.28,
+                "h": 0.22
+              }
+            },
+            {
+              "id": "node_review",
+              "label": "Review draft",
+              "bounds": {
+                "x": 0.57,
+                "y": 0.12,
+                "w": 0.28,
+                "h": 0.22
+              }
+            },
+            {
+              "id": "node_export",
+              "label": "Approved export",
+              "bounds": {
+                "x": 0.57,
+                "y": 0.61,
+                "w": 0.28,
+                "h": 0.22
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "edge_review",
+              "from": "node_source",
+              "to": "node_review",
+              "label": "Compose"
+            },
+            {
+              "id": "edge_export",
+              "from": "node_review",
+              "to": "node_export",
+              "label": "Approve"
+            }
+          ],
+          "alt_text": "Source snapshot is composed into a draft; approval permits export."
+        }
+      ]
+    },
+    {
+      "id": "slide_decision",
+      "layout_id": "decision",
+      "purpose": "Make the audience decision explicit.",
+      "title": "Decision: confirm the next reporting scope",
+      "notes": {
+        "speaker_text": "All data and asset IDs are fictional. This is a contract example, not a generated presentation.",
+        "source_snapshot_ids": []
+      },
+      "claims": [
+        {
+          "id": "claim_recommendation",
+          "classification": "recommendation",
+          "text": "Confirm metric definitions before comparisons."
+        }
+      ],
+      "elements": [
+        {
+          "id": "slide_decision_title",
+          "kind": "text",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "role": "slide_title",
+          "text": "Decision: confirm the next reporting scope",
+          "claim_ids": []
+        },
+        {
+          "id": "decision_body",
+          "kind": "text",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "role": "body",
+          "text": "Recommendation: confirm the metric definitions and source cutoff before the next weekly draft.\nDo not infer a trend from this single fictional reporting window.",
+          "claim_ids": []
+        }
+      ]
+    },
+    {
+      "id": "slide_next",
+      "layout_id": "summary",
+      "purpose": "Close with concrete owner-review actions.",
+      "title": "Next period: prepare, inspect, approve",
+      "notes": {
+        "speaker_text": "All data and asset IDs are fictional. This is a contract example, not a generated presentation.",
+        "source_snapshot_ids": []
+      },
+      "claims": [],
+      "elements": [
+        {
+          "id": "slide_next_title",
+          "kind": "text",
+          "bounds": {
+            "x": 0.04,
+            "y": 0.07,
+            "w": 0.92,
+            "h": 0.13
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "role": "slide_title",
+          "text": "Next period: prepare, inspect, approve",
+          "claim_ids": []
+        },
+        {
+          "id": "next_body",
+          "kind": "text",
+          "bounds": {
+            "x": 0.06,
+            "y": 0.25,
+            "w": 0.86,
+            "h": 0.58
+          },
+          "content_locked": false,
+          "layout_locked": false,
+          "role": "body",
+          "text": "1. Capture fresh permitted sources.\n2. Preserve the approved company template.\n3. Inspect every exported slide.\n4. Review before sharing.",
+          "claim_ids": []
+        }
+      ]
+    }
+  ]
+}
