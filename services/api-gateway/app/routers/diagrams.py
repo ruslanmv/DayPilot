@@ -71,7 +71,8 @@ def access(request: Request, session: Session = Depends(get_session)) -> str:
 class SaveIn(BaseModel):
     document: dict[str, Any]
     expectedRevision: int = Field(0, ge=0)
-    archived: bool = False
+    # Omitted keeps the stored state: an ordinary save must never silently unarchive.
+    archived: bool | None = None
 
 
 class GenerateIn(BaseModel):
@@ -94,17 +95,37 @@ def checked(document):
         raise HTTPException(422, str(exc)) from exc
 
 
+def reason(response: httpx.Response) -> str:
+    """The designer's own explanation (plain text, bounded), e.g. a provider-policy refusal."""
+    try:
+        detail = response.json().get("detail")
+    except (ValueError, AttributeError):
+        return ""
+    return detail[:300] if isinstance(detail, str) else ""
+
+
 def upstream(path: str, payload: dict[str, Any]):
     try:
         return matrix_designer_from_env()._post(path, payload)
     except DesignerError as exc:
         raise HTTPException(400, str(exc)) from exc
     except httpx.HTTPStatusError as exc:
-        if exc.response.status_code in (400, 422):
-            raise HTTPException(422, "Matrix Designer rejected the diagram or source") from exc
-        if exc.response.status_code == 404:
+        status = exc.response.status_code
+        if status in (400, 422):
+            why = reason(exc.response)
+            raise HTTPException(
+                422,
+                f"Matrix Designer rejected the request: {why}"
+                if why
+                else "Matrix Designer rejected the diagram or source",
+            ) from exc
+        if status == 404:
             raise HTTPException(
                 502, "Install the Matrix Designer dmind interoperability update"
+            ) from exc
+        if status in (401, 403):
+            raise HTTPException(
+                502, "Matrix Designer refused the configured API key (MATRIX_DESIGNER_API_KEY)"
             ) from exc
         raise HTTPException(502, "Matrix Designer request failed") from exc
     except httpx.HTTPError as exc:
@@ -233,7 +254,7 @@ def save(
             document_json=document,
             title=document["title"],
             revision=revision,
-            archived=body.archived,
+            **({} if body.archived is None else {"archived": body.archived}),
         )
     )
     if result.rowcount != 1:
