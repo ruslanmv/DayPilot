@@ -1301,3 +1301,21 @@ class DiagramRevision(Base):
     revision: Mapped[int] = mapped_column(Integer, primary_key=True)
     document_json: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DiagramShare(Base):
+    """A read-only, expiring link to one pinned revision of a diagram. Only the token's SHA-256 is stored."""
+    __tablename__ = "diagram_shares"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    diagram_id: Mapped[str] = mapped_column(ForeignKey("diagrams.id"), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    include_notes: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

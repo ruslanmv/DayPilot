@@ -154,3 +154,15 @@ def test_0025_adds_only_nullable_columns_to_diagrams_and_keeps_rows(database):
     assert tuple(row) == ("Existing", None, None)
     command.downgrade(config(), "0024_dmind_diagrams")
     assert snapshot(database) == before
+
+
+def test_0026_adds_only_the_shares_table_and_reverses_cleanly(database):
+    command.upgrade(config(), "0025_dmind_workspace")
+    before = snapshot(database)
+    command.upgrade(config(), "0026_dmind_shares")
+    after = snapshot(database)
+    assert set(after) - set(before) == {"diagram_shares"}
+    for table, shape in before.items():
+        assert after[table] == shape, f"{table} changed"
+    command.downgrade(config(), "0025_dmind_workspace")
+    assert snapshot(database) == before

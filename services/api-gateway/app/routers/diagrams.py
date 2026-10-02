@@ -1,7 +1,7 @@
 """Isolated dmind API: workspace authorization, CAS saves and immutable revisions.
 
 Generation and coding handoff never intake tasks or execute code. Sharing is via
-explicit portable exports in the UI; this router creates no anonymous public URLs.
+explicit portable exports in the UI. Read-only links live in diagram_shares.py (off by default).
 """
 
 from __future__ import annotations
