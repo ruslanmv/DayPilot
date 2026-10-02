@@ -1,4 +1,5 @@
 import { api } from '../apiClient'
+import { workspaceId } from '../env'
 import type { Diagram, DiagramKind } from './dmind'
 export type SavedDiagram = {
   id: string
@@ -11,6 +12,42 @@ export type DiagramSummary = {
   title: string
   revision: number
   archived: boolean
+  updatedAt?: string | null
+  tags?: string[]
+  projectId?: string | null
+}
+export type DiagramPage = {
+  items: DiagramSummary[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+export type ListQuery = {
+  q?: string
+  tag?: string
+  projectId?: string
+  archived?: 'include' | 'exclude' | 'only'
+  cursor?: string | null
+  limit?: number
+}
+export type RevisionSummary = {
+  revision: number
+  createdAt?: string | null
+  title?: string
+  nodes: number
+  edges: number
+  document?: Diagram
+}
+export type RevisionPage = {
+  items: RevisionSummary[]
+  hasMore: boolean
+  nextBefore: number | null
+}
+const query = (params: Record<string, string | number | null | undefined>) => {
+  const search = new URLSearchParams()
+  for (const [k, v] of Object.entries(params))
+    if (v !== undefined && v !== null && v !== '') search.set(k, String(v))
+  const text = search.toString()
+  return text ? '?' + text : ''
 }
 function headers() {
   const match = document.cookie.match(/(?:^|;\s*)dp_csrf=([^;]+)/)
@@ -19,7 +56,18 @@ function headers() {
   }
 }
 export const diagramsApi = {
-  list: () => api.get<{ items: DiagramSummary[] }>('/v1/diagrams'),
+  list: (q: ListQuery = {}) =>
+    api.get<DiagramPage>(
+      '/v1/diagrams' +
+        query({
+          q: q.q,
+          tag: q.tag,
+          project_id: q.projectId,
+          archived: q.archived,
+          cursor: q.cursor,
+          limit: q.limit ?? 50,
+        }),
+    ),
   load: (id: string) =>
     api.get<SavedDiagram>(`/v1/diagrams/${encodeURIComponent(id)}`),
   create: (document: Diagram) =>
@@ -35,9 +83,18 @@ export const diagramsApi = {
       { document, expectedRevision, archived },
       headers(),
     ),
-  revisions: (id: string) =>
-    api.get<{ items: { revision: number; document: Diagram }[] }>(
-      `/v1/diagrams/${encodeURIComponent(id)}/revisions`,
+  revisions: (id: string, before?: number | null) =>
+    api.get<RevisionPage>(
+      `/v1/diagrams/${encodeURIComponent(id)}/revisions` +
+        query({ summary: 'true', limit: 20, before }),
+    ),
+  revision: (id: string, revision: number) =>
+    api.get<RevisionSummary & { document: Diagram }>(
+      `/v1/diagrams/${encodeURIComponent(id)}/revisions/${revision}`,
+    ),
+  projects: () =>
+    api.get<{ items: { id: string; name: string }[] }>(
+      `/v1/projects?workspaceId=${encodeURIComponent(workspaceId())}&limit=200`,
     ),
   generate: (
     topic: string,

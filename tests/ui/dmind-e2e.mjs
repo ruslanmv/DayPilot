@@ -268,12 +268,12 @@ await step('persistence: save, reopen, revisions append, restore never rewrites 
   await page.getByText(/Saved revision 2/).waitFor()
   await page.reload({ waitUntil: 'networkidle' })
   await page.getByRole('heading', { name: 'Turn ideas into diagrams' }).waitFor()
-  await page.locator('.dmind-library button', { hasText: 'Order processing v2' }).click()
+  await page.locator('.dmind-saved button', { hasText: 'Order processing v2' }).click()
   await page.getByText(/Loaded revision 2/).waitFor()
   await button(page, 'Load saved revisions').click()
   await button(page, 'Restore r1').click()
+  await page.getByText(/Save to append a new revision/).waitFor()
   assert.equal(await page.getByLabel('Diagram title').inputValue(), 'Order processing v1')
-  assert.match(await status(page).innerText(), /Save to append a new revision/)
   await save(page).click()
   await page.getByText(/Saved revision 3/).waitFor()
   await button(page, 'Load saved revisions').click()
@@ -284,7 +284,7 @@ await step('persistence: save, reopen, revisions append, restore never rewrites 
 await step('conflict: a stale tab gets 409, keeps its draft, and can save a copy', async () => {
   const tab2 = watch(await ctx.newPage())
   await ready(tab2)
-  await tab2.locator('.dmind-library button', { hasText: 'Order processing v1' }).first().click()
+  await tab2.locator('.dmind-saved button', { hasText: 'Order processing v1' }).first().click()
   await tab2.getByText(/Loaded revision 3/).waitFor()
   await page.getByLabel('Diagram title').fill('Edited in tab one')
   await save(page).click()
@@ -295,28 +295,29 @@ await step('conflict: a stale tab gets 409, keeps its draft, and can save a copy
   assert.equal(await tab2.getByLabel('Diagram title').inputValue(), 'Edited in tab two')
   await button(tab2, 'Save a copy').click()
   await tab2.getByText(/Saved revision 1/).waitFor()
-  await tab2.locator('.dmind-library button', { hasText: 'Edited in tab one' }).first().waitFor()
-  await tab2.locator('.dmind-library button', { hasText: 'Edited in tab two' }).first().waitFor()
+  await tab2.locator('.dmind-saved button', { hasText: 'Edited in tab one' }).first().waitFor()
+  await tab2.locator('.dmind-saved button', { hasText: 'Edited in tab two' }).first().waitFor()
   await tab2.close()
 })
 
 await step('archive: ordinary saves keep the state; archived diagrams stay recoverable', async () => {
   await button(page, 'Archive diagram').click()
   await page.getByText(/· archived/).first().waitFor()
-  await page.locator('.dmind-library button', { hasText: 'Edited in tab one' }).waitFor({ state: 'detached' })
+  await page.locator('.dmind-saved button', { hasText: 'Edited in tab one' }).waitFor({ state: 'detached' })
   await page.getByLabel('Include archived').check()
-  assert.equal(await page.locator('.dmind-library button', { hasText: 'Edited in tab one' }).count(), 1)
+  await page.locator('.dmind-saved button', { hasText: 'Edited in tab one' }).first().waitFor()
   await page.getByLabel('Diagram title').fill('Edited while archived')
   await save(page).click()
   await page.getByText(/Saved revision \d+ · archived/).waitFor()
   await button(page, 'Unarchive diagram').click()
   await page.getByText(/Saved revision \d+$/).waitFor()
   await page.getByLabel('Include archived').uncheck()
-  await page.locator('.dmind-library button', { hasText: 'Edited while archived' }).waitFor()
+  await page.locator('.dmind-saved button', { hasText: 'Edited while archived' }).waitFor()
 })
 
 await step('draft recovery: unsaved work survives a reload', async () => {
   await page.getByLabel('Diagram title').fill('Unsaved idea')
+  await page.locator('.dmind-draft', { hasText: 'Unsaved idea' }).waitFor() // autosaved to IndexedDB
   await page.reload({ waitUntil: 'networkidle' })
   await page.getByRole('heading', { name: 'Turn ideas into diagrams' }).waitFor()
   await button(page, 'Recover browser draft').click()
@@ -369,7 +370,7 @@ await step('imports: text, dmind JSON copy, Matrix bundle; bad files are refused
   await useDiagram(page)
   await save(page).click()
   await page.getByText(/Saved revision 1/).waitFor()
-  await page.locator('.dmind-library button', { hasText: 'Order processing system' }).first().waitFor() // saved as a copy
+  await page.locator('.dmind-saved button', { hasText: 'Order processing system' }).first().waitFor() // saved as a copy
   // Drag and drop a .dmind file onto the workspace: opens a preview, keeps unknown fields.
   const dropped = { ...JSON.parse(fs.readFileSync(fixture, 'utf8')), future_field: { keep: true } }
   const dt = await page.evaluateHandle((text) => {
@@ -435,6 +436,132 @@ await step(withDesigner ? 'matrix: designer proposal and handoff return a fresh 
     assert.equal(await page.getByLabel(/Ask Matrix Designer/).isChecked(), false, 'provider use is opt-in per run')
     await button(page, 'Close wizard').click()
   }
+})
+
+// ---------------------------------------------------------------- B2 reliable workspace
+const poll = async (fn, what, ms = 8000) => {
+  const end = Date.now() + ms
+  for (;;) {
+    const v = await fn()
+    if (v) return v
+    if (Date.now() > end) throw new Error('timed out waiting for ' + what)
+    await page.waitForTimeout(100)
+  }
+}
+const chip = (name) => page.locator('.dmind-tags').getByRole('button', { name, exact: true })
+const savedItems = (p) => p.locator('.dmind-saved button[aria-pressed]')
+const api = (p, method, path, body) =>
+  p.evaluate(
+    async ([method, path, body]) => {
+      const csrf = ((document.cookie.match(/(?:^|;\s*)dp_csrf=([^;]+)/) || [])[1]) || ''
+      const r = await fetch(path, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'X-Workspace-Id': 'default', 'X-CSRF-Token': decodeURIComponent(csrf) },
+        body: body ? JSON.stringify(body) : undefined,
+      })
+      return { status: r.status, body: await r.json().catch(() => null) }
+    },
+    [method, path, body],
+  )
+const tiny = (title, tags) => ({
+  schema_version: 'dmind/v1', id: 'x', title, kind: 'mindmap', nodes: [{ id: 'n', label: 'topic' }], edges: [], metadata: { tags },
+})
+
+await step('workspace: 55 diagrams page in, search and tag filters work', async () => {
+  for (let i = 0; i < 55; i++) await api(page, 'POST', '/v1/diagrams', { document: tiny('Bulk ' + String(i).padStart(2, '0'), [i % 2 ? 'even-tag' : 'odd-tag']) })
+  await page.getByLabel('Include archived').check()
+  await button(page, 'Refresh').click()
+  await poll(async () => (await savedItems(page).count()) === 50, 'the first page of 50')
+  await button(page, 'Load more').click()
+  await poll(async () => (await savedItems(page).count()) >= 55, 'the rest of the list')
+  assert.equal(await page.getByRole('button', { name: 'Load more' }).count(), 0, 'no more pages')
+  await page.getByLabel('Search diagrams').fill('Bulk 07')
+  await poll(async () => (await savedItems(page).count()) === 1, 'search narrowing to one')
+  assert.match(await savedItems(page).first().innerText(), /Bulk 07/)
+  await page.getByLabel('Search diagrams').fill('')
+  await chip('#odd-tag').click()
+  await poll(async () => (await savedItems(page).count()) === 28, '28 diagrams with the tag')
+  await chip('#odd-tag').click()
+  await poll(async () => (await savedItems(page).count()) >= 50, 'the unfiltered list again')
+  await page.getByLabel('Include archived').uncheck()
+})
+
+await step('details: tags are normalised and the diagram can be found by them', async () => {
+  await page.getByLabel('Search diagrams').fill('Bulk 00')
+  await poll(async () => (await savedItems(page).count()) === 1, 'Bulk 00')
+  await savedItems(page).first().click()
+  await page.getByText(/Loaded revision 1/).waitFor()
+  await page.getByLabel('Tags', { exact: true }).fill('  Needs Review , needs review, Q3 ')
+  await page.getByLabel('Tags', { exact: true }).blur()
+  await page.getByLabel('Tags', { exact: true }).waitFor()
+  assert.equal(await page.getByLabel('Tags', { exact: true }).inputValue(), 'needs review, q3')
+  await save(page).click()
+  await page.getByText(/Saved revision 2/).waitFor()
+  await chip('#needs review').waitFor()
+})
+
+await step('resilience: a save retries through a dropped connection and a failure keeps the work', async () => {
+  try {
+  await page.getByLabel('Diagram title').fill('Bulk 00 edited')
+  await ctx.setOffline(true)
+  await save(page).click()
+  await page.getByText(/Retrying \(\d\/4\)/).waitFor()
+  await ctx.setOffline(false)
+  await page.getByText(/Saved revision 3/).waitFor()
+  // Offline for good: the person is told, and the edit survives in the drafts list.
+  await page.getByLabel('Diagram title').fill('Bulk 00 offline edit')
+  await ctx.setOffline(true)
+  await save(page).click()
+  await page.getByText(/Could not reach the server/).waitFor({ timeout: 15000 })
+  await page.locator('.dmind-draft', { hasText: 'Bulk 00 offline edit' }).waitFor()
+  await ctx.setOffline(false)
+  await save(page).click()
+  await page.getByText(/Saved revision 4/).waitFor()
+  assert.equal(await page.locator('.dmind-draft', { hasText: 'Bulk 00 offline edit' }).count(), 0, 'a saved draft is cleared')
+  } finally {
+    await ctx.setOffline(false)
+  }
+})
+
+await step('history: revisions page, compare and restore', async () => {
+  const found = await api(page, 'GET', '/v1/diagrams?q=Bulk 00&limit=5')
+  const { id, revision } = found.body.items[0]
+  const doc = (await api(page, 'GET', '/v1/diagrams/' + id)).body.document
+  for (let r = revision; r < revision + 22; r++) {
+    doc.title = 'Bulk 00 v' + (r + 1)
+    assert.equal((await api(page, 'PUT', '/v1/diagrams/' + id, { document: doc, expectedRevision: r })).status, 200)
+  }
+  await page.getByLabel('Search diagrams').fill('Bulk 00')
+  await savedItems(page).first().click()
+  await page.getByText(/Loaded revision 26/).waitFor()
+  await button(page, 'Load saved revisions').click()
+  await poll(async () => (await page.locator('.dmind-rev').count()) === 20, 'the first 20 revisions')
+  await button(page, 'Load older revisions').click()
+  await poll(async () => (await page.locator('.dmind-rev').count()) === 26, 'all 26 revisions')
+  assert.equal(await page.getByRole('button', { name: 'Load older revisions' }).count(), 0)
+  await page.getByLabel('Compare r1 with the current draft').click()
+  await page.getByLabel('Revision changes').waitFor()
+  assert.match(await page.getByLabel('Revision changes').innerText(), /Title: "Bulk 00" → "Bulk 00 v26"/)
+  await page.getByLabel('Search diagrams').fill('')
+})
+
+await step('drafts: shared live across tabs, optional, and cleared when discarded', async () => {
+  const tab2 = watch(await ctx.newPage())
+  await ready(tab2)
+  await wizard(page, { topic: 'Cross tab draft', outline: 'One\n  Two' })
+  await useDiagram(page)
+  await tab2.locator('.dmind-draft', { hasText: 'Cross tab draft' }).waitFor() // announced, no reload
+  await tab2.getByLabel('Discard draft Cross tab draft').click()
+  await page.locator('.dmind-draft', { hasText: 'Cross tab draft' }).waitFor({ state: 'detached' })
+  await tab2.close()
+  // Opting out stores nothing new and clears what was kept.
+  await page.getByLabel('Keep drafts in this browser').uncheck()
+  await page.getByLabel('Diagram title').fill('Never stored')
+  await page.waitForTimeout(700)
+  assert.equal(await page.locator('.dmind-draft').count(), 0)
+  await page.getByLabel('Keep drafts in this browser').check()
+  await page.getByLabel('Diagram title').fill('Stored again')
+  await page.locator('.dmind-draft', { hasText: 'Stored again' }).waitFor()
 })
 
 await step('layout: usable at phone width without horizontal page scroll', async () => {

@@ -3,8 +3,14 @@ import { workspaceId } from '../env'
 import {
   diagramsApi,
   type DiagramSummary,
+  type RevisionSummary,
   type SavedDiagram,
 } from './diagramsClient'
+import { diffDiagrams } from './diff'
+import type { DraftRecord } from './draftStore'
+import { relativeTime } from './format'
+import { normalizeTags, sameContent, withRetry } from './saveQueue'
+import { useDrafts } from './useDrafts'
 import {
   addTopic,
   commitHistory,
@@ -40,7 +46,6 @@ import {
 } from './dmindFile'
 import './diagrams.css'
 
-type Revision = { revision: number; document: Diagram }
 type NodeViewProps = {
   n: DiagramNode
   x: number
@@ -123,8 +128,19 @@ export function DiagramsWorkspace({
 }: {
   accountKey?: string
 }) {
+  const workspace = workspaceId()
+  const drafts = useDrafts(accountKey, workspace)
+  const draftId = useRef<string>(newId()) // one draft per open diagram: the saved id, or a fresh id
   const [items, setItems] = useState<DiagramSummary[]>([]),
     [showArchived, setShowArchived] = useState(false)
+  const [search, setSearch] = useState(''),
+    [tagFilter, setTagFilter] = useState(''),
+    [projectFilter, setProjectFilter] = useState('')
+  const [nextCursor, setNextCursor] = useState<string | null>(null),
+    [knownTags, setKnownTags] = useState<string[]>([]),
+    [projects, setProjects] = useState<{ id: string; name: string }[]>([])
+  const [revMore, setRevMore] = useState<number | null>(null),
+    [changes, setChanges] = useState<{ revision: number; lines: string[] } | null>(null)
   const [history, setHistory] = useState<History | null>(null),
     [saved, setSaved] = useState<SavedDiagram | null>(null)
   const [dirty, setDirty] = useState(false),
@@ -142,7 +158,7 @@ export function DiagramsWorkspace({
   const [linkTarget, setLinkTarget] = useState(''),
     [linkKind, setLinkKind] = useState<EdgeKind>('flow'),
     [linkLabel, setLinkLabel] = useState('')
-  const [revisions, setRevisions] = useState<Revision[]>([]),
+  const [revisions, setRevisions] = useState<RevisionSummary[]>([]),
     [zoom, setZoom] = useState(1)
   const [validationReport, setValidationReport] = useState<Record<
     string,
@@ -168,7 +184,7 @@ export function DiagramsWorkspace({
   } | null>(null)
   const viewport = useRef<HTMLDivElement>(null),
     input = useRef<HTMLInputElement>(null)
-  const draftKey = `daypilot.dmind.draft:${workspaceId()}:${accountKey}`
+  const legacyDraftKey = `daypilot.dmind.draft:${workspace}:${accountKey}`
   const diagram = history?.present || null
   const arranged = useMemo(() => (diagram ? layout(diagram) : null), [diagram])
   // Pointer moves re-render this component many times a second: keep derived data memoised
@@ -206,30 +222,61 @@ export function DiagramsWorkspace({
     return { minX: x0, minY: y0, width: x1 - x0, height: y1 - y0 }
   }, [visible])
 
-  async function refresh() {
-    const result = await diagramsApi.list()
-    if (result.ok) setItems(result.data.items)
-    else
+  const listQuery = useMemo(
+    () => ({
+      q: search.trim(),
+      tag: tagFilter,
+      projectId: projectFilter,
+      archived: showArchived ? ('include' as const) : ('exclude' as const),
+    }),
+    [search, tagFilter, projectFilter, showArchived],
+  )
+  async function refresh(more = false) {
+    const result = await diagramsApi.list({
+      ...listQuery,
+      cursor: more ? nextCursor : null,
+    })
+    if (result.ok) {
+      setItems((prev) => (more ? [...prev, ...result.data.items] : result.data.items))
+      setNextCursor(result.data.nextCursor)
+      setKnownTags((prev) =>
+        [...new Set([...prev, ...result.data.items.flatMap((i) => i.tags || [])])].sort(),
+      )
+    } else
       setMessage(
         'Saved diagrams unavailable. You can create, edit and export a local draft. ' +
           result.error,
       )
   }
   useEffect(() => {
-    let active = true
-    diagramsApi.list().then((r) => {
-      if (!active) return
-      if (r.ok) setItems(r.data.items)
-      else
-        setMessage(
-          'Create a local draft or reconnect to load saved diagrams. ' +
-            r.error,
-        )
-    })
-    return () => {
-      active = false
-    }
+    // Searching waits for a pause in typing; filters apply at once.
+    const timer = setTimeout(() => void refresh(), search ? 250 : 0)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listQuery])
+  useEffect(() => {
+    void diagramsApi.projects().then((r) => r.ok && setProjects(r.data.items || []))
   }, [])
+  // Drafts saved by the earlier single-slot cache move into the durable store once.
+  useEffect(() => {
+    if (!drafts.ready) return
+    try {
+      const raw = localStorage.getItem(legacyDraftKey)
+      if (!raw) return
+      localStorage.removeItem(legacyDraftKey)
+      const old = JSON.parse(raw)
+      void drafts.save({
+        id: newId(),
+        kind: 'draft',
+        document: validateDiagram(old.document),
+        saved: old.saved ? { id: old.saved.id, revision: old.saved.revision } : null,
+        updatedAt: Date.now(),
+      })
+    } catch {
+      /* an unreadable legacy draft is dropped */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drafts.ready])
   useEffect(() => {
     function beforeUnload(e: BeforeUnloadEvent) {
       if (dirty) {
@@ -240,19 +287,41 @@ export function DiagramsWorkspace({
     window.addEventListener('beforeunload', beforeUnload)
     return () => window.removeEventListener('beforeunload', beforeUnload)
   }, [dirty])
+  const pending = useRef<DraftRecord | null>(null)
   useEffect(() => {
-    if (!diagram || !dirty) return
-    try {
-      localStorage.setItem(
-        draftKey,
-        JSON.stringify({ document: diagram, saved }),
-      )
-    } catch {
-      setMessage(
-        'Browser draft cache is full. Export JSON or save to preserve your work.',
-      )
+    // Every edit is written to the durable store a moment after it happens, and at once if the
+    // page is hidden or closed.
+    if (!diagram || !dirty) {
+      pending.current = null
+      return
     }
-  }, [diagram, dirty, draftKey, saved])
+    const record: DraftRecord = {
+      id: draftId.current,
+      kind: 'draft',
+      document: diagram,
+      saved: saved ? { id: saved.id, revision: saved.revision } : null,
+      updatedAt: Date.now(),
+    }
+    pending.current = record
+    const timer = setTimeout(() => {
+      pending.current = null
+      void drafts.save(record)
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [diagram, dirty, saved, drafts.save])
+  useEffect(() => {
+    const flush = () => {
+      if (pending.current) void drafts.save(pending.current)
+      pending.current = null
+    }
+    const hidden = () => document.visibilityState === 'hidden' && flush()
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', hidden)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', hidden)
+    }
+  }, [drafts.save])
 
   useEffect(() => {
     if (diagram && !diagram.nodes.some((n) => n.id === selected))
@@ -279,8 +348,10 @@ export function DiagramsWorkspace({
     d: Diagram,
     persisted: SavedDiagram | null = null,
     isDirty = true,
+    draft?: string,
   ) {
     const safe = validateDiagram(d)
+    draftId.current = draft ?? persisted?.id ?? newId()
     setHistory(startHistory(safe))
     setSaved(persisted)
     setDirty(isDirty)
@@ -288,6 +359,8 @@ export function DiagramsWorkspace({
     setValidationReport(null)
     setWizard(0)
     setRevisions([])
+    setRevMore(null)
+    setChanges(null)
     setLinkTarget('')
     setZoom(1)
   }
@@ -344,32 +417,110 @@ export function DiagramsWorkspace({
   }
   async function save(copy = false, archive = saved?.archived ?? false) {
     if (!diagram) return
+    setMessage('')
     setBusy(true)
-    const result =
-      saved && !copy
-        ? await diagramsApi.save(saved.id, diagram, saved.revision, archive)
-        : await diagramsApi.create(diagram)
+    const update = saved && !copy
+    const attempt = () =>
+      update
+        ? diagramsApi.save(saved.id, diagram, saved.revision, archive)
+        : diagramsApi.create(diagram)
+    let tries = 1
+    // Only updates are retried: they are guarded by the expected revision, so repeating one is
+    // safe. A create is never repeated automatically, because a lost response could duplicate it.
+    let result = update
+      ? await withRetry(attempt, {
+          onRetry: (n) => {
+            tries = n
+            setMessage(`Connection problem. Retrying (${n}/4)…`)
+          },
+        })
+      : await attempt()
+    if (!result.ok && result.status === 409 && tries > 1 && update) {
+      // A retry that now conflicts may be our own first attempt, which did land.
+      const now = await diagramsApi.load(saved.id)
+      if (
+        now.ok &&
+        now.data.revision === saved.revision + 1 &&
+        now.data.archived === archive &&
+        sameContent(now.data.document, { ...diagram, id: saved.id })
+      )
+        result = now
+    }
     setBusy(false)
     if (result.ok) {
+      await drafts.discard(draftId.current)
       open(result.data.document, result.data, false)
-      try {
-        localStorage.removeItem(draftKey)
-      } catch {
-        /* Browser storage may be blocked; the server save succeeded. */
-      }
       setMessage(
         `Saved revision ${result.data.revision}${result.data.archived ? ' · archived' : ''}`,
       )
       await refresh()
-    } else
+    } else if (result.status === 409 && update) {
+      await drafts.save({
+        id: 'conflict-' + newId(),
+        kind: 'conflict',
+        document: diagram,
+        saved: { id: saved.id, revision: saved.revision },
+        updatedAt: Date.now(),
+        reason: 'Saved from another tab or device first',
+      })
       setMessage(
-        result.status === 409
-          ? 'This diagram changed elsewhere. Your draft is safe here. Save a copy or reload the latest revision.'
-          : result.error,
+        'This diagram changed elsewhere. Your edits are kept as a conflict copy in this browser. Save a copy, or reload the latest revision.',
       )
+    } else if (result.status === undefined || result.status >= 500)
+      setMessage(
+        `Could not reach the server (${result.error}). ${
+          drafts.enabled
+            ? 'Your work is kept in this browser; press Save again when the connection is back.'
+            : 'Export a .dmind file to keep your work, then try again.'
+        }`,
+      )
+    else setMessage(result.error)
+  }
+  async function openDraft(rec: DraftRecord) {
+    if (!canLeave()) return
+    let persisted: SavedDiagram | null = null
+    if (rec.saved) {
+      // Keep the revision the draft was based on: a newer one is a conflict at save time.
+      const current = await diagramsApi.load(rec.saved.id)
+      if (current.ok)
+        persisted = {
+          id: rec.saved.id,
+          revision: rec.saved.revision,
+          archived: current.data.archived,
+          document: rec.document,
+        }
+      else
+        setMessage(
+          'The saved diagram is no longer available. Saving will create a new diagram.',
+        )
+    }
+    open(rec.document, persisted, true, rec.id)
+    if (persisted || !rec.saved)
+      setMessage(
+        rec.kind === 'conflict'
+          ? 'Conflict copy opened. Save a copy to keep it, or reload the latest revision.'
+          : 'Recovered a local draft. Save or export it to preserve it.',
+      )
+  }
+  async function loadRevisions(older = false) {
+    if (!saved) return
+    const r = await diagramsApi.revisions(saved.id, older ? revMore : null)
+    if (!r.ok) return setMessage(r.error)
+    setRevisions((prev) => (older ? [...prev, ...r.data.items] : r.data.items))
+    setRevMore(r.data.hasMore ? r.data.nextBefore : null)
+  }
+  async function fetchRevision(n: number) {
+    if (!saved) return null
+    const r = await diagramsApi.revision(saved.id, n)
+    if (!r.ok) {
+      setMessage(r.error)
+      return null
+    }
+    return r.data.document
   }
   async function load(id: string) {
     if (!canLeave()) return
+    setMessage('')
     setBusy(true)
     const r = await diagramsApi.load(id)
     setBusy(false)
@@ -447,6 +598,7 @@ export function DiagramsWorkspace({
   }
   async function handoff() {
     if (!diagram) return
+    setMessage('')
     setBusy(true)
     const r = await diagramsApi.bundle(diagram, tier)
     setBusy(false)
@@ -533,7 +685,7 @@ export function DiagramsWorkspace({
         </button>
       </header>
       <p className="dmind-status" role="status" aria-live="polite">
-        {busy
+        {busy && !message
           ? 'Working…'
           : message ||
             (dirty
@@ -678,6 +830,47 @@ export function DiagramsWorkspace({
         <div className="dmind-layout">
           <aside className="dmind-library">
             <h3>My diagrams</h3>
+            <label>
+              Search
+              <input
+                type="search"
+                aria-label="Search diagrams"
+                value={search}
+                maxLength={200}
+                placeholder="Title"
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            {knownTags.length > 0 && (
+              <div className="dmind-tags" aria-label="Filter by tag">
+                {knownTags.map((t) => (
+                  <button
+                    key={t}
+                    aria-pressed={tagFilter === t}
+                    onClick={() => setTagFilter(tagFilter === t ? '' : t)}
+                  >
+                    #{t}
+                  </button>
+                ))}
+              </div>
+            )}
+            {projects.length > 0 && (
+              <label>
+                Project
+                <select
+                  aria-label="Filter by project"
+                  value={projectFilter}
+                  onChange={(e) => setProjectFilter(e.target.value)}
+                >
+                  <option value="">All projects</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button onClick={() => void refresh()}>Refresh</button>
             <label>
               <input
@@ -687,9 +880,8 @@ export function DiagramsWorkspace({
               />{' '}
               Include archived
             </label>
-            {items
-              .filter((i) => showArchived || !i.archived)
-              .map((i) => (
+            <div className="dmind-saved">
+              {items.map((i) => (
                 <button
                   key={i.id}
                   aria-pressed={saved?.id === i.id}
@@ -699,30 +891,62 @@ export function DiagramsWorkspace({
                   <small>
                     Revision {i.revision}
                     {i.archived ? ' · archived' : ''}
+                    {i.updatedAt ? ' · ' + relativeTime(i.updatedAt) : ''}
                   </small>
+                  {!!i.tags?.length && (
+                    <small>{i.tags.map((t) => '#' + t).join(' ')}</small>
+                  )}
                 </button>
               ))}
-            {!items.length && <p>Your saved diagrams appear here.</p>}
+              {!items.length && <p>Your saved diagrams appear here.</p>}
+              {nextCursor && (
+                <button onClick={() => void refresh(true)}>Load more</button>
+              )}
+            </div>
+            <h4>Local drafts</h4>
+            <div className="dmind-drafts">
+              {drafts.drafts.map((rec) => (
+                <div key={rec.id} className="dmind-draft">
+                  <button onClick={() => void openDraft(rec)}>
+                    {rec.kind === 'conflict' ? 'Conflict copy: ' : ''}
+                    {rec.document.title}
+                    <small>
+                      {rec.saved ? `Based on r${rec.saved.revision}` : 'Not saved yet'}
+                      {' · '}
+                      {relativeTime(rec.updatedAt)}
+                    </small>
+                  </button>
+                  <button
+                    aria-label={`Discard draft ${rec.document.title}`}
+                    onClick={() => void drafts.discard(rec.id)}
+                  >
+                    Discard
+                  </button>
+                </div>
+              ))}
+              {!drafts.drafts.length && (
+                <p>Unsaved work is kept here automatically.</p>
+              )}
+              {drafts.ready && !drafts.durable && (
+                <p role="note">
+                  This browser blocks local storage, so drafts are kept in memory
+                  only. Export a .dmind file to keep your work.
+                </p>
+              )}
+              <label>
+                <input
+                  type="checkbox"
+                  checked={drafts.enabled}
+                  onChange={(e) => void drafts.setEnabled(e.target.checked)}
+                />{' '}
+                Keep drafts in this browser
+              </label>
+            </div>
             <button
               onClick={() => {
-                try {
-                  const cache = localStorage.getItem(draftKey)
-                  if (!cache) {
-                    setMessage('No cached draft.')
-                    return
-                  }
-                  if (canLeave()) {
-                    const draft = JSON.parse(cache)
-                    open(draft.document, draft.saved)
-                    setMessage(
-                      'Recovered browser draft. Save or export it to preserve it.',
-                    )
-                  }
-                } catch {
-                  setMessage(
-                    'Cached draft could not be read. Import an exported JSON copy.',
-                  )
-                }
+                const latest = drafts.drafts.find((r) => r.kind === 'draft') || drafts.drafts[0]
+                if (!latest) setMessage('No cached draft.')
+                else void openDraft(latest).then(() => setMessage('Recovered browser draft. Save or export it to preserve it.'))
               }}
             >
               Recover browser draft
@@ -798,6 +1022,45 @@ export function DiagramsWorkspace({
                   }
                 />
               </label>
+              <div className="dmind-meta">
+                <label>
+                  Tags
+                  <input
+                    key={JSON.stringify(diagram.metadata?.tags || [])}
+                    aria-label="Tags"
+                    placeholder="comma separated"
+                    defaultValue={((diagram.metadata?.tags as string[]) || []).join(', ')}
+                    onBlur={(e) => {
+                      const tags = normalizeTags(e.target.value.split(','))
+                      if (JSON.stringify(tags) !== JSON.stringify(diagram.metadata?.tags || []))
+                        commit({ ...diagram, metadata: { ...diagram.metadata, tags } })
+                    }}
+                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                  />
+                </label>
+                {projects.length > 0 && (
+                  <label>
+                    Project
+                    <select
+                      aria-label="Project"
+                      value={(diagram.metadata?.project_id as string) || ''}
+                      onChange={(e) => {
+                        const meta = { ...diagram.metadata }
+                        if (e.target.value) meta.project_id = e.target.value
+                        else delete meta.project_id
+                        commit({ ...diagram, metadata: meta })
+                      }}
+                    >
+                      <option value="">No project</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
               <p>
                 {diagram.nodes.length} topics · {diagram.edges.length} links ·{' '}
                 {analysis?.decisions} branching decisions
@@ -1067,28 +1330,61 @@ export function DiagramsWorkspace({
               {saved && (
                 <>
                   <h4>Revision history</h4>
-                  <button
-                    onClick={async () => {
-                      const r = await diagramsApi.revisions(saved.id)
-                      if (r.ok) setRevisions(r.data.items)
-                      else setMessage(r.error)
-                    }}
-                  >
+                  <button onClick={() => void loadRevisions()}>
                     Load saved revisions
                   </button>
                   {revisions.map((r) => (
-                    <button
-                      key={r.revision}
-                      onClick={() => {
-                        commit(r.document)
-                        setMessage(
-                          `Revision ${r.revision} restored as a draft. Save to append a new revision.`,
-                        )
-                      }}
-                    >
-                      Restore r{r.revision}
-                    </button>
+                    <div key={r.revision} className="dmind-rev">
+                      <span>
+                        r{r.revision} · {r.nodes} topics
+                        {r.createdAt ? ' · ' + relativeTime(r.createdAt) : ''}
+                      </span>
+                      <button
+                        onClick={async () => {
+                          const doc = await fetchRevision(r.revision)
+                          if (!doc) return
+                          commit(doc)
+                          setMessage(
+                            `Revision ${r.revision} restored as a draft. Save to append a new revision.`,
+                          )
+                        }}
+                      >
+                        Restore r{r.revision}
+                      </button>
+                      <button
+                        aria-label={`Compare r${r.revision} with the current draft`}
+                        onClick={async () => {
+                          const doc = await fetchRevision(r.revision)
+                          if (doc && diagram)
+                            setChanges({
+                              revision: r.revision,
+                              lines: diffDiagrams(doc, diagram).summary.slice(0, 60),
+                            })
+                        }}
+                      >
+                        Compare
+                      </button>
+                    </div>
                   ))}
+                  {revMore !== null && (
+                    <button onClick={() => void loadRevisions(true)}>
+                      Load older revisions
+                    </button>
+                  )}
+                  {changes && (
+                    <>
+                      <h5>Changes since r{changes.revision}</h5>
+                      {changes.lines.length ? (
+                        <ul aria-label="Revision changes">
+                          {changes.lines.map((l, i) => (
+                            <li key={i}>{l}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>The draft matches r{changes.revision}.</p>
+                      )}
+                    </>
+                  )}
                   <button onClick={() => void save(false, !saved.archived)}>
                     {saved.archived ? 'Unarchive' : 'Archive'} diagram
                   </button>

@@ -127,3 +127,30 @@ def test_existing_rows_survive_the_upgrade(database):
     with database.connect() as conn:
         rows = conn.execute(text("SELECT id, name FROM workspaces")).all()
     assert ("keep-me", "Existing") in [tuple(r) for r in rows]
+
+
+def test_0025_adds_only_nullable_columns_to_diagrams_and_keeps_rows(database):
+    command.upgrade(config(), "0024_dmind_diagrams")
+    before = snapshot(database)
+    with database.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO diagrams (id, workspace_id, title, revision, archived, document_json) "
+                "VALUES ('keep', 'ws', 'Existing', 1, 0, '{}')"
+            )
+        )
+    command.upgrade(config(), "0025_dmind_workspace")
+    after = snapshot(database)
+    assert set(after) == set(before)
+    for table, shape in before.items():
+        if table != "diagrams":
+            assert after[table] == shape, f"{table} changed"
+    added = set(after["diagrams"]["columns"]) - set(before["diagrams"]["columns"])
+    assert {c[0] for c in added} == {"project_id", "tags_text"}
+    assert all(c[2] for c in added), "new columns must be nullable"
+    assert set(before["diagrams"]["columns"]) <= set(after["diagrams"]["columns"])
+    with database.connect() as conn:
+        row = conn.execute(text("SELECT title, project_id, tags_text FROM diagrams WHERE id='keep'")).one()
+    assert tuple(row) == ("Existing", None, None)
+    command.downgrade(config(), "0024_dmind_diagrams")
+    assert snapshot(database) == before

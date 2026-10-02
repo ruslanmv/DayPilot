@@ -237,3 +237,43 @@
   outline-offset: 6px;
   border-radius: 12px;
 }
+
+.dmind-library h4 {
+  margin: 1rem 0 0.2rem;
+}
+.dmind-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.dmind-tags button {
+  width: auto;
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+}
+.dmind-draft {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.3rem;
+  align-items: start;
+}
+.dmind-draft button:last-child {
+  width: auto;
+}
+.dmind-rev {
+  margin: 0.4rem 0;
+  font-size: 0.85rem;
+}
+.dmind-rev span {
+  display: block;
+  opacity: 0.8;
+}
+.dmind-meta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.dmind-meta label {
+  flex: 1 1 200px;
+}

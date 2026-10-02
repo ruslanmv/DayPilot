@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { clearAllLocalDrafts } from './diagrams/draftStore'
 import type { DayPilotAgent, DayPilotDocument, DayPilotDocumentSource, DayPilotMessage, DayPilotProject, DayPilotTask } from '@daypilot/shared-types'
 import { MinutePlanCalendar } from './calendar/MinutePlanCalendar'
 import { isDemoMode, seedAgents, seedDocumentSources, seedDocuments, seedMessages, seedProjects, seedTasks } from './demoData'
@@ -578,7 +579,9 @@ function DetailDrawer({ selected, documents, onClose }: { selected?: DrawerItem;
   )
 }
 
-export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackEnabled = false, onSignOut, user }: SpaceBridgeShellProps) {
+export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackEnabled = false, onSignOut: onSignOutRaw, user }: SpaceBridgeShellProps) {
+  // Signing out also clears local dmind drafts, so nothing is left on a shared machine.
+  const onSignOut = onSignOutRaw && (() => { void clearAllLocalDrafts(); onSignOutRaw() })
   const isMobile = useIsMobile()
   // Apply the persisted theme (dark by default) so the shell is consistent even
   // when the host app didn't call initTheme() itself.

@@ -1289,6 +1289,9 @@ class Diagram(TimestampMixin, Base):
     revision: Mapped[int] = mapped_column(Integer, default=1)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     document_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # Derived from document metadata (tags, project_id) so lists can filter without parsing JSON.
+    project_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    tags_text: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class DiagramRevision(Base):

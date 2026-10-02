@@ -226,7 +226,9 @@ def test_ordinary_save_never_unarchives_and_history_is_kept():
     r = c.put(url, json={"document": doc, "expectedRevision": 3, "archived": False}, headers=headers)
     assert (r.json()["revision"], r.json()["archived"]) == (4, False)
     items = c.get("/v1/diagrams", headers=headers).json()["items"]
-    assert items == [{"id": did, "title": doc["title"], "revision": 4, "archived": False}]
+    assert len(items) == 1
+    original = {k: items[0][k] for k in ("id", "title", "revision", "archived")}  # B0 keys unchanged
+    assert original == {"id": did, "title": doc["title"], "revision": 4, "archived": False}
     assert len(c.get(url + "/revisions", headers=headers).json()["items"]) == 4
 
 
