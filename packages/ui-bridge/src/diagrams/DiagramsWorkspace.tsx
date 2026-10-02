@@ -9,7 +9,6 @@ import {
   addTopic,
   commitHistory,
   download,
-  fromBundle,
   fromOutline,
   graphAnalysis,
   layout,
@@ -32,6 +31,13 @@ import {
   type EdgeKind,
   type History,
 } from './dmind'
+import {
+  DMIND_MIME,
+  describeUnknown,
+  dmindFileName,
+  importFile,
+  serializeDmind,
+} from './dmindFile'
 import './diagrams.css'
 
 type Revision = { revision: number; document: Diagram }
@@ -124,6 +130,7 @@ export function DiagramsWorkspace({
   const [dirty, setDirty] = useState(false),
     [selected, setSelected] = useState(''),
     [busy, setBusy] = useState(false)
+  const [dropping, setDropping] = useState(false)
   const [message, setMessage] = useState(''),
     [wizard, setWizard] = useState(0)
   const [topic, setTopic] = useState(''),
@@ -392,29 +399,21 @@ export function DiagramsWorkspace({
   async function readFile(file?: File) {
     if (!file) return
     try {
-      if (file.size > 2_000_000) throw new Error('Use a file smaller than 2 MB')
-      const text = await file.text()
-      if (file.name.toLowerCase().endsWith('.json')) {
-        const value = JSON.parse(text)
-        const d =
-          value?.schema_version === 'matrix.designer.bundle/v1'
-            ? fromBundle(value)
-            : validateDiagram(value)
-        setPreview({ ...d, id: newId() })
-        setTopic(d.title)
-        setWizard(3)
-      } else if (/\.(txt|md|markdown)$/i.test(file.name)) {
-        if (text.length > 100000)
-          throw new Error('Text source exceeds 100000 characters')
-        setContent(text)
-        if (!topic) setTopic(file.name.replace(/\.[^.]+$/, '').slice(0, 200))
+      if (file.size > 2_000_000) throw new Error('Use a file smaller than 2 MB.')
+      const result = importFile(file.name, new Uint8Array(await file.arrayBuffer()))
+      if (result.kind === 'text') {
+        setContent(result.text)
+        if (!topic) setTopic(result.name.replace(/\.[^.]+$/, '').slice(0, 200))
         setMessage(
           'Text loaded. Indentation becomes branches; each line becomes a topic.',
         )
-      } else
-        throw new Error(
-          'Supported attachments: TXT, Markdown, dmind JSON or Matrix Design Bundle JSON. PDF and image extraction are planned.',
-        )
+      } else {
+        const d = result.diagram
+        setPreview({ ...d, id: newId() })
+        setTopic(d.title)
+        setWizard(3)
+        setMessage(describeUnknown(result.report))
+      }
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Import failed')
     }
@@ -424,11 +423,7 @@ export function DiagramsWorkspace({
     if (!diagram) return
     const name = diagram.title.slice(0, 80)
     if (format === 'json')
-      download(
-        name + '.dmind.json',
-        JSON.stringify(diagram, null, 2),
-        'application/json',
-      )
+      download(dmindFileName(diagram.title), serializeDmind(diagram), DMIND_MIME)
     if (format === 'md')
       download(name + '.md', toMarkdown(diagram), 'text/markdown')
     if (format === 'mermaid')
@@ -495,9 +490,24 @@ export function DiagramsWorkspace({
   }
   return (
     <section
-      className="dmind"
+      className={`dmind${dropping ? ' dmind-dropping' : ''}`}
       aria-label="dmind diagrams workspace"
       onKeyDown={keyDown}
+      onDragOver={(e) => {
+        if (e.dataTransfer?.types.includes('Files')) {
+          e.preventDefault()
+          setDropping(true)
+        }
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDropping(false)
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer?.files.length) return
+        e.preventDefault()
+        setDropping(false)
+        if (canLeave()) void readFile(e.dataTransfer.files[0])
+      }}
     >
       <header className="dmind-header">
         <div>
@@ -534,7 +544,7 @@ export function DiagramsWorkspace({
         ref={input}
         className="dmind-file"
         type="file"
-        accept=".txt,.md,.markdown,.json"
+        accept=".txt,.md,.markdown,.json,.dmind"
         aria-label="Import source or diagram"
         onChange={(e) => void readFile(e.target.files?.[0])}
       />
@@ -580,7 +590,7 @@ export function DiagramsWorkspace({
                   topics.
                 </p>
                 <button onClick={() => input.current?.click()}>
-                  Attach text or import JSON
+                  Attach text or open a .dmind file
                 </button>
                 <button disabled={!topic.trim()} onClick={() => setWizard(2)}>
                   Next: structure
@@ -765,7 +775,7 @@ export function DiagramsWorkspace({
                   onChange={(e) => exportAs(e.target.value)}
                 >
                   <option value="">Export / share…</option>
-                  <option value="json">dmind JSON</option>
+                  <option value="json">dmind file (.dmind)</option>
                   <option value="md">Markdown outline</option>
                   <option value="mermaid">Mermaid</option>
                   <option value="svg">SVG image</option>

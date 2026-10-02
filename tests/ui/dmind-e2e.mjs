@@ -329,7 +329,7 @@ await step('exports: portable, escaped, script-free and self-contained', async (
   await inspectorLabel(page).fill('"><script>window.__xss=2</script>')
   await page.locator('.dmind-inspector').getByLabel('Notes / algorithm').fill('</pre><script>window.__xss=3</script>')
   const json = await exportAs(page, 'json')
-  assert.ok(json.name.endsWith('.json'))
+  assert.ok(json.name.endsWith('.dmind'), json.name)
   const doc = JSON.parse(json.text)
   assert.equal(doc.schema_version, 'dmind/v1')
   assert.equal(doc.nodes.length, await nodes(page).count())
@@ -358,11 +358,11 @@ await step('imports: text, dmind JSON copy, Matrix bundle; bad files are refused
   await page.getByText(/Text loaded/).waitFor()
   assert.equal(await page.getByLabel('Topic', { exact: true }).inputValue(), 'ideas')
   await file.setInputFiles({ name: 'scan.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') })
-  await page.getByText(/PDF and image extraction are planned/).waitFor()
+  await page.getByText(/Supported attachments/).waitFor()
   await file.setInputFiles({ name: 'huge.txt', mimeType: 'text/plain', buffer: Buffer.alloc(2_100_000, 97) })
   await page.getByText(/smaller than 2 MB/).waitFor()
   await file.setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{"schema_version":"dmind/v2"}') })
-  await page.getByText(/Unsupported diagram version/).waitFor()
+  await page.getByText(/dmind\/v2.*Update DayPilot/).waitFor()
   await file.setInputFiles({ name: 'order.dmind.json', mimeType: 'application/json', buffer: fs.readFileSync(fixture) })
   await page.locator('.dmind-preview').waitFor()
   assert.equal(await page.locator('.dmind-preview li').count(), 4)
@@ -370,6 +370,20 @@ await step('imports: text, dmind JSON copy, Matrix bundle; bad files are refused
   await save(page).click()
   await page.getByText(/Saved revision 1/).waitFor()
   await page.locator('.dmind-library button', { hasText: 'Order processing system' }).first().waitFor() // saved as a copy
+  // Drag and drop a .dmind file onto the workspace: opens a preview, keeps unknown fields.
+  const dropped = { ...JSON.parse(fs.readFileSync(fixture, 'utf8')), future_field: { keep: true } }
+  const dt = await page.evaluateHandle((text) => {
+    const d = new DataTransfer()
+    d.items.add(new File([text], 'dropped.dmind', { type: 'application/vnd.dmind+json' }))
+    return d
+  }, JSON.stringify(dropped))
+  await page.dispatchEvent('section.dmind', 'dragover', { dataTransfer: dt })
+  assert.ok(await page.locator('section.dmind-dropping').count(), 'drop target is highlighted')
+  await page.dispatchEvent('section.dmind', 'drop', { dataTransfer: dt })
+  await page.locator('.dmind-preview').waitFor()
+  assert.match(await status(page).innerText(), /Kept 1 field\(s\).*future_field/)
+  await useDiagram(page)
+  assert.deepEqual(JSON.parse((await exportAs(page, 'json')).text).future_field, { keep: true })
   const bundle = {
     schema_version: 'matrix.designer.bundle/v1',
     project: 'Inventory app',

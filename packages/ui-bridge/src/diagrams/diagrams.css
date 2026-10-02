@@ -231,3 +231,9 @@
   --dp-surface: #fff;
   --dmind-border: #cbd5e1;
 }
+
+.dmind-dropping {
+  outline: 2px dashed #818cf8;
+  outline-offset: 6px;
+  border-radius: 12px;
+}
