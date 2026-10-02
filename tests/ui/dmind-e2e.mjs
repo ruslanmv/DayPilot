@@ -973,6 +973,27 @@ if (process.env.DMIND_E2E_PERF === '1')
     }
   })
 
+await step('refine: solver checks are shown; a patch for another state or a malformed one is refused', async () => {
+  await wizard(page, { topic: 'Refine', outline: 'A\n  B\nC' })
+  await page.locator('.dmind-preview').waitFor()
+  await useDiagram(page)
+  await page.locator('.dmind-refine > summary').click()
+  await page.getByLabel('Patch proposal').first().waitFor()
+  const box = page.locator('textarea[aria-label="Patch proposal"]')
+  const review = page.getByRole('button', { name: 'Review changes' })
+  const stale = { schema: 'dmind-patch/v1', base: { id: 'someone-else', hash: '0'.repeat(64) }, origin: 'model', summary: 's', ops: [{ op: 'set_title', title: 'X' }] }
+  await box.fill(JSON.stringify(stale))
+  await review.click()
+  assert.match(await page.getByRole('alert').last().innerText(), /changed after this proposal/)
+  await box.fill(JSON.stringify({ ...stale, ops: [{ op: 'drop_table' }] }))
+  await review.click()
+  assert.match(await page.getByRole('alert').last().innerText(), /unknown operation/)
+  await box.fill('not json')
+  await review.click()
+  await page.getByRole('alert').last().waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Apply', exact: true }).count(), 0)
+})
+
 await step('no uncaught script errors during the whole run', async () => {
   assert.deepEqual(pageErrors, [])
 })

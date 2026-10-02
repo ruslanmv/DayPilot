@@ -185,3 +185,8 @@ Migration creates only two new tables. Existing data is untouched. Deploy Matrix
 ## Definition of done
 
 For each batch: implemented user journey, documented API/schema, meaningful automated checks, reviewer-visible limitations, appropriate UI/accessibility/performance evidence, migration/rollback notes, no unexpected writes to existing tasks or code, and reviewable pull request. B0 is usable independently; the later capabilities are complete only when their release gates pass.
+
+## Delivery notes (branch `claude/dmind-batches`)
+
+- **B5** ships the strict ZIP reader/writer, attachment model and shared archive corpus in both repos. Server-side asset storage (migration 0026) is not built: bundles are a client-side file format, and attachment bytes live in the file.
+- **B6** adds `analysis.ts` (SCCs, dependency order, loops without exit, unreachable and orphan topics; every result labelled `origin: "solver"`) and `patch.ts` (`dmind-patch/v1`: at most 200 ops, bound to the document by canonical SHA-256, all-or-nothing, shown as a diff and applied only on request). Matrix Designer has the Python port (`dmind_patch.py`); both run `patch-cases.json`, pinned by digest. The hash matches across languages for ASCII keys (all contract field names and ids). Producing proposals from a model is left to the caller; the editor accepts a pasted proposal in "Check and refine".

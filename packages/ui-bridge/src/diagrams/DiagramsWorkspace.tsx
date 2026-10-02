@@ -11,6 +11,7 @@ import { diffDiagrams } from './diff'
 import type { DraftRecord } from './draftStore'
 import { relativeTime } from './format'
 import { SourcePanel } from './SourcePanel'
+import { RefinePanel } from './RefinePanel'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { NodeStyleControls } from './NodeStyleControls'
 import { OutlineEditor } from './OutlineEditor'
@@ -1289,6 +1290,7 @@ export function DiagramsWorkspace({
                   </label>
                 )}
               </div>
+              <RefinePanel diagram={diagram} onApply={(next) => commit(next)} />
               <p>
                 {diagram.nodes.length} topics · {diagram.edges.length} links ·{' '}
                 {analysis?.decisions} branching decisions

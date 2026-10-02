@@ -988,4 +988,93 @@ await asyncSection('B5 shared archive corpus', async () => {
   assert.ok(corpus.zip.refused.length >= 35 && corpus.bundle.refused.length >= 20)
 })
 
+await asyncSection('B6 analysis and patches', async () => {
+  const { analysis: an, patch: pt, dmind: dm } = m
+  const mk = (kind, labels, edges) => ({
+    schema_version: 'dmind/v1', id: 'd1', title: 'T', kind,
+    nodes: labels.map((l, i) => ({ id: 'n' + i, label: l })),
+    edges: edges.map(([s, t, k], i) => ({ id: 'e' + i, source: 'n' + s, target: 'n' + t, kind: k || 'flow' })),
+  })
+  const codes = (r) => r.findings.map((f) => f.code).sort()
+  // order and acyclic
+  let r = an.analyse(mk('flowchart', ['a', 'b', 'c'], [[0, 1], [1, 2]]))
+  assert.deepEqual(r.order, ['n0', 'n1', 'n2']); assert.deepEqual(codes(r), []); checks += 2
+  // loop with exit: info only; loop without exit: warning; order null
+  r = an.analyse(mk('flowchart', ['a', 'b', 'c'], [[0, 1], [1, 0], [1, 2]]))
+  assert.equal(r.order, null); assert.deepEqual(codes(r), ['cycle'])
+  r = an.analyse(mk('flowchart', ['a', 'b', 'c'], [[0, 1], [1, 2], [2, 1]]))
+  assert.deepEqual(codes(r), ['cycle', 'no_exit']); checks += 3
+  // self loop is a loop; unreachable island that is itself acyclic; orphans; all results solver-labelled
+  r = an.analyse(mk('flowchart', ['a', 'b', 'c', 'd', 'e'], [[0, 0], [2, 3], [3, 3]]))
+  assert.ok(r.findings.every((f) => f.origin === 'solver') && r.origin === 'solver')
+  assert.ok(codes(r).includes('no_exit') && codes(r).includes('orphan')); checks += 2
+  r = an.analyse(mk('flowchart', ['a', 'b', 'c', 'd'], [[0, 1], [2, 3], [3, 2], [3, 1]]))
+  assert.ok(!codes(r).includes('unreachable')) // reachable through a loop start is not flagged
+  // branch links are hierarchy, not ordering
+  r = an.analyse(mk('mindmap', ['r', 'a', 'b'], [[0, 1, 'branch'], [1, 2, 'branch'], [2, 0, 'branch']]))
+  assert.equal(r.order?.length, 3); assert.deepEqual(codes(r), []); checks += 2
+  // deep chain: iterative, no stack overflow
+  const chain = mk('flowchart', Array.from({ length: 1000 }, (_, i) => 'n' + i), Array.from({ length: 999 }, (_, i) => [i, i + 1]))
+  assert.equal(an.analyse(chain).order.length, 1000)
+  const ring = mk('flowchart', Array.from({ length: 1000 }, (_, i) => 'n' + i), Array.from({ length: 1000 }, (_, i) => [i, (i + 1) % 1000]))
+  assert.equal(an.analyse(ring).components.filter((c) => c.length === 1000).length, 1); checks += 2
+
+  // patches
+  const base = dm.fromOutline('Root', 'A\n  B\nC', 'mindmap')
+  const h0 = await pt.hashDiagram(base)
+  assert.match(h0, /^[0-9a-f]{64}$/)
+  assert.equal(h0, await pt.hashDiagram(structuredClone(base)))
+  assert.notEqual(h0, await pt.hashDiagram({ ...base, title: 'X' })); checks += 3
+  const ops = [
+    { op: 'update_node', id: 'n1', set: { label: 'Alpha' } },
+    { op: 'add_node', node: { id: 'z1', label: 'New' } },
+    { op: 'add_edge', edge: { id: 'ez', source: 'root', target: 'z1', kind: 'branch' } },
+    { op: 'remove_node', id: 'n3' },
+  ]
+  const p = await pt.makePatch(base, 'model', 'tidy', ops)
+  const res = await pt.applyPatch(base, p)
+  assert.ok(res.ok); assert.ok(res.diff.summary.length >= 3)
+  assert.ok(res.diagram.nodes.some((n) => n.label === 'Alpha') && !res.diagram.nodes.some((n) => n.id === 'n3'))
+  assert.ok(!res.diagram.edges.some((e) => e.source === 'n3' || e.target === 'n3'))
+  assert.equal(base.nodes.find((n) => n.id === 'n1').label, 'A') // input untouched
+  checks += 5
+  // stale: the document moved on
+  const moved = { ...base, title: 'Changed' }
+  let bad = await pt.applyPatch(moved, p); assert.equal(bad.reason, 'stale')
+  bad = await pt.applyPatch({ ...base, id: 'other' }, p); assert.equal(bad.reason, 'stale'); checks += 2
+  // all-or-nothing and contract validation
+  const refuse = async (opsList, why) => {
+    const r2 = await pt.applyPatch(base, await pt.makePatch(base, 'model', 's', opsList))
+    assert.equal(r2.ok, false, why); assert.equal(r2.reason, 'invalid', why); checks++
+  }
+  await refuse([{ op: 'update_node', id: 'n1', set: { label: 'ok' } }, { op: 'remove_node', id: 'ghost' }], 'unknown topic')
+  await refuse([{ op: 'add_node', node: { id: 'n1', label: 'dup' } }], 'duplicate id')
+  await refuse([{ op: 'add_edge', edge: { id: 'q', source: 'n1', target: 'ghost', kind: 'flow' } }], 'dangling link')
+  await refuse([{ op: 'add_edge', edge: { id: 'q', source: 'n2', target: 'root', kind: 'branch' } }], 'branch cycle')
+  await refuse([{ op: 'update_node', id: 'n1', set: { label: '' } }], 'empty label')
+  await refuse([{ op: 'add_node', node: { id: 'bad id!', label: 'x' } }], 'unsafe id')
+  await refuse([{ op: 'set_title', title: ' ' }], 'blank title')
+  await refuse(base.nodes.map((n) => ({ op: 'remove_node', id: n.id })), 'remove everything')
+  // untrusted patch JSON: unknown ops and fields, pollution, size
+  const must = (v) => assert.throws(() => pt.parsePatch(v)); const good = JSON.parse(JSON.stringify(p))
+  must(null); must({ ...good, schema: 'x' }); must({ ...good, extra: 1 }); must({ ...good, origin: 'admin' })
+  must({ ...good, ops: [] }); must({ ...good, ops: Array(201).fill(ops[0]) }); must({ ...good, base: { id: 'd', hash: 'zz' } })
+  must({ ...good, ops: [{ op: 'drop_table' }] }); must({ ...good, ops: [{ op: 'update_node', id: 'n1', set: { position: { x: 1, y: 1 } } }] })
+  must({ ...good, ops: [{ op: 'update_node', id: 'n1', set: JSON.parse('{"__proto__":{"x":1}}') }] })
+  must({ ...good, ops: [{ op: 'update_node', id: 'n1', set: {} }] }); must({ ...good, ops: [{ op: 'remove_node', id: 'n1', cascade: true }] })
+  checks += 12
+  assert.equal(pt.parsePatch(good).summary, 'tidy'); checks++
+  const viaJson = await pt.applyPatch(base, JSON.parse('{"schema":"dmind-patch/v1","base":{"id":"' + base.id + '","hash":"' + h0 + '"},"origin":"model","summary":"s","ops":[{"op":"set_title","title":"Renamed"}]}'))
+  assert.ok(viaJson.ok && viaJson.diagram.title === 'Renamed'); checks++
+  // shared corpus: the same file Matrix Designer's Python port runs
+  const pc = JSON.parse(fs.readFileSync(new URL('../../packages/dmind-contract/patch-cases.json', import.meta.url)))
+  assert.equal(await pt.hashDiagram(pc.base), pc.base_hash); checks++
+  for (const c of pc.cases) {
+    const r3 = await pt.applyPatch(structuredClone(pc.base), c.patch)
+    if (c.expect === 'ok') assert.equal(await pt.hashDiagram(r3.diagram), c.result_digest, c.name)
+    else assert.equal(r3.reason, c.expect, c.name)
+    checks++
+  }
+})
+
 console.log(`dmind modules: ${checks} checks passed`)
