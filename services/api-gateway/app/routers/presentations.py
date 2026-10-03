@@ -8,6 +8,7 @@ and ids from the browser are references, never authority.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from datetime import datetime, timezone
@@ -32,8 +33,9 @@ from daypilot_knowledge.db.models import (
     PresentationSeries,
 )
 
+from .. import ai_credits as credits
 from ..db import get_session
-from ..presentations import brandkit, engine, genres, images, render, store, weekly, worker
+from ..presentations import ai, brandkit, engine, genres, images, render, store, weekly, worker
 from ..rbac import ROLE_RANK
 from .diagrams import access, access_role
 
@@ -614,3 +616,99 @@ def pause(series_id: str, workspace: str = Depends(access), session: Session = D
         raise HTTPException(404, "series not found")
     s.paused = not s.paused
     return series_out(session, s)
+
+
+# ----------------------------------------------------------------------------- AI (own models, credits)
+
+
+def connector_for(session: Session, workspace: str):
+    from daypilot_orchestrator.assistant.orchestrator import active_connector
+
+    try:
+        return active_connector(session, workspace)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+class OutlineIn(BaseModel):
+    genre: str = Field("weekly_update", max_length=40)
+    brief: str = Field("", max_length=3000)
+    audience: str = Field("", max_length=120)
+    slideCount: int = Field(8, ge=3, le=30)
+    sources: str = Field("", max_length=20000)
+    diagramId: str | None = Field(None, max_length=36)
+    periodLabel: str = Field("", max_length=80)
+    language: str = Field("en", max_length=10)
+
+
+def map_slide(session: Session, workspace: str, diagram_id: str | None) -> dict[str, Any] | None:
+    if not diagram_id:
+        return None
+    from daypilot_knowledge.db.models import Diagram
+
+    row = session.get(Diagram, diagram_id)
+    if row is None or row.workspace_id != workspace:
+        raise HTTPException(404, "diagram not found")
+    return ai.diagram_slide(row.document_json)
+
+
+@router.post("/outline")
+def outline(body: OutlineIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Propose a storyline. With a connected model it is written by AI (and costs credits); without
+    one it starts from the genre template. Either way the person edits it before anything is built."""
+    on()
+    if body.genre not in genres.GENRES:
+        raise HTTPException(422, "unknown genre")
+    extra = map_slide(session, workspace, body.diagramId)
+    connector = connector_for(session, workspace)
+    topic = body.brief.strip().split("\n")[0][:150] or genres.GENRES[body.genre]
+    if connector is None:
+        story = genres.storyline(body.genre, topic, body.periodLabel, body.audience)
+        if extra:
+            story["slides"].insert(min(2, len(story["slides"])), extra)
+        return {"storyline": story, "mode": "template", "removedNumbers": [], "message": "AI is not connected, so this starts from the template. Connect a provider in Settings for an AI-written draft."}
+    cost = credits.cost_for("presentation_outline") if credits.enabled() else 0
+    if cost:
+        credits.charge(session, workspace, "presentation_outline", cost)
+    try:
+        sources = body.sources + ("\n" + json.dumps(extra) if extra else "")
+        story, removed = ai.outline(connector, body.brief or topic, genres.GENRES[body.genre], body.slideCount - (1 if extra else 0), body.audience, sources, body.language)
+    except ai.AIError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if extra:
+        story["slides"].insert(min(2, len(story["slides"])), extra)
+    if body.periodLabel and story["slides"] and story["slides"][0].get("type") == "cover":
+        story["slides"][0]["kicker"] = body.periodLabel[:80]
+    out: dict[str, Any] = {"storyline": story, "mode": "model", "removedNumbers": removed}
+    if credits.enabled():
+        out["credits"] = {"charged": cost, "balance": credits.account(session, workspace).balance}
+    return out
+
+
+class RegenerateIn(BaseModel):
+    slideIds: list[str] = Field(..., min_length=1, max_length=10)
+    instruction: str = Field("", max_length=1500)
+    expectedRevision: int = Field(..., ge=1)
+
+
+@router.post("/decks/{deck_id}/regenerate", status_code=202)
+def regenerate(deck_id: str, body: RegenerateIn, background: BackgroundTasks, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Rewrite selected slides with AI as a new revision. Locked slides are refused; others unchanged."""
+    on()
+    d = deck_of(session, workspace, deck_id)
+    if d.head_revision != body.expectedRevision:
+        raise HTTPException(409, "This presentation changed meanwhile. Reload.")
+    head = session.get(PresentationRevision, (d.id, d.head_revision))
+    connector = connector_for(session, workspace)
+    if connector is None:
+        raise HTTPException(409, "AI is not connected. Connect a provider in Settings, or edit the slides directly.")
+    cost = credits.cost_for("presentation_slides") * len(body.slideIds) if credits.enabled() else 0
+    if cost:
+        credits.charge(session, workspace, "presentation_slides", cost)
+    try:
+        story, removed = ai.rewrite_slides(connector, head.storyline_json, body.slideIds, body.instruction, head.locks_json or [])
+    except ai.AIError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    out = new_revision(session, background, d, story, body.expectedRevision, head.locks_json or [], "model", head.brand_version)
+    out["removedNumbers"] = removed
+    return out

@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from daypilot_knowledge.db.models import AiCreditAccount, AiCreditEvent
 
-DEFAULT_COSTS = {"chat": 1, "generate": 2, "grow": 1, "explain": 1, "reorganize": 2, "refine": 1}
+DEFAULT_COSTS = {"chat": 1, "generate": 2, "grow": 1, "explain": 1, "reorganize": 2, "refine": 1, "presentation_outline": 3, "presentation_slides": 1}
 MAX_GRANT = 1_000_000
 
 
