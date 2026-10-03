@@ -178,3 +178,19 @@ def test_0027_adds_only_the_credit_tables_and_reverses_cleanly(database):
         assert after[table] == shape, f"{table} changed"
     command.downgrade(config(), "0026_dmind_shares")
     assert snapshot(database) == before
+
+
+def test_0028_adds_only_presentation_tables_and_reverses_cleanly(database):
+    command.upgrade(config(), "0027_ai_credits")
+    before = snapshot(database)
+    command.upgrade(config(), "0028_presentations")
+    after = snapshot(database)
+    assert set(after) - set(before) == {
+        "presentation_companies", "presentation_brand_kits", "presentation_assets", "presentation_decks",
+        "presentation_revisions", "presentation_runs", "presentation_artifacts", "presentation_series",
+        "presentation_occurrences",
+    }
+    for table, shape in before.items():
+        assert after[table] == shape, f"{table} changed"
+    command.downgrade(config(), "0027_ai_credits")
+    assert snapshot(database) == before

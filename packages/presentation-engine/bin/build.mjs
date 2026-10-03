@@ -8,7 +8,7 @@
  * Errors: {"error": "...", "problems": [...]} with exit code 2 (bad input) or 1 (internal).
  */
 import fs from 'node:fs'
-import { brandWarnings, checkDeck, compile, compose, inspect, sha256, SpecError, validateBrandKit } from '../src/index.mjs'
+import { brandWarnings, checkDeck, compile, compose, inspect, sha256, SpecError, validateBrandKit, validateStoryline } from '../src/index.mjs'
 
 const MAX_INPUT = 25_000_000
 let raw = ''
@@ -25,6 +25,7 @@ try {
 }
 try {
   if (req.op === 'compose') out(compose(req.storyline, req.kit, req.options ?? {}))
+  else if (req.op === 'validate-storyline') out({ ok: !!validateStoryline(req.storyline) })
   else if (req.op === 'validate-kit') out({ warnings: brandWarnings(validateBrandKit(req.kit)) })
   else if (req.op === 'compile') {
     const { pptx, scene } = await compile(req.deck, req.kit, req.assets ?? {})
