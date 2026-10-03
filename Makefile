@@ -197,6 +197,9 @@ ui-smoke: ## Build operator-web and run the Playwright UI smoke test.
 dmind-e2e: ## Run the dmind browser end-to-end test against a throwaway gateway and database.
 	UV="$(UV)" PNPM="$(PNPM)" scripts/dmind_e2e.sh
 
+presentations-e2e: ## Run the Presentations browser end-to-end test (needs libreoffice-impress for the render checks).
+	UV="$(UV)" PNPM="$(PNPM)" scripts/presentations_e2e.sh
+
 compose: ## Start the Docker Compose development stack.
 	docker compose up --build
 
