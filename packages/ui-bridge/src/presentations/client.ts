@@ -19,6 +19,8 @@ export type Revision = {
   files: { pptx: boolean; pdf: boolean; slides: number }
   run: RunInfo | null
   locks: string[]
+  expert?: boolean
+  expertScript?: string | null
   storyline?: Storyline
   findings?: Finding[]
   notes?: { id: string; title: string; notes: string }[]
@@ -57,6 +59,7 @@ export type Capabilities = {
   genres: { id: string; name: string }[]
   slideTypes: string[]
   fonts: string[]
+  expert?: { enabled: boolean; ready: boolean }
 }
 export type Series = {
   id: string
@@ -66,7 +69,37 @@ export type Series = {
   timezone: string
   nextPeriod: { key: string; label: string; start: string; end_exclusive: string } | null
   occurrences: { periodKey: string; deckId: string; start: string; end: string }[]
+  schedule?: Schedule
 }
+export type Schedule = {
+  enabled: boolean
+  weekday: number | null
+  localTime: string | null
+  catchUpHours: number
+  nextRunAt: string | null
+  lastFiredAt: string | null
+  lastResult: string | null
+  upcoming: string[]
+  schedulerRunning: boolean
+  policy: string
+}
+export type TemplateReport = {
+  kind: 'pptx' | 'potx'
+  themeName: string | null
+  slideSize: { width_inches: number; height_inches: number }
+  palette: Record<string, string>
+  fonts: { heading: string | null; body: string | null }
+  footer: string | null
+  kept: string[]
+  notKept: string[]
+  proposal: { palette: Record<string, string>; headingFont: string; bodyFont: string; footerText: string | null; warnings: string[] }
+  logoCandidates: { index: number; part: string; mediaType: string; w: number; h: number }[]
+  thumbnails: number
+  rendered: boolean
+  renderNote?: string
+  fidelityNote: string
+}
+export type Template = { id: string; companyId: string; filename: string; sha256: string; bytes: number; createdAt: string | null; report: TemplateReport }
 export type BrandChoices = {
   palette: Record<string, string>
   headingFont: string
@@ -76,6 +109,8 @@ export type BrandChoices = {
   logoAssetId?: string
   darkLogoAssetId?: string
   activate?: boolean
+  fromTemplateId?: string
+  templateLogoIndex?: number
 }
 
 function headers() {
@@ -121,5 +156,17 @@ export const presentationsApi = {
     api.post<Series>(`${P}/series`, body, headers()),
   prepare: (id: string) => api.post<{ created: boolean; period: { key: string; label: string }; deck: Deck }>(`${P}/series/${e(id)}/prepare`, {}, headers()),
   pause: (id: string) => api.post<Series>(`${P}/series/${e(id)}/pause`, {}, headers()),
+  setSchedule: (id: string, body: { enabled: boolean; weekday: number; localTime: string; catchUpHours: number }) =>
+    api.put<Series>(`${P}/series/${e(id)}/schedule`, body, headers()),
+  importTemplate: (companyId: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.postForm<Template>(`${P}/companies/${e(companyId)}/templates`, form, headers())
+  },
+  templates: (companyId: string) => api.get<{ items: Template[] }>(`${P}/companies/${e(companyId)}/templates`),
+  templateThumbUrl: (id: string, n: number) => `${P}/templates/${e(id)}/thumbs/${n}`,
+  templateLogoUrl: (id: string, index: number) => `${P}/templates/${e(id)}/logo/${index}`,
+  templateFileUrl: (id: string) => `${P}/templates/${e(id)}/file`,
+  expert: (id: string, script: string, expectedRevision: number) => api.post<Deck>(`${P}/decks/${e(id)}/expert`, { script, expectedRevision }, headers()),
   diagrams: () => api.get<{ items: { id: string; title: string }[] }>('/v1/diagrams?archived=exclude&limit=50'),
 }

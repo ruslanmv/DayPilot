@@ -105,6 +105,7 @@ await step('wizard: purpose, sources, brand and an editable outline before anyth
 })
 
 let deckUrlTitle = ''
+let builtPptx = null
 await step('build: the real PowerPoint is exported, rendered and checked; review shows its slides', async () => {
   await button('Build presentation').click()
   await page.getByRole('region', { name: /Presentation / }).waitFor()
@@ -124,6 +125,7 @@ await step('download: the file is a PowerPoint package named after the deck and 
   assert.match(dl.suggestedFilename(), /^Platform-weekly-review-r1\.pptx$/)
   const buf = fs.readFileSync(await dl.path())
   assert.equal(buf.subarray(0, 2).toString(), 'PK')
+  builtPptx = buf
 })
 
 await step('locks and revisions: a locked slide cannot change; an edit builds revision 2 and keeps revision 1', async () => {
@@ -175,6 +177,62 @@ await step('weekly: save as a weekly presentation, prepare this week, numbers st
   await button('Prepare this week').click()
   await page.getByText(/already exists; opening it/).waitFor()
 })
+
+await step('schedule: opt in to automatic weekly drafts with day, time and the clock-change policy shown', async () => {
+  await button('← All presentations').click()
+  const series = page.getByRole('region', { name: 'Weekly presentations' })
+  await series.getByText('Automatic drafts: off').click()
+  await series.getByLabel('Prepare the draft automatically each week').check()
+  await series.getByLabel('Day').selectOption('0')
+  await series.getByLabel(/^Time/).fill('08:30')
+  await button('Save schedule').click()
+  await page.getByText(/drafts will be prepared every Monday at 08:30/).waitFor()
+  await series.getByText('Automatic: Monday 08:30').waitFor()
+  await series.getByText(/Drafts only, never sent/).waitFor()
+  await series.getByText(/^Next: /).waitFor()
+})
+
+await step('svg logo: a hostile SVG is cleaned, converted and saved as a new brand version', async () => {
+  await button('Brand').click()
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100"><script>alert(1)</script><rect width="90" height="90" fill="#0B3C5D"/><text x="110" y="62" font-size="36">Northwind</text></svg>'
+  await page.getByLabel(/^Logo \(PNG/).setInputFiles({ name: 'logo.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) })
+  await button('Save brand').click()
+  await page.getByText(/Brand saved for Northwind/).waitFor()
+})
+
+await step('template import: a .pptx is kept, its colours, fonts and logo are reported, and a brand is created from it', async () => {
+  assert.ok(builtPptx, 'needs the downloaded deck')
+  await button('Brand').click()
+  const panel = page.getByRole('region', { name: 'Import a PowerPoint template' })
+  await panel.getByLabel(/^Template file/).setInputFiles({ name: 'northwind-template.pptx', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', buffer: builtPptx })
+  await panel.getByText('Used', { exact: true }).waitFor({ timeout: 60000 })
+  await panel.getByText(/theme colours/).waitFor()
+  await panel.getByText(/The template's own layouts are not reproduced/).waitFor()
+  assert.ok(await panel.locator('.pz-chip').count() >= 4)
+  const [dl] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: 'Download original' }).click()])
+  assert.deepEqual(fs.readFileSync(await dl.path()), builtPptx, 'the original is kept byte for byte')
+  await panel.getByRole('button', { name: 'Create brand from this template' }).click()
+  await page.getByText(/Brand created from the template/).waitFor()
+})
+
+const caps = await page.evaluate(async () => (await fetch('/v1/presentations/capabilities')).json()).catch(() => ({}))
+if (caps.expert?.ready)
+  await step('expert builder: a script builds a checked revision in the sandbox; forbidden code is refused with reasons', async () => {
+    await page.locator('.pz-card', { hasText: 'Platform weekly review' }).filter({ hasText: '· r2' }).first().click()
+    await page.locator('.pz-thumb').nth(1).click()
+    await button('Unlock slide').click()
+    await button('Lock slide').waitFor()
+    await page.locator('.pz-expert > summary').click()
+    const box = page.getByLabel('Builder script')
+    await box.fill("export default (deck) => { require('fs') }")
+    await button('Build with script').click()
+    await page.locator('.pz-expert [role=alert]').getByText(/require/).waitFor()
+    await button('Reset to example').click()
+    await button('Build with script').click()
+    await page.locator('.pz-review-head').getByText(/\(expert build\)/).waitFor()
+    await page.locator('.pz-state-review_ready').first().waitFor({ timeout: 90000 })
+    assert.equal(await page.locator('.pz-filmstrip .pz-thumb').count(), 2)
+  })
 
 await step('narrow screens: review stacks without horizontal page scroll', async () => {
   await page.setViewportSize({ width: 390, height: 844 })

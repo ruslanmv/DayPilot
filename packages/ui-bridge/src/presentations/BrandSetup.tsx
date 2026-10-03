@@ -85,12 +85,13 @@ export function BrandSetup({ company, onDone, onCancel }: { company: Company | n
             </label>
           )}
           <label className="pz-field">
-            Logo (PNG or JPEG, transparent background works best)
-            <input type="file" accept="image/png,image/jpeg" onChange={(e) => setLogo(e.target.files?.[0] ?? null)} />
+            Logo (PNG, JPEG or SVG; transparent background works best)
+            <input type="file" accept="image/png,image/jpeg,image/svg+xml,.svg" onChange={(e) => setLogo(e.target.files?.[0] ?? null)} />
           </label>
           <label className="pz-field">
             Logo for dark backgrounds (optional)
-            <input type="file" accept="image/png,image/jpeg" onChange={(e) => setDarkLogo(e.target.files?.[0] ?? null)} />
+            <small>SVG logos are cleaned (scripts, links and external references removed) and converted to a sharp PNG.</small>
+            <input type="file" accept="image/png,image/jpeg,image/svg+xml,.svg" onChange={(e) => setDarkLogo(e.target.files?.[0] ?? null)} />
           </label>
           <div className="pz-colors">
             {color('Main colour', primary, setPrimary)}

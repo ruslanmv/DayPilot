@@ -5,6 +5,8 @@ import { presentationsApi, type Capabilities, type Company, type Deck, type Seri
 import { DeckReview } from './DeckReview'
 import { useBlobUrl } from './files'
 import { NewDeck } from './NewDeck'
+import { ScheduleEditor } from './ScheduleEditor'
+import { TemplateImport } from './TemplateImport'
 
 type View = { kind: 'library' } | { kind: 'new' } | { kind: 'brand'; companyId: string | null } | { kind: 'deck'; id: string } | { kind: 'weekly'; storyline: Storyline; companyId: string }
 
@@ -91,6 +93,7 @@ export function PresentationsWorkspace() {
                       setView({ kind: 'deck', id: r.data.deck.id })
                     })}>Prepare this week</button>
                     <button type="button" onClick={() => void presentationsApi.pause(s.id).then(() => refresh())}>{s.paused ? 'Resume' : 'Pause'}</button>
+                    <ScheduleEditor series={s} onSaved={(m) => { setMessage(m); void refresh() }} />
                   </li>
                 ))}
               </ul>
@@ -134,6 +137,16 @@ export function PresentationsWorkspace() {
             </label>
           )}
           {companies.length === 1 && <button type="button" className="pz-link" onClick={() => setView({ kind: 'brand', companyId: null })}>+ Add another company</button>}
+          {view.companyId && company(view.companyId) && (
+            <TemplateImport
+              key={`tpl-${view.companyId}`}
+              company={company(view.companyId)!}
+              onBrand={(warnings) => {
+                setMessage(`Brand created from the template.${warnings.length ? ' Check: ' + warnings.join(' ') : ''}`)
+                setView({ kind: 'library' })
+              }}
+            />
+          )}
           <BrandSetup
             key={view.companyId ?? 'new'}
             company={view.companyId ? company(view.companyId) ?? null : null}

@@ -704,12 +704,13 @@ Weekly and one-off decks in your company's brand, built as **native, editable Po
 
 #### How to use it
 
-1. **Brand once.** Open **Presentations → Set up brand**: company name, logo (PNG/JPEG), main and accent colours, fonts and footer. Each save is a new version; existing decks keep theirs.
+1. **Brand once.** Open **Presentations → Set up brand**: company name, logo (PNG, JPEG or SVG — SVGs are cleaned and converted), main and accent colours, fonts and footer. Each save is a new version; existing decks keep theirs. Already have a PowerPoint template? Upload the `.pptx`/`.potx` under **Brand → Start from your PowerPoint template**: DayPilot keeps the original, shows what it uses (colours, fonts, size, footer, logo) and what it does not reproduce, and creates the brand from it.
 2. **New presentation.** Pick a kind (weekly update, executive update, kickoff, quarterly review, launch, incident review, proposal, training), say what it is about, paste the facts and figures it may use, and optionally include a dmind map.
 3. **Approve the outline.** Draft it (written by your connected AI model, or from the template when none is connected) and edit every slide as plain fields. Numbers that are not in your sources are removed, never invented.
 4. **Build and review.** DayPilot lays out the slides, writes the PowerPoint, renders it and checks every slide (text fit, contrast, logo proportions, native charts and tables, slide count, evidence). Review the real rendered slides with notes and findings; lock slides you are happy with, rewrite one with AI, edit and rebuild; every change is a new revision.
 5. **Approve and download.** Approval binds the exact file. Download PowerPoint or PDF.
-6. **Every week.** **Make it weekly**, then **Prepare this week**: the same structure and wording for the new period, with last week's numbers cleared. Asking twice for the same week opens the same draft; nothing is sent automatically.
+6. **Every week.** **Make it weekly**, then **Prepare this week**: the same structure and wording for the new period, with last week's numbers cleared. Asking twice for the same week opens the same draft; nothing is sent automatically. To have the draft waiting for you, open **Automatic drafts** on the series and pick a day and time (needs `DAYPILOT_PRESENTATIONS_SCHEDULER=true` on the server); you get a notification when it is ready.
+7. **Optional extras.** Agents can use the same features through MCP at `POST /v1/presentations/mcp` (draft-only tools). With `DAYPILOT_PRESENTATIONS_EXPERT=true`, the **Expert builder (JavaScript)** panel on a deck runs your own PptxGenJS script in an isolated sandbox on your brand's layouts; the result is checked like any other revision.
 
 Design and plan: [docs/presentations](docs/presentations/README.md) · build and feasibility notes: [implementation plan](docs/presentations/implementation-plan.md) · checks: `make presentations-e2e`, `node packages/presentation-engine/test/engine.test.mjs` · screenshots: `scripts/presentations_screenshots.sh`.
 

@@ -14,6 +14,8 @@ trap cleanup EXIT
 "$PNPM" --filter @daypilot/operator-web build
 port="$("$UV" run python scripts/find_free_port.py "${PORT:-8890}" 127.0.0.1)"
 export DAYPILOT_PRESENTATIONS=true
+# Expert builds run only where the sandbox is available (setpriv/unshare as root); the step skips otherwise.
+export DAYPILOT_PRESENTATIONS_EXPERT=true
 export DAYPILOT_PRESENTATIONS_DIR="$tmp/store"
 export DATABASE_URL="sqlite:///$tmp/dmind-e2e.db"
 # Deterministic failure path unless a real Matrix Designer is supplied.

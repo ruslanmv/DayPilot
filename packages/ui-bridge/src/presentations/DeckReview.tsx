@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { presentationsApi, type Deck, type Revision, type Storyline } from './client'
 import { download, useBlobUrl } from './files'
+import { ExpertBuilder } from './ExpertBuilder'
 import { OutlineEditor } from './OutlineEditor'
 import { withIds } from './outline'
 
@@ -48,7 +49,8 @@ export function DeckReview({ deckId, onBack, onMakeWeekly }: { deckId: string; o
     return () => clearInterval(t)
   }, [building, load])
 
-  const slides = rev?.storyline?.slides ?? []
+  // An expert revision's slides come from the built file, not the outline.
+  const slides = rev?.expert ? (rev.notes ?? []).map((n) => ({ id: n.id, type: 'expert', title: n.title })) : rev?.storyline?.slides ?? []
   const current = slides[slide - 1]
   const findings = useMemo(() => (rev?.findings ?? []).filter((f) => f.slide === current?.id || f.slide === null), [rev, current])
   const notes = rev?.notes?.find((n) => n.id === current?.id)?.notes
@@ -77,7 +79,7 @@ export function DeckReview({ deckId, onBack, onMakeWeekly }: { deckId: string; o
         <div>
           <h3>{deck.title}</h3>
           <p className="pz-muted">
-            Revision {rev.revision} · <span className={`pz-state pz-state-${rev.state}`}>{STATE[rev.state] ?? rev.state}</span>
+            Revision {rev.revision}{rev.expert && ' (expert build)'} · <span className={`pz-state pz-state-${rev.state}`}>{STATE[rev.state] ?? rev.state}</span>
             {rev.quality && ` · ${rev.quality.slides_checked} slides checked, ${rev.quality.hard_failures} problem(s), ${rev.quality.warnings} note(s)`}
             {deck.periodKey && ` · ${deck.periodKey}`}
           </p>
@@ -122,7 +124,7 @@ export function DeckReview({ deckId, onBack, onMakeWeekly }: { deckId: string; o
           </div>
           <aside className="pz-side" aria-label="Slide details">
             <h4>Slide {slide}{current ? `: ${current.title}` : ''}</h4>
-            {current?.id && (
+            {current?.id && !rev.expert && (
               <button type="button" aria-pressed={locks.includes(current.id)} disabled={busy || building} onClick={() => void toggleLock()}>
                 {locks.includes(current.id) ? 'Unlock slide' : 'Lock slide'}
               </button>
@@ -139,7 +141,7 @@ export function DeckReview({ deckId, onBack, onMakeWeekly }: { deckId: string; o
             )}
             <h5>Speaker notes</h5>
             <p className="pz-notes">{notes || '—'}</p>
-            {current?.id && !locks.includes(current.id) && (
+            {current?.id && !rev.expert && !locks.includes(current.id) && (
               <div className="pz-rewrite">
                 <h5>Rewrite this slide with AI</h5>
                 <textarea rows={2} maxLength={1500} value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="e.g. make the title a finding; shorter points" aria-label="Instruction for the AI" />
@@ -153,6 +155,8 @@ export function DeckReview({ deckId, onBack, onMakeWeekly }: { deckId: string; o
           </aside>
         </div>
       )}
+      <ExpertBuilder key={rev.revision} deckId={deckId} headRevision={deck.headRevision} initial={rev.expertScript} hasLocks={locks.length > 0} disabled={building || !!editing}
+        onStarted={(m) => { setMessage(m); void load() }} />
       <details className="pz-history">
         <summary>Revisions ({deck.revisions?.length ?? 0})</summary>
         <ul>

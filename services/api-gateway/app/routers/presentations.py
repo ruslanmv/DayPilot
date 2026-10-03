@@ -340,8 +340,10 @@ def revision_out(session: Session, rev: PresentationRevision, full: bool = False
         "files": {"pptx": any(a.kind == "pptx" for a in arts), "pdf": any(a.kind == "pdf" for a in arts), "slides": sum(1 for a in arts if a.kind == "png")},
         "run": run_out(run),
         "locks": rev.locks_json or [],
+        "expert": bool(rev.expert_script),
     }
     if full:
+        out["expertScript"] = rev.expert_script
         out["storyline"] = rev.storyline_json
         out["findings"] = (rev.receipt_json or {}).get("findings", [])
         out["notes"] = [{"id": s["id"], "title": s["title"], "notes": s["notes"]["speaker_text"]} for s in (rev.deck_json or {}).get("slides", [])]
@@ -473,7 +475,7 @@ def expert(deck_id: str, body: ExpertIn, background: BackgroundTasks, workspace:
         raise HTTPException(409, "Expert builds are unavailable on this server: the sandbox (setpriv, unshare, prlimit, node) is missing.")
     problems = sandbox.precheck(body.script)
     if problems:
-        raise HTTPException(422, {"problems": problems})
+        raise HTTPException(422, " ".join(problems))
     d = deck_of(session, workspace, deck_id)
     parent = session.get(PresentationRevision, (d.id, body.expectedRevision))
     if parent is None:
