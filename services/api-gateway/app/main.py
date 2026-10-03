@@ -62,7 +62,14 @@ async def _lifespan(_app: FastAPI):
         ensure_schema()
     except BaseException:  # noqa: BLE001 - a schema hiccup can't take down the server
         pass
+    # Automatic weekly presentation drafts: only when both flags are explicitly on.
+    from .presentations import scheduler as deck_scheduler
+    from .routers.presentations import enabled as presentations_enabled, scheduler_tick
+
+    if presentations_enabled() and deck_scheduler.enabled():
+        deck_scheduler.start(lambda: scheduler_tick())
     yield
+    deck_scheduler.stop()
 
 
 app = FastAPI(title="DayPilot API Gateway", version="0.3.0", lifespan=_lifespan)

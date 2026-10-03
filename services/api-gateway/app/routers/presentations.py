@@ -35,7 +35,7 @@ from daypilot_knowledge.db.models import (
 
 from .. import ai_credits as credits
 from ..db import get_session
-from ..presentations import ai, brandkit, engine, genres, images, render, store, svg, weekly, worker
+from ..presentations import ai, brandkit, engine, genres, images, render, scheduler, store, svg, weekly, worker
 from ..rbac import ROLE_RANK
 from .diagrams import access, access_role
 
@@ -553,8 +553,14 @@ def series_out(session: Session, s: PresentationSeries) -> dict[str, Any]:
         nxt = weekly.period(r["rule"], r["timezone"], r["week_starts_on"])
     except ValueError:
         nxt = None
+    sched = r.get("schedule") or {}
+    upcoming = scheduler.preview(sched, r["timezone"], datetime.now(timezone.utc)) if s.schedule_enabled and sched else []
     return {"id": s.id, "name": s.name, "companyId": s.company_id, "version": s.version, "paused": s.paused, "timezone": r["timezone"], "rule": r["rule"], "weekStartsOn": r["week_starts_on"],
-            "nextPeriod": nxt, "occurrences": [{"periodKey": o.period_key, "deckId": o.deck_id, "start": o.period_start, "end": o.period_end} for o in occ], "schedule": {"enabled": False, "note": "Drafts are prepared on request; automatic schedules are not enabled."}}
+            "nextPeriod": nxt, "occurrences": [{"periodKey": o.period_key, "deckId": o.deck_id, "start": o.period_start, "end": o.period_end} for o in occ],
+            "schedule": {"enabled": s.schedule_enabled, "weekday": sched.get("weekday"), "localTime": sched.get("local_time"), "catchUpHours": sched.get("catch_up_hours", 24),
+                         "nextRunAt": s.next_run_at.isoformat() if s.next_run_at else None, "lastFiredAt": s.last_fired_at.isoformat() if s.last_fired_at else None,
+                         "lastResult": s.last_result, "upcoming": upcoming, "schedulerRunning": scheduler.enabled(),
+                         "policy": "Drafts only, never sent. A time skipped by a clock change runs at the first valid moment after it; a repeated time runs the first time it occurs."}}
 
 
 @router.post("/series", status_code=201)
@@ -594,8 +600,15 @@ def prepare(series_id: str, body: PrepareIn, background: BackgroundTasks, worksp
         raise HTTPException(404, "series not found")
     if s.paused:
         raise HTTPException(409, "This series is paused.")
+    return prepare_occurrence(session, s, body.at, background)
+
+
+def prepare_occurrence(session: Session, s: PresentationSeries, at: datetime | None, background: Any) -> dict[str, Any]:
+    """One draft per (series, recipe version, period): manual and scheduled preparation converge here.
+    ``background`` is anything with ``add_task(fn, *args)`` (FastAPI BackgroundTasks or the scheduler's pool)."""
+    workspace = s.workspace_id
     r = s.recipe_json
-    p = weekly.period(r["rule"], r["timezone"], r["week_starts_on"], body.at)
+    p = weekly.period(r["rule"], r["timezone"], r["week_starts_on"], at)
     existing = session.execute(select(PresentationOccurrence).where(PresentationOccurrence.series_id == s.id, PresentationOccurrence.recipe_version == s.version, PresentationOccurrence.period_key == p["key"])).scalar_one_or_none()
     if existing:
         d = deck_of(session, workspace, existing.deck_id)
@@ -733,3 +746,48 @@ def regenerate(deck_id: str, body: RegenerateIn, background: BackgroundTasks, wo
     out = new_revision(session, background, d, story, body.expectedRevision, head.locks_json or [], "model", head.brand_version)
     out["removedNumbers"] = removed
     return out
+
+
+
+class ScheduleIn(BaseModel):
+    enabled: bool
+    weekday: int = Field(0, ge=0, le=6)  # 0 = Monday
+    localTime: str = Field("08:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    catchUpHours: int = Field(24, ge=1, le=168)
+
+
+@router.put("/series/{series_id}/schedule")
+def set_schedule(series_id: str, body: ScheduleIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Opt in to (or out of) automatic weekly drafts. Nothing is ever sent automatically."""
+    on()
+    s = session.get(PresentationSeries, series_id)
+    if s is None or s.workspace_id != workspace:
+        raise HTTPException(404, "series not found")
+    recipe = dict(s.recipe_json)
+    recipe["schedule"] = {"weekday": body.weekday, "local_time": body.localTime, "catch_up_hours": body.catchUpHours}
+    s.recipe_json = recipe
+    s.schedule_enabled = body.enabled
+    s.next_run_at = scheduler.next_run(recipe["schedule"], recipe["timezone"], datetime.now(timezone.utc)).replace(tzinfo=None) if body.enabled else None
+    session.flush()
+    return series_out(session, s)
+
+
+POOL = scheduler.Pool()
+
+
+def notify(session: Session, s: PresentationSeries, title: str, summary: str) -> None:
+    from daypilot_orchestrator.integrations.notifications import normalize, record_notification
+
+    record_notification(session, s.workspace_id, normalize("presentations", "draft.prepared", title, summary, "info", seriesId=s.id))
+
+
+def scheduler_tick(now: datetime | None = None, pool: Any = None) -> list[dict[str, Any]]:
+    """One pass of the scheduler with its own session (used by the background loop and tests)."""
+    from ..db import _get_sessionmaker
+
+    with _get_sessionmaker()() as session:
+        return scheduler.tick(
+            session, now or datetime.now(timezone.utc),
+            lambda sess, series, at: prepare_occurrence(sess, series, at, pool or POOL),
+            notify,
+        )
