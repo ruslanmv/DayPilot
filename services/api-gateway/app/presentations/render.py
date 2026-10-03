@@ -59,13 +59,13 @@ def _pgm_is_blank(path: Path) -> bool:
     return var < 2.0
 
 
-def render(pptx: bytes) -> RenderResult:
+def render(pptx: bytes, suffix: str = ".pptx") -> RenderResult:
     caps = capabilities()
     if not caps["ready"]:
         raise RuntimeError("renderer unavailable: install libreoffice-impress and poppler-utils")
     with tempfile.TemporaryDirectory(prefix="dp-render-") as tmp:
         work = Path(tmp)
-        src = work / "deck.pptx"
+        src = work / f"deck{suffix}"
         src.write_bytes(pptx)
         profile = work / "profile"
         env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(work), "SAL_USE_VCLPLUGIN": "svp"}

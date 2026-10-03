@@ -31,11 +31,12 @@ from daypilot_knowledge.db.models import (
     PresentationRevision,
     PresentationRun,
     PresentationSeries,
+    PresentationTemplate,
 )
 
 from .. import ai_credits as credits
 from ..db import get_session
-from ..presentations import ai, brandkit, engine, genres, images, render, scheduler, store, svg, weekly, worker
+from ..presentations import ai, brandkit, engine, genres, images, render, scheduler, store, svg, template_import, weekly, worker
 from ..rbac import ROLE_RANK
 from .diagrams import access, access_role
 
@@ -147,13 +148,8 @@ def store_asset(session: Session, workspace: str, company_id: str, data: bytes, 
     return existing
 
 
-@router.post("/companies/{company_id}/assets", status_code=201)
-async def upload_asset(company_id: str, file: UploadFile = File(...), workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
-    """PNG/JPEG are stored as uploaded. An SVG is sanitised (kept as the original) and rendered to a
-    PNG that decks use; the returned id is always the one to put in a brand kit."""
-    on()
-    company(session, workspace, company_id)
-    data = await file.read(images.MAX_BYTES + 1)
+def asset_from_bytes(session: Session, workspace: str, company_id: str, data: bytes, filename: str) -> str:
+    """Store an image (sanitising and rendering SVG). Returns the id a brand kit may use (PNG/JPEG)."""
     if images.is_svg(data):
         try:
             clean, sw, sh = svg.sanitize(data)
@@ -161,15 +157,27 @@ async def upload_asset(company_id: str, file: UploadFile = File(...), workspace:
             kind, w, h = images.inspect(png)
         except (svg.SvgError, images.ImageError) as exc:
             raise HTTPException(422, str(exc)) from exc
-        original = store_asset(session, workspace, company_id, clean, "image/svg+xml", round(sw), round(sh), file.filename or "logo.svg")
-        asset = store_asset(session, workspace, company_id, png, kind, w, h, (file.filename or "logo") + ".png", source=original.id)
-        return {"id": asset.id, "sha256": asset.sha256, "mediaType": kind, "width": w, "height": h, "bytes": len(png), "originalId": original.id, "sanitized": True}
+        original = store_asset(session, workspace, company_id, clean, "image/svg+xml", round(sw), round(sh), filename)
+        return store_asset(session, workspace, company_id, png, kind, w, h, filename + ".png", source=original.id).id
     try:
         kind, w, h = images.inspect(data)
     except images.ImageError as exc:
         raise HTTPException(422, str(exc)) from exc
-    asset = store_asset(session, workspace, company_id, data, kind, w, h, file.filename or "logo")
-    return {"id": asset.id, "sha256": asset.sha256, "mediaType": kind, "width": w, "height": h, "bytes": len(data)}
+    return store_asset(session, workspace, company_id, data, kind, w, h, filename).id
+
+
+@router.post("/companies/{company_id}/assets", status_code=201)
+async def upload_asset(company_id: str, file: UploadFile = File(...), workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """PNG/JPEG are stored as uploaded. An SVG is sanitised (kept as the original) and rendered to a
+    PNG that decks use; the returned id is always the one to put in a brand kit."""
+    on()
+    company(session, workspace, company_id)
+    data = await file.read(images.MAX_BYTES + 1)
+    asset = session.get(PresentationAsset, asset_from_bytes(session, workspace, company_id, data, file.filename or "logo"))
+    out = {"id": asset.id, "sha256": asset.sha256, "mediaType": asset.media_type, "width": asset.width, "height": asset.height, "bytes": asset.byte_size}
+    if asset.source_asset_id:
+        out.update({"originalId": asset.source_asset_id, "sanitized": True})
+    return out
 
 
 @router.get("/assets/{asset_id}")
@@ -194,6 +202,8 @@ class BrandIn(BaseModel):
     logoAssetId: str | None = None
     darkLogoAssetId: str | None = None
     activate: bool = False
+    fromTemplateId: str | None = None  # start from an imported .pptx/.potx
+    templateLogoIndex: int | None = Field(None, ge=0, le=200)
 
 
 @router.post("/companies/{company_id}/brand-kits", status_code=201)
@@ -210,8 +220,31 @@ def create_brand_kit(company_id: str, body: BrandIn, workspace: str = Depends(ac
             raise HTTPException(422, "logo must be an image uploaded for this company")
         variant = "universal" if not body.darkLogoAssetId else variant
         logos.append({"asset_id": a.id, "sha256": a.sha256, "variant": variant, "aspect_ratio": round(a.width / a.height, 4), "minimum_width_inches": 1.0, "clear_space_ratio": 0.2, "rights": "company_original"})
+    choices = body.model_dump()
+    slide_size = None
+    if body.fromTemplateId:
+        t = template_of(session, workspace, body.fromTemplateId)
+        if t.company_id != company_id:
+            raise HTTPException(422, "that template belongs to another company")
+        proposal = t.report_json["proposal"]
+        choices = {
+            **choices,
+            "palette": {**proposal["palette"], **body.palette},
+            "headingFont": body.headingFont or proposal["headingFont"],
+            "bodyFont": body.bodyFont or proposal["bodyFont"],
+            "footerText": body.footerText or proposal.get("footerText"),
+        }
+        slide_size = proposal["slideSize"]
+        if body.templateLogoIndex is not None and not logos:
+            found = template_import.read(t.data)["logos"]
+            if body.templateLogoIndex >= len(found) or not found[body.templateLogoIndex]["data"]:
+                raise HTTPException(422, "that logo candidate cannot be used")
+            cand = found[body.templateLogoIndex]
+            asset_id = asset_from_bytes(session, workspace, company_id, cand["data"], cand["part"].rsplit("/", 1)[-1])
+            a = session.get(PresentationAsset, asset_id)
+            logos.append({"asset_id": a.id, "sha256": a.sha256, "variant": "universal", "aspect_ratio": round(a.width / a.height, 4), "minimum_width_inches": 1.0, "clear_space_ratio": 0.2, "rights": "company_original"})
     latest = session.execute(select(func.max(PresentationBrandKit.version)).where(PresentationBrandKit.company_id == company_id)).scalar() or 0
-    kit = brandkit.build(c.id, c.name, latest + 1, body.model_dump(), logos)
+    kit = brandkit.build(c.id, c.name, latest + 1, choices, logos, slide_size)
     try:
         warnings = engine.call({"op": "validate-kit", "kit": kit})["warnings"]
     except engine.EngineError as exc:
@@ -791,3 +824,91 @@ def scheduler_tick(now: datetime | None = None, pool: Any = None) -> list[dict[s
             lambda sess, series, at: prepare_occurrence(sess, series, at, pool or POOL),
             notify,
         )
+
+
+
+# ----------------------------------------------------------------------------- imported templates
+
+
+def template_of(session: Session, workspace: str, template_id: str) -> PresentationTemplate:
+    t = session.get(PresentationTemplate, template_id)
+    if t is None or t.workspace_id != workspace:
+        raise HTTPException(404, "template not found")
+    return t
+
+
+def template_out(t: PresentationTemplate) -> dict[str, Any]:
+    return {"id": t.id, "companyId": t.company_id, "filename": t.filename, "sha256": t.sha256, "bytes": t.byte_size,
+            "createdAt": t.created_at.isoformat() if t.created_at else None, "report": {k: v for k, v in t.report_json.items() if k != "thumbnailKeys"}}
+
+
+@router.post("/companies/{company_id}/templates", status_code=201)
+async def import_template(company_id: str, file: UploadFile = File(...), workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Keep the uploaded template exactly as it is and report what DayPilot can use from it."""
+    on()
+    company(session, workspace, company_id)
+    data = await file.read(template_import.MAX_FILE + 1)
+    try:
+        parsed = template_import.read(data)
+    except template_import.TemplateError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    report = parsed["report"]
+    keys: list[str] = []
+    try:
+        rendered = render.render(data, "." + parsed["kind"])
+        keys = [store.put(workspace, "png", png)[1] for png in rendered.pages[:30]]
+        report["rendered"] = True
+    except Exception as exc:  # noqa: BLE001 - previews are a convenience; the import itself stands
+        report["rendered"] = False
+        report["renderNote"] = f"Previews could not be rendered here ({type(exc).__name__})."
+    report["thumbnailKeys"] = keys
+    report["thumbnails"] = len(keys)
+    name = re.sub(r"[^\w.\- ]", "_", file.filename or f"template.{parsed['kind']}")[:200]
+    t = PresentationTemplate(workspace_id=workspace, company_id=company_id, filename=name, sha256=hashlib.sha256(data).hexdigest(), byte_size=len(data), data=data, report_json=report)
+    session.add(t)
+    session.flush()
+    return template_out(t)
+
+
+@router.get("/companies/{company_id}/templates")
+def list_templates(company_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    company(session, workspace, company_id)
+    rows = session.execute(select(PresentationTemplate).where(PresentationTemplate.company_id == company_id).order_by(PresentationTemplate.created_at.desc())).scalars()
+    return {"items": [template_out(t) for t in rows]}
+
+
+@router.get("/templates/{template_id}")
+def get_template(template_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    return template_out(template_of(session, workspace, template_id))
+
+
+@router.get("/templates/{template_id}/thumbs/{n}")
+def template_thumb(template_id: str, n: int, workspace: str = Depends(access), session: Session = Depends(get_session)) -> Response:
+    on()
+    t = template_of(session, workspace, template_id)
+    keys = t.report_json.get("thumbnailKeys", [])
+    if not 1 <= n <= len(keys):
+        raise HTTPException(404, "preview not found")
+    return Response(store.get(keys[n - 1]), media_type="image/png", headers={"Cache-Control": "private, max-age=600", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/templates/{template_id}/logo/{index}")
+def template_logo(template_id: str, index: int, workspace: str = Depends(access), session: Session = Depends(get_session)) -> Response:
+    on()
+    t = template_of(session, workspace, template_id)
+    found = template_import.read(t.data)["logos"]
+    if not 0 <= index < len(found) or not found[index]["data"] or found[index]["mediaType"] == "image/svg+xml":
+        raise HTTPException(404, "preview not available")
+    return Response(found[index]["data"], media_type=found[index]["mediaType"], headers={"Cache-Control": "private, max-age=600", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/templates/{template_id}/file")
+def template_file(template_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> Response:
+    """The original upload, byte for byte."""
+    on()
+    t = template_of(session, workspace, template_id)
+    kind = "potx" if t.report_json.get("kind") == "potx" else "pptx"
+    mime = FILE_TYPES["pptx"] if kind == "pptx" else "application/vnd.openxmlformats-officedocument.presentationml.template"
+    return Response(t.data, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{t.filename}"', "X-Content-Type-Options": "nosniff"})

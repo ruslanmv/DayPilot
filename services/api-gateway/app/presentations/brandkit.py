@@ -12,7 +12,7 @@ DEFAULT_PALETTE = {
 }
 
 
-def build(company_id: str, company_name: str, version: int, choices: dict[str, Any], logos: list[dict[str, Any]]) -> dict[str, Any]:
+def build(company_id: str, company_name: str, version: int, choices: dict[str, Any], logos: list[dict[str, Any]], slide_size: dict[str, float] | None = None) -> dict[str, Any]:
     palette = {**DEFAULT_PALETTE, **{k: v for k, v in (choices.get("palette") or {}).items() if k in PALETTE_KEYS}}
     head = choices.get("headingFont") or "Calibri"
     body = choices.get("bodyFont") or "Calibri"
@@ -29,7 +29,7 @@ def build(company_id: str, company_name: str, version: int, choices: dict[str, A
         "company_id": company_id,
         "company_name": company_name,
         "version": version,
-        "slide_size": {"width_inches": 13.333, "height_inches": 7.5},
+        "slide_size": slide_size or {"width_inches": 13.333, "height_inches": 7.5},
         "palette": palette,
         "typography": {
             "deck_title": role(head, 36, 44), "slide_title": role(head, 26, 32), "body": role(body, 16, 20),
