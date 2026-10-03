@@ -194,3 +194,18 @@ def test_0028_adds_only_presentation_tables_and_reverses_cleanly(database):
         assert after[table] == shape, f"{table} changed"
     command.downgrade(config(), "0027_ai_credits")
     assert snapshot(database) == before
+
+
+def test_0029_only_adds_nullable_columns_and_one_table(database):
+    command.upgrade(config(), "0028_presentations")
+    before = snapshot(database)
+    command.upgrade(config(), "0029_presentations_extensions")
+    after = snapshot(database)
+    assert set(after) - set(before) == {"presentation_templates"}
+    for table in ("presentation_assets", "presentation_revisions", "presentation_series"):
+        assert set(before[table]["columns"]) <= set(after[table]["columns"]), f"{table} lost a column"
+    for table, shape in before.items():
+        if table not in ("presentation_assets", "presentation_revisions", "presentation_series"):
+            assert after[table] == shape, f"{table} changed"
+    command.downgrade(config(), "0028_presentations")
+    assert snapshot(database) == before

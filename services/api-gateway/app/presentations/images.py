@@ -12,6 +12,11 @@ class ImageError(ValueError):
     pass
 
 
+def is_svg(data: bytes) -> bool:
+    """Anything that looks like markup mentioning <svg early on goes to the sanitiser (which explains refusals)."""
+    return data[:1024].lstrip().startswith(b"<") and b"<svg" in data[:4096].lower()
+
+
 def inspect(data: bytes) -> tuple[str, int, int]:
     if len(data) > MAX_BYTES:
         raise ImageError("Use an image smaller than 5 MB.")
@@ -35,8 +40,8 @@ def inspect(data: bytes) -> tuple[str, int, int]:
                 break
             i += 2 + length
         kind = "image/jpeg"
-    elif data.lstrip()[:5].lower() in (b"<?xml", b"<svg ") or b"<svg" in data[:512].lower():
-        raise ImageError("SVG logos are not accepted yet: export the logo as a PNG (transparent background is fine).")
+    elif is_svg(data):
+        raise ImageError("SVG must go through the sanitiser.")
     else:
         raise ImageError("Upload a PNG or JPEG image.")
     if not (0 < w <= MAX_SIDE and 0 < h <= MAX_SIDE):

@@ -1390,6 +1390,8 @@ class PresentationAsset(Base):
     filename: Mapped[str] = mapped_column(String(200))
     data: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # A rendered variant (e.g. the PNG made from a sanitised SVG) points at its original.
+    source_asset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class PresentationDeck(TimestampMixin, Base):
@@ -1421,6 +1423,8 @@ class PresentationRevision(Base):
     pptx_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     slide_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Expert mode: a reviewed JavaScript builder that produced this revision in the sandbox.
+    expert_script: Mapped[str | None] = mapped_column(Text, nullable=True)
     approved_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -1471,6 +1475,11 @@ class PresentationSeries(TimestampMixin, Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
     recipe_json: Mapped[dict[str, Any]] = mapped_column(JSON)
     paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Opt-in automatic drafts. next_run_at is advanced with a compare-and-swap so only one worker fires.
+    schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_result: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
 class PresentationOccurrence(Base):
@@ -1485,4 +1494,19 @@ class PresentationOccurrence(Base):
     period_start: Mapped[str] = mapped_column(String(40))
     period_end: Mapped[str] = mapped_column(String(40))
     deck_id: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PresentationTemplate(Base):
+    """An uploaded .pptx/.potx, kept byte-for-byte, with what DayPilot could and could not take from it."""
+    __tablename__ = "presentation_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    company_id: Mapped[str] = mapped_column(ForeignKey("presentation_companies.id"), index=True)
+    filename: Mapped[str] = mapped_column(String(200))
+    sha256: Mapped[str] = mapped_column(String(64))
+    byte_size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    report_json: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

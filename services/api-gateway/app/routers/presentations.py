@@ -35,7 +35,7 @@ from daypilot_knowledge.db.models import (
 
 from .. import ai_credits as credits
 from ..db import get_session
-from ..presentations import ai, brandkit, engine, genres, images, render, store, weekly, worker
+from ..presentations import ai, brandkit, engine, genres, images, render, store, svg, weekly, worker
 from ..rbac import ROLE_RANK
 from .diagrams import access, access_role
 
@@ -136,22 +136,40 @@ def list_companies(workspace: str = Depends(access), session: Session = Depends(
     return {"items": [company_out(session, c) for c in rows]}
 
 
+def store_asset(session: Session, workspace: str, company_id: str, data: bytes, kind: str, w: int, h: int, filename: str, source: str | None = None) -> PresentationAsset:
+    digest = hashlib.sha256(data).hexdigest()
+    existing = session.execute(select(PresentationAsset).where(PresentationAsset.company_id == company_id, PresentationAsset.sha256 == digest)).scalar_one_or_none()
+    if existing is None:
+        existing = PresentationAsset(workspace_id=workspace, company_id=company_id, sha256=digest, media_type=kind, width=w, height=h, byte_size=len(data),
+                                     filename=re.sub(r"[^\w.\- ]", "_", filename or "logo")[:200], data=data, source_asset_id=source)
+        session.add(existing)
+        session.flush()
+    return existing
+
+
 @router.post("/companies/{company_id}/assets", status_code=201)
 async def upload_asset(company_id: str, file: UploadFile = File(...), workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """PNG/JPEG are stored as uploaded. An SVG is sanitised (kept as the original) and rendered to a
+    PNG that decks use; the returned id is always the one to put in a brand kit."""
     on()
     company(session, workspace, company_id)
     data = await file.read(images.MAX_BYTES + 1)
+    if images.is_svg(data):
+        try:
+            clean, sw, sh = svg.sanitize(data)
+            png = svg.rasterize(clean, sw, sh)
+            kind, w, h = images.inspect(png)
+        except (svg.SvgError, images.ImageError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        original = store_asset(session, workspace, company_id, clean, "image/svg+xml", round(sw), round(sh), file.filename or "logo.svg")
+        asset = store_asset(session, workspace, company_id, png, kind, w, h, (file.filename or "logo") + ".png", source=original.id)
+        return {"id": asset.id, "sha256": asset.sha256, "mediaType": kind, "width": w, "height": h, "bytes": len(png), "originalId": original.id, "sanitized": True}
     try:
         kind, w, h = images.inspect(data)
     except images.ImageError as exc:
         raise HTTPException(422, str(exc)) from exc
-    digest = hashlib.sha256(data).hexdigest()
-    existing = session.execute(select(PresentationAsset).where(PresentationAsset.company_id == company_id, PresentationAsset.sha256 == digest)).scalar_one_or_none()
-    if existing is None:
-        existing = PresentationAsset(workspace_id=workspace, company_id=company_id, sha256=digest, media_type=kind, width=w, height=h, byte_size=len(data), filename=re.sub(r"[^\w.\- ]", "_", file.filename or "logo")[:200], data=data)
-        session.add(existing)
-        session.flush()
-    return {"id": existing.id, "sha256": digest, "mediaType": kind, "width": w, "height": h, "bytes": len(data)}
+    asset = store_asset(session, workspace, company_id, data, kind, w, h, file.filename or "logo")
+    return {"id": asset.id, "sha256": asset.sha256, "mediaType": kind, "width": w, "height": h, "bytes": len(data)}
 
 
 @router.get("/assets/{asset_id}")
@@ -160,7 +178,10 @@ def get_asset(asset_id: str, workspace: str = Depends(access), session: Session 
     a = session.get(PresentationAsset, asset_id)
     if a is None or a.workspace_id != workspace:
         raise HTTPException(404, "asset not found")
-    return Response(a.data, media_type=a.media_type, headers={"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"})
+    headers = {"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"}
+    if a.media_type == "image/svg+xml":  # even sanitised, never render an SVG as a page
+        headers.update({"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "Content-Disposition": f'attachment; filename="{a.filename}"'})
+    return Response(a.data, media_type=a.media_type, headers=headers)
 
 
 class BrandIn(BaseModel):
@@ -185,7 +206,7 @@ def create_brand_kit(company_id: str, body: BrandIn, workspace: str = Depends(ac
         if not asset_id:
             continue
         a = session.get(PresentationAsset, asset_id)
-        if a is None or a.company_id != company_id:
+        if a is None or a.company_id != company_id or a.media_type not in ("image/png", "image/jpeg"):
             raise HTTPException(422, "logo must be an image uploaded for this company")
         variant = "universal" if not body.darkLogoAssetId else variant
         logos.append({"asset_id": a.id, "sha256": a.sha256, "variant": variant, "aspect_ratio": round(a.width / a.height, 4), "minimum_width_inches": 1.0, "clear_space_ratio": 0.2, "rights": "company_original"})
