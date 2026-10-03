@@ -29,55 +29,7 @@ export async function compile(deck, kit, assets = {}) {
   pres.company = xmlSafe(kit.company_name ?? kit.company_id)
   const scene = { engine: ENGINE_VERSION, slide_size: { w: W, h: H }, slides: [] }
 
-  // --- layouts: background, footer, page number and logo live on the layout, never on a slide
-  const logoFor = (dark) => {
-    const pref = dark ? 'dark_background' : 'light_background'
-    const l = (kit.logos ?? []).find((x) => x.variant === pref && assets[x.asset_id]) ?? (kit.logos ?? []).find((x) => x.variant === 'universal' && assets[x.asset_id])
-    return l ? { ...l, asset: assets[l.asset_id] } : null
-  }
-  const masters = new Map()
-  const masterFor = (layout) => {
-    const dark = DARK.has(layout)
-    const bg = layout === 'section' ? pal.foreground : dark ? pal.primary : layout === 'quote' ? tint(pal.primary, 0.94) : pal.background
-    const name = `DP ${layout}`
-    if (masters.has(name)) return masters.get(name)
-    const objects = []
-    const derived = []
-    const footColor = dark ? onColor(bg, kit) : readable(pal.muted, bg, kit)
-    const ft = kit.typography.footnote
-    if (kit.footer?.text && layout !== 'cover') {
-      objects.push({ text: { text: kit.footer.text, options: { x: M, y: H - 0.55, w: W * 0.6, h: 0.32, fontFace: ft.family, fontSize: ft.minimum_pt, color: footColor, margin: 0, valign: 'middle' } } })
-      derived.push({ id: 'footer', kind: 'text', box: { x: M, y: H - 0.55, w: W * 0.6, h: 0.32 }, pt: ft.minimum_pt, font: ft.family, color: footColor, bg, text: kit.footer.text })
-    }
-    const logo = logoFor(dark)
-    if (logo) {
-      const h = layout === 'cover' ? 0.62 : 0.4
-      let w = h * logo.aspect_ratio
-      const minW = logo.minimum_width_inches ?? 0
-      const lh = w < minW ? minW / logo.aspect_ratio : h
-      w = Math.max(w, minW)
-      const x = layout === 'cover' ? M + 0.1 : W - M - w
-      const y = layout === 'cover' ? 0.55 : H - 0.35 - lh
-      // A logo made for light backgrounds never sits directly on a dark slide: it gets a white plate.
-      if (dark && logo.variant !== 'dark_background') {
-        const pad = Math.max(0.1, lh * (logo.clear_space_ratio ?? 0.2))
-        objects.push({ rect: { x: x - pad, y: y - pad, w: w + 2 * pad, h: lh + 2 * pad, fill: { color: 'FFFFFF' }, rectRadius: 0.08 } })
-        derived.push({ id: 'logo_plate', kind: 'panel', box: { x: x - pad, y: y - pad, w: w + 2 * pad, h: lh + 2 * pad }, fill: 'FFFFFF' })
-      }
-      objects.push({ image: { x, y, w, h: lh, data: dataUri(logo.asset), altText: `${kit.company_name ?? 'Company'} logo` } })
-      derived.push({ id: 'logo', kind: 'image', box: { x, y, w, h: lh }, asset_id: logo.asset_id, aspect: w / lh, expected_aspect: logo.aspect_ratio, bg: dark && logo.variant !== 'dark_background' ? 'FFFFFF' : bg })
-    }
-    const showNumber = kit.footer?.show_page_number !== false && layout !== 'cover'
-    const numX = logo && layout !== 'cover' ? W - M - (derived.find((d) => d.id === 'logo').box.w) - 0.9 : W - M - 0.6
-    masters.set(name, { name, bg, dark, derived, numBox: showNumber ? { x: numX, y: H - 0.55, w: 0.6, h: 0.32 } : null })
-    pres.defineSlideMaster({
-      title: name,
-      background: { color: bg },
-      objects,
-      ...(showNumber ? { slideNumber: { x: numX, y: H - 0.55, w: 0.6, h: 0.32, fontFace: ft.family, fontSize: ft.minimum_pt, color: footColor, align: 'right' } } : {}),
-    })
-    return masters.get(name)
-  }
+  const masterFor = makeMasters(pres, kit, assets, W, H, pal)
 
   // --- sections only when the deck has section slides
   const hasSections = deck.slides.some((s) => s.layout_id === 'section')
@@ -248,6 +200,60 @@ export async function compile(deck, kit, assets = {}) {
 function readable(want, bg, kit) {
   return contrast(want, bg) >= 4.5 ? want : onColor(bg, kit)
 }
+/** Branded slide layouts: background, footer, page number and logo live on the layout, never on a slide. */
+export function makeMasters(pres, kit, assets, W, H, pal) {
+  const logoFor = (dark) => {
+    const pref = dark ? 'dark_background' : 'light_background'
+    const l = (kit.logos ?? []).find((x) => x.variant === pref && assets[x.asset_id]) ?? (kit.logos ?? []).find((x) => x.variant === 'universal' && assets[x.asset_id])
+    return l ? { ...l, asset: assets[l.asset_id] } : null
+  }
+  const masters = new Map()
+  const masterFor = (layout) => {
+    const dark = DARK.has(layout)
+    const bg = layout === 'section' ? pal.foreground : dark ? pal.primary : layout === 'quote' ? tint(pal.primary, 0.94) : pal.background
+    const name = `DP ${layout}`
+    if (masters.has(name)) return masters.get(name)
+    const objects = []
+    const derived = []
+    const footColor = dark ? onColor(bg, kit) : readable(pal.muted, bg, kit)
+    const ft = kit.typography.footnote
+    if (kit.footer?.text && layout !== 'cover') {
+      objects.push({ text: { text: kit.footer.text, options: { x: M, y: H - 0.55, w: W * 0.6, h: 0.32, fontFace: ft.family, fontSize: ft.minimum_pt, color: footColor, margin: 0, valign: 'middle' } } })
+      derived.push({ id: 'footer', kind: 'text', box: { x: M, y: H - 0.55, w: W * 0.6, h: 0.32 }, pt: ft.minimum_pt, font: ft.family, color: footColor, bg, text: kit.footer.text })
+    }
+    const logo = logoFor(dark)
+    if (logo) {
+      const h = layout === 'cover' ? 0.62 : 0.4
+      let w = h * logo.aspect_ratio
+      const minW = logo.minimum_width_inches ?? 0
+      const lh = w < minW ? minW / logo.aspect_ratio : h
+      w = Math.max(w, minW)
+      const x = layout === 'cover' ? M + 0.1 : W - M - w
+      const y = layout === 'cover' ? 0.55 : H - 0.35 - lh
+      // A logo made for light backgrounds never sits directly on a dark slide: it gets a white plate.
+      if (dark && logo.variant !== 'dark_background') {
+        const pad = Math.max(0.1, lh * (logo.clear_space_ratio ?? 0.2))
+        objects.push({ rect: { x: x - pad, y: y - pad, w: w + 2 * pad, h: lh + 2 * pad, fill: { color: 'FFFFFF' }, rectRadius: 0.08 } })
+        derived.push({ id: 'logo_plate', kind: 'panel', box: { x: x - pad, y: y - pad, w: w + 2 * pad, h: lh + 2 * pad }, fill: 'FFFFFF' })
+      }
+      objects.push({ image: { x, y, w, h: lh, data: dataUri(logo.asset), altText: `${kit.company_name ?? 'Company'} logo` } })
+      derived.push({ id: 'logo', kind: 'image', box: { x, y, w, h: lh }, asset_id: logo.asset_id, aspect: w / lh, expected_aspect: logo.aspect_ratio, bg: dark && logo.variant !== 'dark_background' ? 'FFFFFF' : bg })
+    }
+    const showNumber = kit.footer?.show_page_number !== false && layout !== 'cover'
+    const numX = logo && layout !== 'cover' ? W - M - (derived.find((d) => d.id === 'logo').box.w) - 0.9 : W - M - 0.6
+    masters.set(name, { name, bg, dark, derived, numBox: showNumber ? { x: numX, y: H - 0.55, w: 0.6, h: 0.32 } : null })
+    pres.defineSlideMaster({
+      title: name,
+      background: { color: bg },
+      objects,
+      ...(showNumber ? { slideNumber: { x: numX, y: H - 0.55, w: 0.6, h: 0.32, fontFace: ft.family, fontSize: ft.minimum_pt, color: footColor, align: 'right' } } : {}),
+    })
+    return masters.get(name)
+  }
+
+  return masterFor
+}
+
 function xmlSafe(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
@@ -396,7 +402,7 @@ function anchors(a, z) {
 }
 
 /** Write the kit's colours into the theme and give tables alt text; refuse invalid colour values. */
-async function finish(buf, kit, deck) {
+export async function finish(buf, kit, deck) {
   const zip = await JSZip.loadAsync(buf)
   const part = 'ppt/theme/theme1.xml'
   const colors = themeColors(kit)

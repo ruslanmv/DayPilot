@@ -91,6 +91,8 @@ def build(session: Session, run_id: str) -> str:
     rev.state = "composing"
     session.commit()
     kit = kit_row.kit_json
+    if rev.expert_script:
+        return build_expert(session, run, rev, kit, kit_row, epoch)
     try:
         composed = engine.call({"op": "compose", "storyline": rev.storyline_json, "kit": kit, "options": {
             "deckId": run.deck_id, "workspaceId": run.workspace_id,
@@ -185,3 +187,57 @@ def recover(session: Session, workspace_id: str) -> list[str]:
         select(PresentationRun.id).where(PresentationRun.workspace_id == workspace_id, PresentationRun.status == "running", PresentationRun.lease_expires_at < now())
     ).scalars().all()
     return list(stale)
+
+
+def build_expert(session: Session, run: PresentationRun, rev: PresentationRevision, kit: dict[str, Any], kit_row: PresentationBrandKit, epoch: int) -> str:
+    """Expert revision: the reviewed builder runs in the sandbox; the file then goes through the same
+    render, page and blank checks plus the expert file checks, and is published under the same fence."""
+    from . import sandbox
+
+    run_id = run.id
+    try:
+        pptx, reply = sandbox.run(rev.expert_script or "", kit, assets_for(session, kit, kit_row.company_id))
+    except sandbox.SandboxError as exc:
+        message = str(exc)[:500]
+        if session.execute(update(PresentationRun).where(PresentationRun.id == run_id, PresentationRun.epoch == epoch, PresentationRun.status == "running")
+                           .values(status="failed", phase="done", error=message, lease_expires_at=None)).rowcount == 1:
+            rev.state, rev.error = "failed", message
+        session.commit()
+        return "failed"
+    receipt = reply["receipt"]
+    slides = len(reply["inspection"]["slides"])
+    if not _phase(session, run_id, epoch, "render"):
+        return "stale"
+    rendered = None
+    try:
+        rendered = render.render(pptx)
+        receipt["checks"].append("actual_render")
+        if len(rendered.pages) != slides:
+            receipt["findings"].append({"severity": "hard", "code": "render_pages", "slide": None, "message": f"The rendered file has {len(rendered.pages)} pages for {slides} slides."})
+        for page in rendered.blank:
+            receipt["findings"].append({"severity": "hard", "code": "blank_render", "slide": f"slide{page}", "message": f"Slide {page} rendered blank."})
+    except Exception as exc:  # noqa: BLE001
+        receipt["findings"].append({"severity": "warning", "code": "not_rendered", "slide": None, "message": f"The file could not be rendered for review ({type(exc).__name__})."})
+    hard = sum(1 for f in receipt["findings"] if f["severity"] == "hard")
+    receipt["hard_failures"], receipt["warnings"] = hard, len(receipt["findings"]) - hard
+    receipt["status"] = "failed" if hard else ("passed" if rendered else "unverified")
+    receipt["pptx_sha256"] = reply["sha256"]
+    if not _phase(session, run_id, epoch, "publish"):
+        return "stale"
+    files = [("pptx", 0, pptx)] + ([("pdf", 0, rendered.pdf)] + [("png", i + 1, p) for i, p in enumerate(rendered.pages)] if rendered else [])
+    written = [(kind, pos, *store.put(run.workspace_id, kind, data), len(data)) for kind, pos, data in files]
+    if session.execute(update(PresentationRun).where(PresentationRun.id == run_id, PresentationRun.epoch == epoch, PresentationRun.status == "running")
+                       .values(status="succeeded", phase="done", lease_expires_at=None)).rowcount != 1:
+        session.rollback()
+        return "stale"
+    for kind, pos, digest, key, size in written:
+        session.add(PresentationArtifact(workspace_id=run.workspace_id, deck_id=run.deck_id, revision=run.revision, kind=kind, position=pos, sha256=digest, byte_size=size, store_key=key, run_id=run_id))
+    titles = [((s.get("text") or "").strip()[:80] or f"Slide {i + 1}") for i, s in enumerate(reply["inspection"]["slides"])]
+    rev.deck_json = {"schema_version": "daypilot.deck-spec/v1", "expert": True, "slides": [{"id": f"slide{i + 1}", "title": t, "notes": {"speaker_text": reply["inspection"]["slides"][i]["notes"]}} for i, t in enumerate(titles)]}
+    rev.receipt_json = receipt
+    rev.pptx_sha256 = reply["sha256"]
+    rev.slide_count = slides
+    rev.state = "failed" if hard else "review_ready"
+    rev.error = None
+    session.commit()
+    return "succeeded"

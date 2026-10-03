@@ -36,7 +36,7 @@ from daypilot_knowledge.db.models import (
 
 from .. import ai_credits as credits
 from ..db import get_session
-from ..presentations import ai, brandkit, engine, genres, images, render, scheduler, store, svg, template_import, weekly, worker
+from ..presentations import ai, brandkit, engine, genres, images, render, sandbox, scheduler, store, svg, template_import, weekly, worker
 from ..rbac import ROLE_RANK
 from .diagrams import access, access_role
 
@@ -102,7 +102,12 @@ def capabilities() -> dict[str, Any]:
         "genres": [{"id": k, "name": v} for k, v in genres.GENRES.items()],
         "slideTypes": ["cover", "section", "agenda", "statement", "bullets", "kpis", "chart", "table", "comparison", "timeline", "diagram", "decision", "quote", "closing"],
         "fonts": brandkit.SAFE_FONTS,
+        "expert": {"enabled": expert_enabled(), **(sandbox.available() if expert_enabled() else {"ready": False})},
     }
+
+
+def expert_enabled() -> bool:
+    return os.getenv("DAYPILOT_PRESENTATIONS_EXPERT", "false").lower() == "true"
 
 
 # ----------------------------------------------------------------------------- companies and brand kits
@@ -416,7 +421,7 @@ def slide_map(storyline: dict[str, Any]) -> dict[str, Any]:
     return {s.get("id") or f"s{i + 1}": s for i, s in enumerate(storyline.get("slides", []))}
 
 
-def new_revision(session: Session, background: BackgroundTasks, d: PresentationDeck, storyline: dict[str, Any], expected: int, locks: list[str], author: str, brand_version: int) -> dict[str, Any]:
+def new_revision(session: Session, background: BackgroundTasks, d: PresentationDeck, storyline: dict[str, Any], expected: int, locks: list[str], author: str, brand_version: int, expert_script: str | None = None) -> dict[str, Any]:
     parent = session.get(PresentationRevision, (d.id, expected))
     if parent is None:
         raise HTTPException(404, "base revision not found")
@@ -431,7 +436,7 @@ def new_revision(session: Session, background: BackgroundTasks, d: PresentationD
     if moved != 1:
         raise HTTPException(409, "This presentation changed meanwhile. Reload to see the latest revision.")
     valid_locks = [x for x in dict.fromkeys(locks) if x in after]
-    session.add(PresentationRevision(deck_id=d.id, revision=revision, parent_revision=expected, brand_version=brand_version, author=author, storyline_json=storyline, locks_json=valid_locks, state="queued"))
+    session.add(PresentationRevision(deck_id=d.id, revision=revision, parent_revision=expected, brand_version=brand_version, author=author, storyline_json=storyline, locks_json=valid_locks, state="queued", expert_script=expert_script))
     session.flush()
     run = start_run(session, background, d, revision)
     session.refresh(d)
@@ -449,6 +454,33 @@ def revise(deck_id: str, body: ReviseIn, background: BackgroundTasks, workspace:
     version = c.active_brand_version if body.rebrand else (parent.brand_version if parent else c.active_brand_version)
     kit_of(session, c.id, version)
     return new_revision(session, background, d, body.storyline, body.expectedRevision, body.locks, "person", version)
+
+
+class ExpertIn(BaseModel):
+    script: str = Field(..., min_length=1, max_length=sandbox.MAX_SCRIPT)
+    expectedRevision: int = Field(..., ge=1)
+
+
+@router.post("/decks/{deck_id}/expert", status_code=202)
+def expert(deck_id: str, body: ExpertIn, background: BackgroundTasks, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Opt-in: a reviewed JavaScript builder writes the slides; it runs only inside the sandbox and
+    the file goes through render and file checks. The storyline is kept, so a later normal revision
+    returns to the composed deck."""
+    on()
+    if not expert_enabled():
+        raise HTTPException(404, "Expert builds are not enabled. An administrator can set DAYPILOT_PRESENTATIONS_EXPERT=true.")
+    if not sandbox.available()["ready"]:
+        raise HTTPException(409, "Expert builds are unavailable on this server: the sandbox (setpriv, unshare, prlimit, node) is missing.")
+    problems = sandbox.precheck(body.script)
+    if problems:
+        raise HTTPException(422, {"problems": problems})
+    d = deck_of(session, workspace, deck_id)
+    parent = session.get(PresentationRevision, (d.id, body.expectedRevision))
+    if parent is None:
+        raise HTTPException(404, "base revision not found")
+    if parent.locks_json:
+        raise HTTPException(409, "Unlock all slides before an expert build: the builder replaces every slide.")
+    return new_revision(session, background, d, parent.storyline_json, body.expectedRevision, [], "expert", parent.brand_version, expert_script=body.script)
 
 
 class LocksIn(BaseModel):
