@@ -28,3 +28,18 @@ Constraints confirmed: LibreOffice is an operational renderer, not proof of Powe
 | E6 Evidence | Unit/integration/E2E tests, rendered sample decks for two fictional companies, docs and README | Every slide of the samples inspected visually |
 
 Deferred, as the design requires: recurring schedules (P10, preview only), existing-template fidelity import (P11), external delivery (P12), Matrix proposals and MCP tools (P13), expert JavaScript sandbox (P14), the blind benchmark against other tools (P15). No claim of being better than any named product is made before that benchmark exists.
+
+## Delivery status (branch `claude/presentations`)
+
+| Step | Status | Evidence |
+|---|---|---|
+| E1 Engine | Done | `packages/presentation-engine`: 14 curated slide types, brand theme written into the file, real-font-metric fitting (Liberation/Carlito/Caladea widths), sections, notes, stable object names, alt text on charts/tables/diagrams. 13 engine checks; the PR 19 fixture deck compiles unchanged |
+| E2 Render and quality | Done | LibreOffice → PDF → 1600-px PNGs in a private profile; blank-page and page-count checks; scene-graph checks for overflow, minimum sizes, contrast, overlap, off-slide, logo distortion, native objects, theme colours, fonts, footer, macros/external links, evidence; receipt bound to the PPTX SHA-256 |
+| E3 Service | Done | Migration 0028 (9 additive tables); companies, immutable brand-kit versions with CAS activation, byte-checked logo uploads, decks with CAS revisions, slide locks, restore-as-new-revision, approval bound to the file hash, lease-epoch-fenced runs (a stale worker cannot publish), content-addressed artifacts, weekly series with one occurrence per period |
+| E4 AI | Done | Storyline and per-slide rewrites on the workspace's own connected model; strict JSON, one bounded repair round, engine validation, numbers not present in the sources removed and reported; AI credits charged (3 per outline, 1 per slide); offline falls back to genre templates; dmind maps imported read-only as diagram slides |
+| E5 UI | Done | `#/presentations` (feature-flagged nav entry after Diagrams): brand setup with preview, 4-step wizard, outline editor without JSON, review of the actual rendered slides with checks and notes, locks, AI rewrite, revisions, approval, PPTX/PDF download, weekly series |
+| E6 Evidence | Done | Python: 20 presentation tests (+ migration test); browser E2E 11/11 including axe (no serious/critical); rendered sample decks inspected slide by slide (defects found and fixed: logo on dark cover, uneven KPI tiles, oversized panels, muted text contrast, motif over the logo) |
+
+Visual QA of the actual renders drove these fixes; the gate now also catches unreadable muted colours and stretched logos automatically.
+
+Not built yet (next): recurring schedules (P10; series prepare on request only), existing `.pptx/.potx` template import with fidelity proof (P11), external sharing/delivery (P12), MCP tools (P13), the expert JavaScript sandbox (P14) and the blind benchmark (P15). Rendering is LibreOffice-based; PowerPoint for Windows/Mac acceptance and a screen-reader review are still required before a release claim. SVG logos are refused until a sanitiser is added.

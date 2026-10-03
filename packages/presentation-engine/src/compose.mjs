@@ -158,7 +158,7 @@ export function compose(storyline, kit, opts = {}) {
         title()
         const side = sl.takeaway ? 3.9 : 0
         text('body', 'bullets', 'body', sl.bullets.join('\n'), { x: content.x, y: content.y, w: content.w - (side ? side + 0.5 : 0), h: content.h })
-        if (sl.takeaway) text('takeaway', 'takeaway', 'body', sl.takeaway, { x: W - M - side + 0.35, y: content.y + 0.35, w: side - 0.7, h: content.h - 0.7 })
+        if (sl.takeaway) text('takeaway', 'takeaway', 'body', sl.takeaway, { x: W - M - side + 0.35, y: content.y + 0.35, w: side - 0.7, h: content.h - 0.7 }, { shrink: true, minH: 1.4 })
         break
       }
       case 'kpis': {

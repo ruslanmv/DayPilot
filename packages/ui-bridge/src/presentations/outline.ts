@@ -20,7 +20,7 @@ export function fieldsFor(type: string): Field[] {
     case 'statement': return [{ key: 'statement', label: 'Message', multiline: true }, { key: 'support', label: 'Supporting line', multiline: true }]
     case 'bullets': return [{ key: 'bullets', label: 'Points', multiline: true, hint: 'One per line' }, { key: 'takeaway', label: 'Takeaway (optional)' }]
     case 'kpis': return [{ key: 'kpis', label: 'Numbers', multiline: true, hint: 'value | label | change — one per line; “—” when unknown' }, { key: 'footnote', label: 'Footnote' }]
-    case 'chart': return [{ key: 'chartType', label: 'Chart type', hint: 'column, bar, line or area' }, { key: 'unit', label: 'Unit' }, { key: 'data', label: 'Data', multiline: true, hint: 'First line: categories separated by |. Then one line per series: name | value | value … (blank = missing)' }, { key: 'insights', label: 'Insights', multiline: true, hint: 'Up to 3, one per line' }]
+    case 'chart': return [{ key: 'chartTitle', label: 'Chart title' }, { key: 'chartType', label: 'Chart type', hint: 'column, bar, line or area' }, { key: 'unit', label: 'Unit' }, { key: 'data', label: 'Data', multiline: true, hint: 'First line: categories separated by |. Then one line per series: name | value | value … (blank = missing)' }, { key: 'insights', label: 'Insights', multiline: true, hint: 'Up to 3, one per line' }]
     case 'table': return [{ key: 'rows', label: 'Table', multiline: true, hint: 'First line: headers separated by |. Then one line per row' }]
     case 'comparison': return [{ key: 'leftHeading', label: 'Left heading' }, { key: 'leftPoints', label: 'Left points', multiline: true }, { key: 'rightHeading', label: 'Right heading' }, { key: 'rightPoints', label: 'Right points', multiline: true }]
     case 'timeline': return [{ key: 'milestones', label: 'Milestones', multiline: true, hint: 'label | date — one per line' }]
@@ -43,6 +43,7 @@ export function readField(s: Slide, key: string): string {
     case 'kpis': return ((s.kpis as { value: string; label: string; delta?: string }[]) ?? []).map((k) => [k.value, k.label, k.delta ?? ''].join(' | ').replace(/ \| $/, '')).join('\n')
     case 'chartType': return ((s.chart as { type?: string }) ?? {}).type ?? 'column'
     case 'unit': return ((s.chart as { unit?: string }) ?? {}).unit ?? ''
+    case 'chartTitle': return ((s.chart as { title?: string }) ?? {}).title ?? ''
     case 'data': {
       const c = (s.chart ?? { categories: [], series: [] }) as { categories: string[]; series: { name: string; values: (number | null)[] }[] }
       return [c.categories.join(' | '), ...c.series.map((x) => [x.name, ...x.values.map((v) => (v === null ? '' : String(v)))].join(' | '))].join('\n')
@@ -77,9 +78,9 @@ export function writeField(s: Slide, key: string, v: string): Slide {
         return { value: value || '—', label: label || '', ...(delta ? { delta } : {}) }
       })
       break
-    case 'chartType': case 'unit': {
+    case 'chartType': case 'unit': case 'chartTitle': {
       const c = { ...((s.chart as object) ?? {}) } as Record<string, unknown>
-      c[key === 'chartType' ? 'type' : 'unit'] = v.trim()
+      c[key === 'chartType' ? 'type' : key === 'unit' ? 'unit' : 'title'] = key === 'chartTitle' ? v : v.trim()
       n.chart = c
       break
     }

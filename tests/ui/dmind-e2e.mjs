@@ -928,7 +928,7 @@ if (process.env.AXE_CORE_PATH)
     await page.addScriptTag({ content: fs.readFileSync(process.env.AXE_CORE_PATH, 'utf8') })
     const found = await page.evaluate(async () => {
       const r = await window.axe.run(document.querySelector('.dmind'), { runOnly: ['wcag2a', 'wcag2aa', 'wcag22aa'] })
-      return r.violations.filter((v) => ['serious', 'critical'].includes(v.impact)).map((v) => `${v.id}: ${v.nodes.length} node(s)`)
+      return r.violations.filter((v) => ['serious', 'critical'].includes(v.impact)).map((v) => `${v.id}: ${v.nodes.length} node(s) ${v.nodes.map((n) => n.target).join(" ")}`)
     })
     assert.deepEqual(found, [])
   })

@@ -58,8 +58,14 @@ export async function compile(deck, kit, assets = {}) {
       w = Math.max(w, minW)
       const x = layout === 'cover' ? M + 0.1 : W - M - w
       const y = layout === 'cover' ? 0.55 : H - 0.35 - lh
+      // A logo made for light backgrounds never sits directly on a dark slide: it gets a white plate.
+      if (dark && logo.variant !== 'dark_background') {
+        const pad = Math.max(0.1, lh * (logo.clear_space_ratio ?? 0.2))
+        objects.push({ rect: { x: x - pad, y: y - pad, w: w + 2 * pad, h: lh + 2 * pad, fill: { color: 'FFFFFF' }, rectRadius: 0.08 } })
+        derived.push({ id: 'logo_plate', kind: 'panel', box: { x: x - pad, y: y - pad, w: w + 2 * pad, h: lh + 2 * pad }, fill: 'FFFFFF' })
+      }
       objects.push({ image: { x, y, w, h: lh, data: dataUri(logo.asset), altText: `${kit.company_name ?? 'Company'} logo` } })
-      derived.push({ id: 'logo', kind: 'image', box: { x, y, w, h: lh }, asset_id: logo.asset_id, aspect: w / lh, expected_aspect: logo.aspect_ratio, bg })
+      derived.push({ id: 'logo', kind: 'image', box: { x, y, w, h: lh }, asset_id: logo.asset_id, aspect: w / lh, expected_aspect: logo.aspect_ratio, bg: dark && logo.variant !== 'dark_background' ? 'FFFFFF' : bg })
     }
     const showNumber = kit.footer?.show_page_number !== false && layout !== 'cover'
     const numX = logo && layout !== 'cover' ? W - M - (derived.find((d) => d.id === 'logo').box.w) - 0.9 : W - M - 0.6
@@ -120,8 +126,9 @@ export async function compile(deck, kit, assets = {}) {
       rec({ id: 'motif', kind: 'decoration', derived: true, box: { x: W * 0.64, y: 0, w: W * 0.36, h: H }, allowOverlap: true })
     }
     if (layout === 'closing') {
-      slide.addShape(pres.ShapeType.ellipse, { x: W * 0.72, y: H * 0.38, w: H * 0.9, h: H * 0.9, fill: { color: tint(pal.primary, 0.14) }, line: { color: tint(pal.primary, 0.14), width: 0 }, objectName: 'motif_large' })
-      rec({ id: 'motif', kind: 'decoration', derived: true, box: { x: W * 0.7, y: H * 0.35, w: W * 0.3, h: H * 0.65 }, allowOverlap: true })
+      // Upper right, clear of the footer, page number and logo in the bottom corners.
+      slide.addShape(pres.ShapeType.ellipse, { x: W * 0.7, y: -H * 0.32, w: H * 0.95, h: H * 0.95, fill: { color: tint(pal.primary, 0.14) }, line: { color: tint(pal.primary, 0.14), width: 0 }, objectName: 'motif_large' })
+      rec({ id: 'motif', kind: 'decoration', derived: true, box: { x: W * 0.7, y: 0, w: W * 0.3, h: H * 0.63 }, allowOverlap: true })
     }
     if (layout === 'quote') {
       slide.addText('“', { x: M + 0.2, y: 0.9, w: 1.2, h: 1.4, fontFace: kit.typography.slide_title.family, fontSize: 120, color: pal.accent, bold: true, margin: 0, isTextBox: true, objectName: 'quote_mark' })
@@ -135,9 +142,10 @@ export async function compile(deck, kit, assets = {}) {
     }
     if (layout === 'kpis') {
       const groups = [...new Set(els.map(group).filter((g) => g.startsWith('kpi')))]
+      const tallest = Math.max(...groups.map((g) => groupBox(g).y + groupBox(g).h))
       groups.forEach((g) => {
         const b = groupBox(g)
-        const tb = { x: b.x - 0.3, y: b.y - 0.3, w: b.w + 0.6, h: b.h + 0.5 }
+        const tb = { x: b.x - 0.3, y: b.y - 0.3, w: b.w + 0.6, h: tallest - b.y + 0.5 }
         panel(`${g}_tile`, tb, tint(pal.primary, 0.92))
         els.filter((e) => group(e) === g).forEach((e) => bgOf.set(e.id, tint(pal.primary, 0.92)))
       })

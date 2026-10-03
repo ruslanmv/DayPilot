@@ -75,6 +75,8 @@ jobs:
         run: node tests/ui/dmind.mjs
       - name: dmind batch module checks
         run: node tests/ui/dmind-modules.mjs
+      - name: Presentation engine checks (native PPTX, fitting, quality gate)
+        run: node packages/presentation-engine/test/engine.test.mjs
       - name: Build
         run: pnpm -r build
       - name: Lint

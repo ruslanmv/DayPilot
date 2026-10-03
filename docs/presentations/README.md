@@ -2,6 +2,8 @@
 
 Status: implementation-ready design proposal. This PR adds design documents, draft contracts and examples. It does not enable the feature or schedule a presentation.
 
+Implementation: an R1 vertical slice is built on branch `claude/presentations` (flag `DAYPILOT_PRESENTATIONS`, off by default); see [implementation plan and status](implementation-plan.md).
+
 ## Product outcome
 
 Add **Presentations**, a dedicated DayPilot workspace for creating, reviewing and exporting company-branded, editable PowerPoint decks. A person supplies a brief, selects sources and chooses a company template. DayPilot proposes an outline, creates slides, renders the actual exported PowerPoint, checks every slide and presents a reviewable revision.

@@ -692,6 +692,27 @@ Licensed under Apache 2.0.
 <sub>DayPilot is part of the HomePilot Family. HomePilot creates portable AI identities; DayPilot governs them in professional workflows.</sub>
 </div>
 
+### Presentations
+
+Weekly and one-off decks in your company's brand, built as **native, editable PowerPoint** (real text, charts, tables and shapes, not pictures) and checked by rendering the actual file before anyone reviews it. Turn it on with `DAYPILOT_PRESENTATIONS=true`.
+
+<img src="docs/assets/screenshots/presentations/3-review.png" alt="Reviewing a deck: rendered slides, checks and speaker notes" width="100%" />
+
+<img src="docs/assets/screenshots/presentations/sheet.png" alt="Every slide of a generated weekly deck, rendered from the exported PowerPoint" width="100%" />
+
+<img src="docs/assets/screenshots/presentations/1-brand.png" alt="Company brand setup" width="49%" /> <img src="docs/assets/screenshots/presentations/2-outline.png" alt="Editable outline" width="49%" />
+
+#### How to use it
+
+1. **Brand once.** Open **Presentations → Set up brand**: company name, logo (PNG/JPEG), main and accent colours, fonts and footer. Each save is a new version; existing decks keep theirs.
+2. **New presentation.** Pick a kind (weekly update, executive update, kickoff, quarterly review, launch, incident review, proposal, training), say what it is about, paste the facts and figures it may use, and optionally include a dmind map.
+3. **Approve the outline.** Draft it (written by your connected AI model, or from the template when none is connected) and edit every slide as plain fields. Numbers that are not in your sources are removed, never invented.
+4. **Build and review.** DayPilot lays out the slides, writes the PowerPoint, renders it and checks every slide (text fit, contrast, logo proportions, native charts and tables, slide count, evidence). Review the real rendered slides with notes and findings; lock slides you are happy with, rewrite one with AI, edit and rebuild; every change is a new revision.
+5. **Approve and download.** Approval binds the exact file. Download PowerPoint or PDF.
+6. **Every week.** **Make it weekly**, then **Prepare this week**: the same structure and wording for the new period, with last week's numbers cleared. Asking twice for the same week opens the same draft; nothing is sent automatically.
+
+Design and plan: [docs/presentations](docs/presentations/README.md) · build and feasibility notes: [implementation plan](docs/presentations/implementation-plan.md) · checks: `make presentations-e2e`, `node packages/presentation-engine/test/engine.test.mjs` · screenshots: `scripts/presentations_screenshots.sh`.
+
 ### dmind diagrams
 
 Open **Diagrams** to turn topics, brainstorms and text attachments into editable mind maps, flows or system graphs. Save revision history, export/share portable snapshots and prepare Claude Code/Codex briefs or fresh Matrix Designer proposals. The native file format is `.dmind`. See [the complete dmind development plan](docs/dmind-development-plan.md) for the batch plan (B0 to B10), the B0 verification record and acceptance gates. Run `make dmind-e2e` for the browser end-to-end test.
