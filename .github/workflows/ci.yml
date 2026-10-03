@@ -25,6 +25,15 @@ jobs:
           python-version: "3.11"
       - name: Sync dev environment
         run: uv sync --group dev
+      # Presentation tests build real PPTX files through the Node engine; without its dependencies
+      # every build answers "engine failure". (No LibreOffice here: render checks skip themselves.)
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install presentation engine dependencies
+        run: pnpm install --frozen-lockfile --filter @daypilot/presentation-engine
       - name: Ruff lint
         run: uv run ruff check services scripts tests
       - name: Pytest
