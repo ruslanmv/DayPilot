@@ -36,6 +36,76 @@
       "risk": "high",
       "write": true,
       "requires_approval": true
+    },
+    {
+      "name": "daypilot.presentations.list_brands",
+      "risk": "low",
+      "write": false,
+      "requires_approval": false,
+      "note": "read-only, workspace-scoped"
+    },
+    {
+      "name": "daypilot.presentations.list_decks",
+      "risk": "low",
+      "write": false,
+      "requires_approval": false,
+      "note": "read-only, workspace-scoped"
+    },
+    {
+      "name": "daypilot.presentations.get_deck",
+      "risk": "low",
+      "write": false,
+      "requires_approval": false,
+      "note": "read-only, workspace-scoped"
+    },
+    {
+      "name": "daypilot.presentations.write_talk_script",
+      "risk": "low",
+      "write": false,
+      "requires_approval": false,
+      "note": "read-only, workspace-scoped; returns a timed storyline, saves nothing"
+    },
+    {
+      "name": "daypilot.presentations.propose_outline",
+      "risk": "low",
+      "write": false,
+      "requires_approval": false,
+      "note": "read-only, workspace-scoped"
+    },
+    {
+      "name": "daypilot.presentations.create_deck",
+      "risk": "medium",
+      "write": true,
+      "requires_approval": false,
+      "note": "drafts only; approval, sharing and sending stay human actions"
+    },
+    {
+      "name": "daypilot.presentations.revise_deck",
+      "risk": "medium",
+      "write": true,
+      "requires_approval": false,
+      "note": "drafts only; approval, sharing and sending stay human actions"
+    },
+    {
+      "name": "daypilot.presentations.regenerate_slides",
+      "risk": "medium",
+      "write": true,
+      "requires_approval": false,
+      "note": "drafts only; approval, sharing and sending stay human actions"
+    },
+    {
+      "name": "daypilot.presentations.prepare_weekly",
+      "risk": "medium",
+      "write": true,
+      "requires_approval": false,
+      "note": "drafts only; approval, sharing and sending stay human actions"
+    },
+    {
+      "name": "daypilot.presentations.export_deck",
+      "risk": "low",
+      "write": false,
+      "requires_approval": false,
+      "note": "read-only, workspace-scoped"
     }
   ]
 }

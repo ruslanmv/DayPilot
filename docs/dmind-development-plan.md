@@ -2,7 +2,7 @@
 
 ## Product decision
 
-**dmind** is DayPilot's diagram tool. Its navigation entry is **Diagrams**. Use dmind in feature names, generated artifacts, APIs and documentation. The supplied Xmind material is a capability reference, not a product name or a promise of native file compatibility. Existing third-party format names such as `.xmind` remain accurate where needed.
+**dmind** is DayPilot's diagram tool. Its navigation entry is **Diagrams**. Use dmind in feature names, generated artifacts, APIs and documentation. The native file format is **`.dmind`** (see below). Other tools' formats are not targets: Xmind was a capability reference only, and the only planned use of third-party formats such as `.xmind` or OPML is an optional, import-only adapter (batch B10) that reports what it could not carry over.
 
 Goal: turn a topic, brainstorm, document or reference into a diagram that a person can inspect, edit, manage, export and share; use that graph to reason about flows and algorithms, then prepare a governed handoff to Matrix Designer, Claude Code or Codex.
 
@@ -22,7 +22,7 @@ This is additive. Existing calendar, tasks, projects, chat, documents, agents, e
 | Matrix compatibility | Shared dmind/v1 schema/fixture; bundle → graph; graph → newly designed and validated bundle; HTTP, MCP and CLI | Original bundle preserved separately; edited graph never inherits a previous approval |
 | Verification | Producer/consumer tests, malformed input/size limits, persistence/CAS/history, roles/workspaces, safe exports, 1000-node pure graph smoke | Existing suites run; unrelated baseline failures recorded honestly |
 
-These PRs are the first usable increment of the full plan. PDF/image/OCR/URL ingestion, native `.xmind`/OPML support, additional layouts, rich markers/media, hosted ACL sharing, collaborative editing, semantic AI graph refinement and comprehensive performance/accessibility certification are scheduled below. There is no claim of complete Xmind feature parity.
+B0 is the first usable increment of the full plan. PDF/image/OCR/URL ingestion, the `.dmind` file and bundle forms, additional layouts, rich markers/media, hosted ACL sharing, collaborative editing, semantic AI graph refinement and comprehensive performance/accessibility certification are scheduled in the batch plan below. There is no claim of feature parity with any other diagram tool.
 
 ## User journey and wizard design
 
@@ -69,7 +69,7 @@ Local outline generation is a deterministic parser, not an LLM. The initial rend
 - Matrix batches map to topic nodes with their original batch metadata. Dependencies map from prerequisite to dependent. The untouched original Design Bundle is preserved in metadata for separate export.
 - Unknown metadata is retained by import/save/export. Native-format information that cannot be represented in v1 must later be retained in an opaque format-specific sidecar and reported, never silently dropped.
 - Limits: 2 MB encoded UTF-8 JSON; 1–1000 nodes; 4000 edges; label 500 characters; notes 20000; source outline 100000. Over-limit inputs are rejected with an actionable error; they are not silently truncated into a different diagram.
-- Current workspace list returns the most recent 200 entries; history returns the most recent 100 snapshots. Cursor pagination is a Phase 2 task; snapshots beyond this window remain stored.
+- Current workspace list returns the most recent 200 entries; history returns the most recent 100 snapshots. Cursor pagination is a B2 task; snapshots beyond this window remain stored.
 
 ## API contracts
 
@@ -93,39 +93,73 @@ Workspace selection uses the existing `X-Workspace-Id` convention. Cookie sessio
 - Existing API-key protection wraps all new endpoints. MCP and CLI call the same core functions.
 - The UI downloads the **raw** `matrix.designer.bundle/v1` document for existing importers and offers its report separately. HTTP/MCP envelopes are not themselves Design Bundle files.
 
-## Phased development backlog
+## The `.dmind` file
 
-Estimates are planning ranges for two engineers plus part-time design/QA, not delivery commitments. Each phase is independently reviewable and deployable; later phases require acceptance evidence from earlier phases.
+| Item | Decision |
+| --- | --- |
+| Extension and MIME | `.dmind`, `application/vnd.dmind+json` |
+| Content (B1) | Plain UTF-8 JSON in the `dmind/v1` schema: readable, diff-friendly, git-friendly. B0 already exports the same JSON as "dmind JSON" (`<title>.dmind.json`). |
+| Container (B5) | When images or attachments arrive, `.dmind` may be a ZIP with `document.json`, `manifest.json` (hashes and sizes) and `assets/`. Readers detect the form from the first bytes: `{` is JSON, `PK` is ZIP. Both open and re-save as the right form; old files always open. |
+| Safety | ZIP limits on entry count, compressed and expanded size, path traversal and symlinks. Notes stay plain text; nothing is executed. |
+| Unknown data | Unknown metadata round-trips. Anything a reader cannot represent is kept and reported, never dropped. |
+| Opening a file | Always creates a new copy; it never overwrites a saved diagram. |
 
-| Phase | Estimate | Scope and deliverables | Release gate |
-| --- | --- | --- | --- |
-| 0 — Paired usable foundation | Delivered in these PRs | Contract, wizard, editor, revisions, exports, Matrix handoff, tests and this plan | Typecheck/build, contract tests and documented regression results |
-| 1 — Input intelligence | 2–3 weeks | Safe PDF/DOCX text extraction; OCR/images; approved document references; URL fetching with SSRF/private-network defenses, redirect/byte/time limits; source provenance and extraction preview | Corpus coverage, malformed-file tests, source cites on generated topics; provider/data disclosure before sending |
-| 2 — Reliable graph workspace | 2–3 weeks | IndexedDB multi-draft store with account/workspace isolation; autosave queue and retries; durable conflict copies; pagination; project association; search/tags; revision metadata/diffs | Offline/reconnect/multi-tab E2E tests; no lost edits; 200+ list and 100+ revision paging |
-| 3 — Layout and rich editing | 3–4 weeks | Radial mind map, tree, org chart, fishbone, grid; layout workers; multi-select; drag-reparent; branch validation; context menus; marker/theme palette; notes, safe links, images and attachments; synchronized outline editing | Keyboard and pointer parity; no branch cycles; importer metadata retained; responsive/touch acceptance |
-| 4 — Native interchange | 3–4 weeks | `.xmind` classic ZIP/XML and modern ZIP/JSON detection; OPML; import/export fidelity reports; attachment manifests; migration adapters; unsupported-field sidecars | Real fixture corpus from both format families; bounded ZIP/XML handling; reopened exports preserve supported topology/notes/media and report losses |
-| 5 — AI refinement and algorithm analysis | 3–4 weeks | Propose expand/explain/reorganize/refine patches against a base revision; semantic diff preview; explicit apply/reject; branching questions; algorithm inputs/outputs/invariants/complexity; reachability, dead ends, SCCs, dependency ordering, retries and tests | Patches never auto-apply; schema validated; source provenance retained; solver results separated from model suggestions |
-| 6 — Sharing and collaboration | 3–4 weeks | Workspace/member ACLs, read-only share links, expiration/revocation, export redaction preview, audit trail; comment threads; opt-in CRDT collaboration | Permission/revocation/tenant isolation tests; read-only cannot mutate; signed attachment URLs expire; no public sharing default |
-| 7 — Coder integration and production hardening | 2–3 weeks | Node-to-requirement IDs; matrix architecture/contracts/batch scope; approved bundle intake; adapter handoff to Claude Code/Codex; code-to-diagram trace links; performance/accessibility/security certification | Allowed-file and acceptance checks; human review before execution; provider outage/fallback tests; zero cross-feature regressions |
-| 8 — Optional presentation/product parity | separately scoped | Audio-to-map, drawing recognition, task/WBS/Gantt conversion, stickers, image generation, pitch/presentation export | Only after core graph/storage/interchange gates; each capability has an explicit privacy and cost review |
+## Simple usage
 
-Sequence: 1 and 2 can proceed together after Phase 0; Phase 3 precedes native export visual fidelity; Phase 5 needs reliable revisions; Phase 6 needs storage/ACL hardening; Phase 7 uses the complete governed contract. Total baseline effort is roughly 18–25 engineering weeks, with overlap possible; optional parity is excluded. Re-estimate after extraction and native-format spikes.
+1. Open **Diagrams** and choose **New diagram**.
+2. In the wizard type a topic (optionally an outline or an attached text file), pick Mind map, Flowchart or System, and review the preview.
+3. Edit the diagram, then **Save**.
+4. **Export** as dmind JSON (the `.dmind` file from B1), Markdown, Mermaid, SVG, read-only HTML or PDF (print the HTML).
+5. **Import a copy** accepts a dmind file or a Matrix Design Bundle; it always creates a new draft.
+6. **Generate Design Bundle** or the coding brief prepares a handoff. Nothing runs, and a separate review comes first.
 
-## Detailed build batches and ownership
+## Delivery batches
 
-| Batch | Owner | Allowed area | Depends on | Acceptance and validation |
+Each batch is independently reviewable and deployable. A batch starts only when the previous gate has evidence. Estimates are planning ranges for two engineers plus part-time design/QA, not commitments.
+
+| Batch | Estimate | Delivers | Touches | Gate |
 | --- | --- | --- | --- | --- |
-| D01 Contract | Integration engineer | Both dmind schema/validator/fixture directories | None | Same fixture validates in Python/TS; limits and semantic failures covered |
-| D02 Persistence | Backend engineer | DayPilot models, migration, diagrams router/tests | D01 | SQLite/Postgres migration works; CAS conflict and restore append tests; membership/role/CSRF checks |
-| D03 Wizard and shell | Frontend engineer + design | DayPilot diagrams UI, shell route/navigation | D01 | Topic/attachment/brainstorm modes; honest offline behavior; preview gate; desktop/mobile navigation |
-| D04 Editor and exports | Frontend engineer | dmind canvas/model/serializers/tests | D03 | Undo/redo, node/branch/link editing, collapse and safe complete exports |
-| D05 Matrix bridge | Integration engineer | Matrix dmind/service/MCP/CLI and DayPilot diagrams bridge | D01 | Exact schema, batch metadata/dependency preservation, new verdict and digest; old routes unchanged |
-| D06 Extraction | Backend + integration | New input adapters, provenance, request limits | D03 | Preview and provenance; no automatic URL fetch or unbounded parsing |
-| D07 Refinement | Integration + frontend | Patch protocol, editor diff/review | D02,D05 | Apply against expected revision; reject stale/invalid patch; previous graph retained |
-| D08 Rich layouts/interchange | Frontend + integration | Layout workers, format adapters, safe media | D04,D06 | Fixtures, fidelity reports, performance profile and keyboard interaction |
-| D09 Share/team | Backend + frontend | Diagram ACL/share resources and UI | D02,D08 | Grant/revoke/expire/read-only isolation; explicit publish action |
-| D10 Coder workflow | Integration engineer | Existing design/coding adapters with additive dmind references | D05,D07 | No auto-run; review status and file scope respected; graph-source hashes retained |
-| D11 Release QA | QA + maintainers | Tests/CI/docs, no unrelated production logic | All selected release batches | Regression, security, accessibility, performance, deployment/rollback evidence |
+| **B0 Foundation** | delivered (merged, then hardened on `claude/dmind-b0-foundation`) | Contract, wizard, SVG editor, undo/redo, revisions, exports, Matrix bridge | `diagrams/`, `dmind-contract`, migration 0024, `/v1/diagrams`, `/design/diagrams*` | Typecheck and build pass, contract tests pass, baseline recorded (below) |
+| **B1 `.dmind` file** | 1 week | Export and open `.dmind` (JSON form), drag-and-drop, schema-version check, an "unknown fields kept" notice | `diagrams/` serializers, shared fixture | Lossless round trip including unknown metadata; oversize and malformed files rejected with clear errors |
+| **B2 Reliable workspace** | 2-3 weeks | IndexedDB drafts per account and workspace, autosave with retry, conflict copies, cursor pagination, search/tags, project link, revision diffs | `diagrams/`, router | Offline, reconnect and multi-tab tests lose no edits; 200+ diagrams and 100+ revisions page correctly; drafts cleared on sign-out where configured |
+| **B3 Inputs** | 2-3 weeks | PDF/DOCX text, OCR, URL fetch with SSRF defenses, provenance on topics, preview before use | New input adapters only | Corpus and malformed-file tests; nothing fetched or sent without disclosure |
+| **B4 Layouts and rich editing** | 3-4 weeks | Radial, tree, org chart, fishbone and grid layouts; multi-select, drag-reparent, context menus, markers and themes, safe links, synchronized outline | `diagrams/` | Keyboard and pointer parity; no branch cycles; 1000-node benchmark recorded |
+| **B5 `.dmind` bundle** | 2 weeks | ZIP container, images and attachments, bounded extraction | Serializers, asset store | ZIP-bomb, traversal and symlink tests; JSON and ZIP forms reopen identically |
+| **B6 AI refinement and analysis** | 3-4 weeks | Patch proposals with visible diff and explicit apply; reachability, dead ends, SCCs, dependency order, retry and termination checks | Patch protocol, editor review, Matrix bridge | Patches apply only against the expected revision; stale or invalid ones rejected; solver results labeled apart from model suggestions |
+| **B7 Sharing** | 3-4 weeks | Workspace ACLs, read-only expiring links, redaction preview, audit trail, comments | New ACL resources | Revoke, expiry and tenant isolation tests; read-only cannot mutate; nothing shared by default |
+| **B8 Coder handoff** | 2-3 weeks | Node-to-requirement IDs, bundle intake, adapter to Claude Code or Codex, trace links | Existing design adapters, additively | Allowed-file and acceptance checks; human review before execution |
+| **B9 Hardening** | 2 weeks | Performance, WCAG 2.2 AA, security and cross-browser certification, rollback evidence | Tests, CI and docs only | Documented hardware benchmarks, axe plus manual review, zero regressions in existing suites |
+| **B10 Optional import** | 2 weeks | Import-only third-party adapter (Xmind, OPML) with a fidelity report | Adapter only | Real fixtures reopen with topology and notes intact; losses reported; ZIP and XML bounded |
+
+Order: B1 and B2 start after B0 and B3 can run alongside B2. B4 follows, then B5 (it needs B4's media fields), then B6, B7, B8 and B9. B10 is last and optional.
+
+Rules for every batch: additive only (new files and routes; existing-file edits are one-line hooks); the same checks each time (typecheck, build, existing suites against the recorded baseline, new tests); no hidden actions (diagrams never create tasks, run code, send messages or publish links); rollback by reverting code, since data stays and migration downgrades are never run on user data.
+
+## B0 verification record
+
+B0 was first merged as DayPilot PR 17 and Matrix Designer PR 3. The hardening branch `claude/dmind-b0-foundation` (both repositories) audited that work against the B0 acceptance table, recorded a clean baseline and closed the gaps below. Measured on 2026-10-02.
+
+**Baseline before any change (merged heads):** DayPilot 700 passed, ruff clean, `pnpm -r typecheck/build/lint` clean, `node tests/ui/dmind.mjs` passed; Matrix Designer 58 passed, ruff clean. No pre-existing failures.
+
+**After hardening:** DayPilot 790 passed (also green on PostgreSQL 16 for the dmind suites), ruff clean, typecheck/build/lint clean, 135 pure-graph checks; Matrix Designer 147 passed, ruff clean; browser E2E 17 of 17 including a live Matrix Designer, an axe scan and timings.
+
+Defects found and fixed:
+
+| Finding | Fix |
+| --- | --- |
+| An ordinary save of an archived diagram silently unarchived it | The `archived` flag is optional on `PUT`; omitted keeps the stored state. The editor sends the current state. |
+| The editor's validator and outline parser disagreed with the Python validators and JSON Schema: a `null` position was accepted, limits counted UTF-16 units instead of characters, tabs and lone carriage returns parsed differently | Aligned; a shared corpus now runs against every validator. |
+| Steps added to a flowchart became `branch` links, so decisions and loops were not seen | Flowcharts grow along `flow` links. |
+| "Ask Matrix Designer" stayed checked for later wizard runs | The provider opt-in resets for each new diagram. |
+| A provider-policy refusal from Matrix Designer was shown as a generic rejection | The designer's own reason (bounded plain text) is returned; a refused API key is reported as such. |
+| Every pointer move re-rendered all topics and links (drag at 1000 topics was about 59 ms per move) | Memoised views and derived data: about 20 ms per move; edit p95 84 ms to 42 ms. |
+| The read-only HTML snapshot relied only on containing no scripts | It also carries a `default-src 'none'` Content-Security-Policy. |
+
+New verification: a shared contract corpus (`contract-cases.json`, 87 cases) run by the Python validator in both repositories, the TypeScript editor and, in Matrix Designer, the JSON Schema; pinned digests of schema, fixture and corpus in both repositories so drift fails a test; migration 0024 proven additive (exactly two new tables, no existing table altered, existing rows survive, matches the ORM models, downgrade and re-upgrade clean) and run on PostgreSQL 16; real concurrent saves (8 writers, one winner, no duplicate snapshot); atomic rollback of a failed snapshot write; the documented 100-snapshot and 200-diagram windows; a browser E2E (`make dmind-e2e`) covering the wizard preview gate, editing, undo/redo, keyboard, drag/pan/zoom, save/reopen/restore, stale-tab conflict, archive, draft recovery, every export, imports, honest provider failure, hostile text and phone width.
+
+Measured performance (headless Chromium on a 4-vCPU Xeon 2.8 GHz sandbox with 15 GB RAM and no GPU, so treat as indicative, not a promise): 1000 topics open in about 175 ms; edit p50 38 ms and p95 45 ms; drag about 28 ms per move including automation overhead. The 45 fps pan/zoom target at 1000 topics is not certified; B9 measures it on documented hardware, and virtualization or canvas rendering is introduced only if that evidence requires it.
+
+Known limitations carried forward: the auto-layout is a simple column layout (B4 adds tree and radial layouts); history and saved snapshots are windowed to the newest 100 (B2 adds cursor paging); SVG export shows the current view while Markdown, JSON and HTML always include folded topics; drafts are cached unencrypted in the browser (B2 adds the sign-out policy).
 
 ## Verification strategy and measurable gates
 
@@ -134,7 +168,7 @@ Sequence: 1 and 2 can proceed together after Phase 0; Phase 3 precedes native ex
 - **Interchange:** shared golden graph in both repos; Matrix bundle batch IDs/acceptance/allowed files/dependencies retained; original download distinct from newly proposed bundle; verdict and digest recomputed; never copy an approval from diagram metadata.
 - **Exports:** hostile labels/notes/conditions escaped in SVG/HTML/Mermaid; no executable scripts, remote resources or HTML notes; complete graph retained when collapsed; coding brief marks source as untrusted.
 - **UI:** wizard back/next/review; file validation; restore/undo/redo; pointer drag/pan/zoom; keyboard outline; narrow layout; unavailable gateway/designer clearly reported; saved-state conflict flow.
-- **Performance:** synthetic balanced/deep/feedback graphs at 100/500/1000 nodes, measured on documented hardware/browser. Target p95 edit <100 ms and steady pan/zoom >=45fps at 1000 nodes; measure before promising. Target import <2s for bounded native files. Implement offscreen culling/workers if evidence requires it.
+- **Performance:** synthetic balanced/deep/feedback graphs at 100/500/1000 nodes, measured on documented hardware/browser. Target p95 edit <100 ms and steady pan/zoom >=45fps at 1000 nodes; measure before promising (B0 numbers are recorded above). Target import <2s for bounded native files. Implement offscreen culling/workers if evidence requires it.
 - **Accessibility:** WCAG 2.2 AA review, axe, focus order/visible focus, keyboard node creation/selection/deletion/folding, screen-reader outline and status, reduced motion, light/dark contrast; Chrome/Firefox/WebKit and touch testing.
 - **Regression:** existing suites on both repositories, TypeScript workspace typechecks/builds and existing UI smoke. Record pre-existing failures with a clean baseline comparison instead of changing unrelated features.
 
@@ -142,7 +176,7 @@ Sequence: 1 and 2 can proceed together after Phase 0; Phase 3 precedes native ex
 
 Treat all attachments, labels, links, notes and model output as untrusted content. Plain text is escaped; no code execution, arbitrary HTML or remote URL fetch is introduced. Bound encoded JSON, source size and graph cardinality. Server-side upload parsers later need compressed/uncompressed ZIP limits, entry count, path traversal protection and XML entity rejection. No arbitrary filesystem paths from imported documents.
 
-Browser draft recovery is scoped to account/workspace and stores local unencrypted work; shared-machine deployments should disable it or clear drafts at sign-out as part of Phase 2. Draft history is bounded to 50 actions. Explicit save failures leave the draft/export workflow available.
+Browser draft recovery is scoped to account/workspace and stores local unencrypted work; shared-machine deployments should disable it or clear drafts at sign-out as part of B2. Draft history is bounded to 50 actions. Explicit save failures leave the draft/export workflow available.
 
 Provider-backed generation and handoff send the selected text/graph through the existing configured connection. The wizard states this before use. Provider credentials stay on the server. AI output remains a proposal; generation is not correctness verification or permission to execute.
 
@@ -150,4 +184,12 @@ Migration creates only two new tables. Existing data is untouched. Deploy Matrix
 
 ## Definition of done
 
-For each phase: implemented user journey, documented API/schema, meaningful automated checks, reviewer-visible limitations, appropriate UI/accessibility/performance evidence, migration/rollback notes, no unexpected writes to existing tasks or code, and reviewable pull request. Phase 0 is usable independently; full native/interchange/collaboration parity is complete only when its later release gates pass.
+For each batch: implemented user journey, documented API/schema, meaningful automated checks, reviewer-visible limitations, appropriate UI/accessibility/performance evidence, migration/rollback notes, no unexpected writes to existing tasks or code, and reviewable pull request. B0 is usable independently; the later capabilities are complete only when their release gates pass.
+
+## Delivery notes (branch `claude/dmind-batches`)
+
+- **B5** ships the strict ZIP reader/writer, attachment model and shared archive corpus in both repos. Server-side asset storage (migration 0026) is not built: bundles are a client-side file format, and attachment bytes live in the file.
+- **B6** adds `analysis.ts` (SCCs, dependency order, loops without exit, unreachable and orphan topics; every result labelled `origin: "solver"`) and `patch.ts` (`dmind-patch/v1`: at most 200 ops, bound to the document by canonical SHA-256, all-or-nothing, shown as a diff and applied only on request). Matrix Designer has the Python port (`dmind_patch.py`); both run `patch-cases.json`, pinned by digest. The hash matches across languages for ASCII keys (all contract field names and ids). Producing proposals from a model is left to the caller; the editor accepts a pasted proposal in "Check and refine".
+- **B7** adds read-only expiring share links (`diagram_shares.py`, migration 0026, off unless `DAYPILOT_DMIND_SHARING=true`): pinned to one revision, only the token hash is stored, redaction preview endpoint, notes opt-in and metadata never shared, revoke, 20 active links per diagram, uniform 404 for unknown/expired/revoked, strict-CSP HTML view, audit events (created/viewed/revoked, never the token), tenant isolation tests. Not built: per-diagram ACLs, comments, an editor UI for managing links, and rate limiting of the public endpoint (put it behind the gateway's edge limits).
+- **B8** adds `handoff.ts` / `dmind_handoff.py` (`dmind-handoff/v1`): topics marked as requirements get stable ids (`REQ-` + FNV-1a of the node id), an allowed-file scope (relative paths, `*`/`**` only; traversal, absolute paths, `.git` and `.env*` refused) and acceptance checks stored in node metadata; `checkChanges` traces changed files to requirement ids and reports out-of-scope and unsafe paths; `mayProceed` needs a person's review flag; the brief marks all topic text untrusted. Both languages run `handoff-cases.json`, pinned by digest. No agent is invoked and nothing executes; an editor panel to mark requirements is not built yet (scope is set via `setScope` or metadata).
+- **B10** adds import-only OPML and XMind (Zen `content.json`) adapters (`importers.ts`), wired into the open/attach flow: DOCTYPE/entities refused, ZIP bounds reused, 1000-topic / depth-100 / text-length limits, relationships map to relationship links, and a fidelity report lists what was not carried over (markers, labels, links, images, styles, floating topics, summaries, extra sheets). Older XMind 8 (`content.xml`) is refused with instructions. Nothing writes those formats.

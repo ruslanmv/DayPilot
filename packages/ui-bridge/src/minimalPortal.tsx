@@ -1,4 +1,6 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { api } from './apiClient'
+import { clearAllLocalDrafts } from './diagrams/draftStore'
 import type { DayPilotAgent, DayPilotDocument, DayPilotDocumentSource, DayPilotMessage, DayPilotProject, DayPilotTask } from '@daypilot/shared-types'
 import { MinutePlanCalendar } from './calendar/MinutePlanCalendar'
 import { isDemoMode, seedAgents, seedDocumentSources, seedDocuments, seedMessages, seedProjects, seedTasks } from './demoData'
@@ -37,6 +39,7 @@ import { useHomeDay } from './home/homeLive'
 import type { SettingsSectionId } from './settings/settingsData'
 
 const DiagramsWorkspace = React.lazy(() => import('./diagrams/DiagramsWorkspace').then(module => ({ default: module.DiagramsWorkspace })))
+const PresentationsWorkspace = React.lazy(() => import('./presentations/PresentationsWorkspace').then(module => ({ default: module.PresentationsWorkspace })))
 
 type NavItem = { id: PortalView; label: string; icon: NavIconName }
 const NAV_BASE: NavItem[] = [
@@ -55,14 +58,31 @@ const NAV_BASE: NavItem[] = [
 // it keeps its place when Email is off rather than sliding around.
 const EMAIL_NAV: NavItem = { id: 'email', label: 'Email', icon: 'email' }
 const SLACK_NAV: NavItem = { id: 'slack', label: 'Slack', icon: 'slack' }
-function navViews(emailEnabled: boolean, slackEnabled: boolean = false): NavItem[] {
+// Presentations is feature-flagged on the server; it is appended after Diagrams so no existing
+// item moves when it appears.
+const PRESENTATIONS_NAV: NavItem = { id: 'presentations', label: 'Presentations', icon: 'presentations' }
+function navViews(emailEnabled: boolean, slackEnabled: boolean = false, presentationsEnabled: boolean = false): NavItem[] {
   const optional = [
     ...(emailEnabled ? [EMAIL_NAV] : []),
     ...(slackEnabled ? [SLACK_NAV] : []),
   ]
-  if (optional.length === 0) return NAV_BASE
+  const tail = presentationsEnabled ? [PRESENTATIONS_NAV] : []
+  if (optional.length === 0) return [...NAV_BASE, ...tail]
   const docsIndex = NAV_BASE.findIndex((n) => n.id === 'documents')
-  return [...NAV_BASE.slice(0, docsIndex), ...optional, ...NAV_BASE.slice(docsIndex)]
+  return [...NAV_BASE.slice(0, docsIndex), ...optional, ...NAV_BASE.slice(docsIndex), ...tail]
+}
+
+/** Whether the server has Presentations turned on (asked once; off on any error). */
+function usePresentationsEnabled(): boolean {
+  const [on, setOn] = React.useState(false)
+  React.useEffect(() => {
+    let live = true
+    void api.get<{ enabled: boolean }>('/v1/presentations/capabilities').then((r) => live && setOn(r.ok && r.data.enabled === true))
+    return () => {
+      live = false
+    }
+  }, [])
+  return on
 }
 
 // PortalView + the hash router live in ./shell/route (Batch A3).
@@ -166,7 +186,7 @@ function createAiTask(input: string): DayPilotTask {
   }
 }
 
-type NavIconName = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'email' | 'slack' | 'documents' | 'agents' | 'diagrams' | 'settings'
+type NavIconName = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'email' | 'slack' | 'documents' | 'agents' | 'diagrams' | 'presentations' | 'settings'
 
 function NavIcon({ name }: { name: NavIconName }) {
   const p: Record<NavIconName, React.ReactNode> = {
@@ -180,6 +200,7 @@ function NavIcon({ name }: { name: NavIconName }) {
     // colour and active state like every other icon here.
     slack: <><path d="M6.5 14.5h-2a2 2 0 1 0 2 2Z" /><path d="M9.5 14.5a2 2 0 1 1 4 0v5a2 2 0 1 1-4 0Z" /><path d="M9.5 6.5v2a2 2 0 1 1-2-2Z" /><path d="M9.5 9.5a2 2 0 1 1 0 4h-5a2 2 0 1 1 0-4Z" /><path d="M17.5 9.5h2a2 2 0 1 0-2-2Z" /><path d="M14.5 9.5a2 2 0 1 1-4 0v-5a2 2 0 1 1 4 0Z" /><path d="M14.5 17.5v-2a2 2 0 1 1 2 2Z" /><path d="M14.5 14.5a2 2 0 1 1 0-4h5a2 2 0 1 1 0 4Z" /></>,
     diagrams: <><rect x="3" y="8" width="6" height="6" rx="1" /><rect x="15" y="3" width="6" height="6" rx="1" /><rect x="15" y="15" width="6" height="6" rx="1" /><path d="M9 11h3V6h3M12 11v7h3" /></>,
+    presentations: <><rect x="3" y="4" width="18" height="12" rx="1.5" /><path d="M12 16v4M8 20h8M7 12l3-3 2 2 4-4" /></>,
     documents: <><path d="M6 3h7l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M13 3v5h5M8.5 13h7M8.5 16.5h7" /></>,
     agents: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.5 3.1-5.5 7-5.5s7 2 7 5.5" /></>,
     settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 13.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.1a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H4a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 2.9-1.2V4a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9Z" /></>,
@@ -578,12 +599,15 @@ function DetailDrawer({ selected, documents, onClose }: { selected?: DrawerItem;
   )
 }
 
-export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackEnabled = false, onSignOut, user }: SpaceBridgeShellProps) {
+export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackEnabled = false, onSignOut: onSignOutRaw, user }: SpaceBridgeShellProps) {
+  // Signing out also clears local dmind drafts, so nothing is left on a shared machine.
+  const onSignOut = onSignOutRaw && (() => { void clearAllLocalDrafts(); onSignOutRaw() })
   const isMobile = useIsMobile()
   // Apply the persisted theme (dark by default) so the shell is consistent even
   // when the host app didn't call initTheme() itself.
   useEffect(() => { initTheme() }, [])
-  const NAV_VIEWS = navViews(emailEnabled, slackEnabled)
+  const presentationsEnabled = usePresentationsEnabled()
+  const NAV_VIEWS = navViews(emailEnabled, slackEnabled, presentationsEnabled)
   // Deep-linkable hash routing (Batch A3). `setView` keeps the old call sites
   // working; navigating also updates the URL and browser history.
   const { route, navigate } = useRoute()
@@ -755,7 +779,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackE
                 chip and the view's own controls belong on one row there, and a
                 second generic title above it just repeats the nav item you
                 already clicked. */}
-            {view !== 'calendar' && view !== 'slack' && view !== 'diagrams' && (
+            {view !== 'calendar' && view !== 'slack' && view !== 'diagrams' && view !== 'presentations' && (
               <header className="dp-topbar">
                 <div>
                   <h2>{view === 'planning' ? 'Day Planner' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : view === 'email' ? 'Email' : view === 'standup' ? 'Daily Standup' : 'Agents'}</h2>
@@ -787,6 +811,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackE
               {view === 'slack' && <SlackWorkspace onOpenSettings={() => setSettingsSection('slack')} />}
               {view === 'standup' && <StandupWorkspace />}
               {view === 'diagrams' && <React.Suspense fallback={<p role="status">Loading dmind…</p>}><DiagramsWorkspace accountKey={user?.email || 'local'} /></React.Suspense>}
+              {view === 'presentations' && <React.Suspense fallback={<p role="status">Loading presentations…</p>}><PresentationsWorkspace /></React.Suspense>}
             </div>
           </>
         )}
@@ -857,6 +882,7 @@ const MOBILE_TITLES: Record<PortalView, string> = {
   email: 'Email',
   documents: 'Documents',
   diagrams: 'Diagrams',
+  presentations: 'Presentations',
   agents: 'Agents',
   slack: 'Slack',
   standup: 'Standup',
@@ -870,7 +896,8 @@ function MobilePortal({ emailEnabled, slackEnabled, user, onSignOut }: {
   user?: { displayName?: string | null; email?: string | null; role?: string | null } | null
   onSignOut?: () => void
 }) {
-  const NAV = navViews(emailEnabled, slackEnabled)
+  const presentationsEnabled = usePresentationsEnabled()
+  const NAV = navViews(emailEnabled, slackEnabled, presentationsEnabled)
   // Deep-linkable hash routing (Batch A3); shared with the desktop shell.
   const { route, navigate } = useRoute()
   const view = route.view
@@ -966,6 +993,7 @@ function MobilePortal({ emailEnabled, slackEnabled, user, onSignOut }: {
         {view === 'slack' && <SlackWorkspace onOpenSettings={() => setSettingsSection('slack')} />}
         {view === 'standup' && <StandupWorkspace />}
               {view === 'diagrams' && <React.Suspense fallback={<p role="status">Loading dmind…</p>}><DiagramsWorkspace accountKey={user?.email || 'local'} /></React.Suspense>}
+              {view === 'presentations' && <React.Suspense fallback={<p role="status">Loading presentations…</p>}><PresentationsWorkspace /></React.Suspense>}
       </main>
 
       {/* Off-canvas navigation drawer */}

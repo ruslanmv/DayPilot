@@ -231,3 +231,211 @@
   --dp-surface: #fff;
   --dmind-border: #cbd5e1;
 }
+
+.dmind-dropping {
+  outline: 2px dashed #818cf8;
+  outline-offset: 6px;
+  border-radius: 12px;
+}
+
+.dmind-library h4 {
+  margin: 1rem 0 0.2rem;
+}
+.dmind-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.dmind-tags button {
+  width: auto;
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+}
+.dmind-draft {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.3rem;
+  align-items: start;
+}
+.dmind-draft button:last-child {
+  width: auto;
+}
+.dmind-rev {
+  margin: 0.4rem 0;
+  font-size: 0.85rem;
+}
+.dmind-rev span {
+  display: block;
+  opacity: 0.8;
+}
+.dmind-meta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.dmind-meta label {
+  flex: 1 1 200px;
+}
+
+.dmind-sources {
+  border-top: 1px solid var(--dmind-border);
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+}
+.dmind-hint {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+.dmind-error {
+  color: #fca5a5;
+  opacity: 1;
+}
+.dmind-extraction {
+  border: 1px solid var(--dmind-border);
+  border-radius: 10px;
+  padding: 0.6rem;
+  margin: 0.6rem 0;
+}
+.dmind-extraction textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}
+.dmind-sources li button {
+  display: inline-block;
+  width: auto;
+  margin-left: 0.5rem;
+}
+
+.dmind-canvas rect.dmind-accent {
+  stroke: none;
+}
+.dmind-canvas rect.is-primary {
+  stroke-width: 4;
+}
+.dmind-canvas text.dmind-glyphs {
+  font-size: 13px;
+  opacity: 0.9;
+}
+.dmind-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 200px;
+  padding: 0.3rem;
+  border: 1px solid var(--dmind-border);
+  border-radius: 10px;
+  background: var(--dp-surface, #172033);
+  box-shadow: 0 10px 30px #0008;
+}
+.dmind .dmind-menu button {
+  display: block;
+  width: 100%;
+  margin: 0;
+  text-align: left;
+  border: 0;
+  border-radius: 6px;
+}
+.dmind .dmind-menu button[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+.dmind .dmind-menu button:focus-visible,
+.dmind .dmind-menu button:hover {
+  background: #4f46e544;
+}
+.dmind-outline ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0;
+  max-height: 320px;
+  overflow: auto;
+}
+.dmind-outline li {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0.15rem 0;
+}
+.dmind-outline li input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.3rem 0.45rem;
+}
+.dmind-outline .dmind-fold {
+  width: 1.4rem;
+  flex: 0 0 1.4rem;
+  padding: 0;
+  text-align: center;
+  background: none;
+  border: 0;
+}
+.dmind-rowtools {
+  display: inline-flex;
+  gap: 0.15rem;
+}
+.dmind .dmind-rowtools button {
+  padding: 0.15rem 0.4rem;
+  min-width: 1.8rem;
+}
+.dmind-swatches,
+.dmind-markers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.4rem 0;
+}
+.dmind .dmind-swatches button,
+.dmind .dmind-markers button {
+  display: inline-block;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  text-align: center;
+}
+.dmind .dmind-swatches button[aria-pressed='true'],
+.dmind .dmind-markers button[aria-pressed='true'] {
+  outline: 2px solid #a5b4fc;
+  outline-offset: 2px;
+}
+.dmind-keys ul {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  padding-left: 1.1rem;
+}
+
+.dmind-ai { margin: 0.75rem 0; padding: 0.75rem; border: 1px solid var(--dp-border, #2a3347); border-radius: 10px }
+.dmind-ai h4 { margin: 0 0 0.5rem }
+.dmind-ai-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center }
+.dmind-ai-translate { display: inline-flex; gap: 0.3rem }
+.dmind-ai-translate input { width: 8rem }
+.dmind-ai-note { opacity: 0.8; margin: 0.4rem 0 }
+.dmind-ai-log { list-style: none; padding: 0; margin: 0.5rem 0; max-height: 9rem; overflow: auto }
+.dmind-ai-log li { padding: 0.15rem 0 }
+.dmind-ai-log li[data-role='user'] { font-weight: 600 }
+.dmind-ai form { display: flex; gap: 0.4rem; margin-top: 0.5rem }
+.dmind-ai form input { flex: 1 }
+.dmind-ai-proposal { margin: 0.5rem 0; padding: 0.5rem; border: 1px dashed var(--dp-border, #2a3347); border-radius: 8px }
+
+.dmind-quick { display: grid; gap: 0.6rem; margin: 0.75rem 0; padding: 0.75rem; border: 1px solid var(--dp-border, #2a3347); border-radius: 10px }
+.dmind-quick label { display: grid; gap: 0.25rem }
+.dmind-quick-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap }
+
+.dmind-tasks-body { display: grid; gap: 0.6rem; padding-top: 0.5rem }
+.dmind-tasks-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end }
+.dmind-task-edit { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: end; border: 1px solid var(--dp-border, #2a3347); border-radius: 8px }
+.dmind-task-edit label { display: grid; gap: 0.2rem }
+.dmind-gantt { overflow-x: auto; max-width: 100% }
+.dmind-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+
+.dmind-present { position: fixed; inset: 0; z-index: 1000; display: grid; grid-template-rows: 1fr auto; background: #0b1020; color: #f2f5ff; outline: none }
+.dmind-present-slide { padding: 6vh 8vw; overflow: auto }
+.dmind-present-slide h1 { font-size: clamp(2rem, 5vw, 3.5rem); margin: 0 0 1rem }
+.dmind-present-slide ul { list-style: disc; font-size: clamp(1.1rem, 2.4vw, 1.9rem); line-height: 1.6 }
+.dmind-present-sub, .dmind-present-notes { opacity: 0.75; font-size: 1.1rem; white-space: pre-wrap }
+.dmind-present-bar { display: flex; gap: 0.75rem; align-items: center; justify-content: center; padding: 0.75rem; border-top: 1px solid #2a3347 }
+
+/* WCAG 2.2 target size: the stacked disclosure headers need their own 24px rows. */
+.dmind-tasks > summary, .dmind-refine > summary { display: list-item; min-height: 24px; padding: 0.35rem 0; cursor: pointer }

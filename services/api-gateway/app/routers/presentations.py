@@ -1,0 +1,1034 @@
+"""Presentations: company brand kits, decks with immutable revisions, actual-file review, weekly series.
+
+Off unless DAYPILOT_PRESENTATIONS=true (only /capabilities answers when off). Workspace membership
+and roles come from the same checks as diagrams; every lookup is scoped to the caller's workspace,
+and ids from the browser are references, never authority.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi.responses import Response
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from daypilot_knowledge.db.models import (
+    PresentationArtifact,
+    PresentationAsset,
+    PresentationBrandKit,
+    PresentationCompany,
+    PresentationDeck,
+    PresentationOccurrence,
+    PresentationRevision,
+    PresentationRun,
+    PresentationSeries,
+    PresentationTemplate,
+)
+
+from .. import ai_credits as credits
+from ..db import get_session
+from ..presentations import ai, brandkit, engine, genres, images, render, sandbox, scheduler, store, svg, talk, template_import, weekly, worker
+from ..rbac import ROLE_RANK
+from .diagrams import access, access_role
+
+router = APIRouter(prefix="/v1/presentations", tags=["presentations"])
+
+
+def enabled() -> bool:
+    return os.getenv("DAYPILOT_PRESENTATIONS", "false").lower() == "true"
+
+
+def on() -> None:
+    if not enabled():
+        raise HTTPException(404, "Presentations are not enabled. An administrator can set DAYPILOT_PRESENTATIONS=true.")
+
+
+def problem(exc: engine.EngineError) -> HTTPException:
+    if exc.internal:
+        return HTTPException(503, str(exc))
+    return HTTPException(422, {"message": str(exc), "problems": exc.problems[:20]})
+
+
+# ----------------------------------------------------------------------------- lookups (scoped)
+
+
+def company(session: Session, workspace: str, company_id: str) -> PresentationCompany:
+    row = session.get(PresentationCompany, company_id)
+    if row is None or row.workspace_id != workspace:
+        raise HTTPException(404, "company not found")
+    return row
+
+
+def deck_of(session: Session, workspace: str, deck_id: str) -> PresentationDeck:
+    row = session.get(PresentationDeck, deck_id)
+    if row is None or row.workspace_id != workspace:
+        raise HTTPException(404, "presentation not found")
+    return row
+
+
+def kit_of(session: Session, company_id: str, version: int | None) -> PresentationBrandKit:
+    if version is None:
+        raise HTTPException(409, "This company has no active brand kit yet. Create one first.")
+    row = session.execute(select(PresentationBrandKit).where(PresentationBrandKit.company_id == company_id, PresentationBrandKit.version == version)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(404, "brand kit version not found")
+    return row
+
+
+def canonical_sha(value: Any) -> str:
+    import json
+
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+# ----------------------------------------------------------------------------- capabilities
+
+
+@router.get("/capabilities")
+def capabilities() -> dict[str, Any]:
+    return {
+        "enabled": enabled(),
+        "engine": engine.available(),
+        "render": render.capabilities(),
+        "genres": [{"id": k, "name": v} for k, v in genres.GENRES.items()],
+        "slideTypes": ["cover", "section", "agenda", "statement", "bullets", "kpis", "chart", "table", "comparison", "timeline", "diagram", "decision", "quote", "closing"],
+        "fonts": brandkit.SAFE_FONTS,
+        "expert": {"enabled": expert_enabled(), **(sandbox.available() if expert_enabled() else {"ready": False})},
+    }
+
+
+def expert_enabled() -> bool:
+    return os.getenv("DAYPILOT_PRESENTATIONS_EXPERT", "false").lower() == "true"
+
+
+# ----------------------------------------------------------------------------- companies and brand kits
+
+
+class CompanyIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+
+
+def company_out(session: Session, c: PresentationCompany) -> dict[str, Any]:
+    versions = session.execute(select(func.count()).select_from(PresentationBrandKit).where(PresentationBrandKit.company_id == c.id)).scalar_one()
+    active = None
+    if c.active_brand_version:
+        k = kit_of(session, c.id, c.active_brand_version)
+        active = {"version": k.version, "sha256": k.sha256, "kit": k.kit_json, "warnings": k.warnings_json}
+    return {"id": c.id, "name": c.name, "activeBrandVersion": c.active_brand_version, "brandVersions": versions, "activeBrand": active}
+
+
+@router.post("/companies", status_code=201)
+def create_company(body: CompanyIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    c = PresentationCompany(workspace_id=workspace, name=" ".join(body.name.split()))
+    session.add(c)
+    session.flush()
+    return company_out(session, c)
+
+
+@router.get("/companies")
+def list_companies(workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    rows = session.execute(select(PresentationCompany).where(PresentationCompany.workspace_id == workspace).order_by(PresentationCompany.created_at)).scalars()
+    return {"items": [company_out(session, c) for c in rows]}
+
+
+def store_asset(session: Session, workspace: str, company_id: str, data: bytes, kind: str, w: int, h: int, filename: str, source: str | None = None) -> PresentationAsset:
+    digest = hashlib.sha256(data).hexdigest()
+    existing = session.execute(select(PresentationAsset).where(PresentationAsset.company_id == company_id, PresentationAsset.sha256 == digest)).scalar_one_or_none()
+    if existing is None:
+        existing = PresentationAsset(workspace_id=workspace, company_id=company_id, sha256=digest, media_type=kind, width=w, height=h, byte_size=len(data),
+                                     filename=re.sub(r"[^\w.\- ]", "_", filename or "logo")[:200], data=data, source_asset_id=source)
+        session.add(existing)
+        session.flush()
+    return existing
+
+
+def asset_from_bytes(session: Session, workspace: str, company_id: str, data: bytes, filename: str) -> str:
+    """Store an image (sanitising and rendering SVG). Returns the id a brand kit may use (PNG/JPEG)."""
+    if images.is_svg(data):
+        try:
+            clean, sw, sh = svg.sanitize(data)
+            png = svg.rasterize(clean, sw, sh)
+            kind, w, h = images.inspect(png)
+        except (svg.SvgError, images.ImageError) as exc:
+            raise HTTPException(422, str(exc)) from exc
+        original = store_asset(session, workspace, company_id, clean, "image/svg+xml", round(sw), round(sh), filename)
+        return store_asset(session, workspace, company_id, png, kind, w, h, filename + ".png", source=original.id).id
+    try:
+        kind, w, h = images.inspect(data)
+    except images.ImageError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return store_asset(session, workspace, company_id, data, kind, w, h, filename).id
+
+
+@router.post("/companies/{company_id}/assets", status_code=201)
+async def upload_asset(company_id: str, file: UploadFile = File(...), workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """PNG/JPEG are stored as uploaded. An SVG is sanitised (kept as the original) and rendered to a
+    PNG that decks use; the returned id is always the one to put in a brand kit."""
+    on()
+    company(session, workspace, company_id)
+    data = await file.read(images.MAX_BYTES + 1)
+    asset = session.get(PresentationAsset, asset_from_bytes(session, workspace, company_id, data, file.filename or "logo"))
+    out = {"id": asset.id, "sha256": asset.sha256, "mediaType": asset.media_type, "width": asset.width, "height": asset.height, "bytes": asset.byte_size}
+    if asset.source_asset_id:
+        out.update({"originalId": asset.source_asset_id, "sanitized": True})
+    return out
+
+
+@router.get("/assets/{asset_id}")
+def get_asset(asset_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> Response:
+    on()
+    a = session.get(PresentationAsset, asset_id)
+    if a is None or a.workspace_id != workspace:
+        raise HTTPException(404, "asset not found")
+    headers = {"Cache-Control": "private, max-age=300", "X-Content-Type-Options": "nosniff"}
+    if a.media_type == "image/svg+xml":  # even sanitised, never render an SVG as a page
+        headers.update({"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "Content-Disposition": f'attachment; filename="{a.filename}"'})
+    return Response(a.data, media_type=a.media_type, headers=headers)
+
+
+class BrandIn(BaseModel):
+    palette: dict[str, str] = Field(default_factory=dict)
+    headingFont: str | None = Field(None, max_length=40)
+    bodyFont: str | None = Field(None, max_length=40)
+    footerText: str | None = Field(None, max_length=160)
+    showPageNumber: bool = True
+    seriesColors: list[str] | None = Field(None, max_length=6)
+    logoAssetId: str | None = None
+    darkLogoAssetId: str | None = None
+    activate: bool = False
+    fromTemplateId: str | None = None  # start from an imported .pptx/.potx
+    templateLogoIndex: int | None = Field(None, ge=0, le=200)
+
+
+@router.post("/companies/{company_id}/brand-kits", status_code=201)
+def create_brand_kit(company_id: str, body: BrandIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """A new immutable version. The first one becomes active; later ones only when asked."""
+    on()
+    c = company(session, workspace, company_id)
+    logos = []
+    for asset_id, variant in ((body.logoAssetId, "light_background"), (body.darkLogoAssetId, "dark_background")):
+        if not asset_id:
+            continue
+        a = session.get(PresentationAsset, asset_id)
+        if a is None or a.company_id != company_id or a.media_type not in ("image/png", "image/jpeg"):
+            raise HTTPException(422, "logo must be an image uploaded for this company")
+        variant = "universal" if not body.darkLogoAssetId else variant
+        logos.append({"asset_id": a.id, "sha256": a.sha256, "variant": variant, "aspect_ratio": round(a.width / a.height, 4), "minimum_width_inches": 1.0, "clear_space_ratio": 0.2, "rights": "company_original"})
+    choices = body.model_dump()
+    slide_size = None
+    if body.fromTemplateId:
+        t = template_of(session, workspace, body.fromTemplateId)
+        if t.company_id != company_id:
+            raise HTTPException(422, "that template belongs to another company")
+        proposal = t.report_json["proposal"]
+        choices = {
+            **choices,
+            "palette": {**proposal["palette"], **body.palette},
+            "headingFont": body.headingFont or proposal["headingFont"],
+            "bodyFont": body.bodyFont or proposal["bodyFont"],
+            "footerText": body.footerText or proposal.get("footerText"),
+        }
+        slide_size = proposal["slideSize"]
+        if body.templateLogoIndex is not None and not logos:
+            found = template_import.read(t.data)["logos"]
+            if body.templateLogoIndex >= len(found) or not found[body.templateLogoIndex]["data"]:
+                raise HTTPException(422, "that logo candidate cannot be used")
+            cand = found[body.templateLogoIndex]
+            asset_id = asset_from_bytes(session, workspace, company_id, cand["data"], cand["part"].rsplit("/", 1)[-1])
+            a = session.get(PresentationAsset, asset_id)
+            logos.append({"asset_id": a.id, "sha256": a.sha256, "variant": "universal", "aspect_ratio": round(a.width / a.height, 4), "minimum_width_inches": 1.0, "clear_space_ratio": 0.2, "rights": "company_original"})
+    latest = session.execute(select(func.max(PresentationBrandKit.version)).where(PresentationBrandKit.company_id == company_id)).scalar() or 0
+    kit = brandkit.build(c.id, c.name, latest + 1, choices, logos, slide_size)
+    try:
+        warnings = engine.call({"op": "validate-kit", "kit": kit})["warnings"]
+    except engine.EngineError as exc:
+        raise problem(exc) from exc
+    row = PresentationBrandKit(workspace_id=workspace, company_id=company_id, version=latest + 1, kit_json=kit, sha256=canonical_sha(kit), warnings_json=warnings)
+    session.add(row)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(409, "another brand kit version was created at the same time; try again") from exc
+    if body.activate or c.active_brand_version is None:
+        c.active_brand_version = row.version
+    return {"version": row.version, "sha256": row.sha256, "warnings": warnings, "active": c.active_brand_version == row.version, "kit": kit}
+
+
+class ActivateIn(BaseModel):
+    expectedActiveVersion: int | None = None
+
+
+@router.post("/companies/{company_id}/brand-kits/{version}/activate")
+def activate_brand_kit(company_id: str, version: int, body: ActivateIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Moves the active pointer only (compare-and-swap). Existing decks stay on their pinned version."""
+    on()
+    company(session, workspace, company_id)
+    kit_of(session, company_id, version)
+    moved = session.execute(
+        update(PresentationCompany).where(PresentationCompany.id == company_id, PresentationCompany.active_brand_version.is_(body.expectedActiveVersion) if body.expectedActiveVersion is None else PresentationCompany.active_brand_version == body.expectedActiveVersion)
+        .values(active_brand_version=version)
+    ).rowcount
+    if moved != 1:
+        raise HTTPException(409, "the active brand kit changed meanwhile; reload")
+    return {"activeBrandVersion": version}
+
+
+# ----------------------------------------------------------------------------- starting points
+
+
+class StarterIn(BaseModel):
+    genre: str = Field(..., max_length=40)
+    topic: str = Field("", max_length=200)
+    periodLabel: str = Field("", max_length=80)
+    audience: str = Field("", max_length=120)
+
+
+@router.post("/starter")
+def starter(body: StarterIn, workspace: str = Depends(access)) -> dict[str, Any]:
+    on()
+    try:
+        return {"storyline": genres.storyline(body.genre, body.topic, body.periodLabel, body.audience), "mode": "template"}
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+# ----------------------------------------------------------------------------- decks and revisions
+
+
+def validate_storyline(storyline: dict[str, Any]) -> None:
+    try:
+        engine.call({"op": "validate-storyline", "storyline": storyline})
+    except engine.EngineError as exc:
+        raise problem(exc) from exc
+
+
+def start_run(session: Session, background: BackgroundTasks, deck: PresentationDeck, revision: int) -> PresentationRun:
+    run = PresentationRun(workspace_id=deck.workspace_id, deck_id=deck.id, revision=revision, status="queued", phase="queued", epoch=0, attempts=0)
+    session.add(run)
+    # Commit first: the build runs in its own session and must see the run and its revision.
+    session.commit()
+    background.add_task(worker.execute, run.id)
+    return run
+
+
+def run_out(run: PresentationRun | None) -> dict[str, Any] | None:
+    if run is None:
+        return None
+    return {"id": run.id, "revision": run.revision, "status": run.status, "phase": run.phase, "error": run.error, "attempts": run.attempts}
+
+
+def revision_out(session: Session, rev: PresentationRevision, full: bool = False) -> dict[str, Any]:
+    arts = session.execute(select(PresentationArtifact).where(PresentationArtifact.deck_id == rev.deck_id, PresentationArtifact.revision == rev.revision).order_by(PresentationArtifact.kind, PresentationArtifact.position)).scalars().all()
+    run = session.execute(select(PresentationRun).where(PresentationRun.deck_id == rev.deck_id, PresentationRun.revision == rev.revision).order_by(PresentationRun.created_at.desc())).scalars().first()
+    out: dict[str, Any] = {
+        "revision": rev.revision, "parent": rev.parent_revision, "state": rev.state, "author": rev.author,
+        "brandVersion": rev.brand_version, "slideCount": rev.slide_count, "pptxSha256": rev.pptx_sha256, "error": rev.error,
+        "createdAt": rev.created_at.isoformat() if rev.created_at else None,
+        "approvedBy": rev.approved_by, "approvedAt": rev.approved_at.isoformat() if rev.approved_at else None,
+        "quality": ({k: rev.receipt_json.get(k) for k in ("status", "hard_failures", "warnings", "slides_checked")} if rev.receipt_json else None),
+        "files": {"pptx": any(a.kind == "pptx" for a in arts), "pdf": any(a.kind == "pdf" for a in arts), "slides": sum(1 for a in arts if a.kind == "png")},
+        "run": run_out(run),
+        "locks": rev.locks_json or [],
+        "expert": bool(rev.expert_script),
+    }
+    if full:
+        out["expertScript"] = rev.expert_script
+        out["storyline"] = rev.storyline_json
+        out["findings"] = (rev.receipt_json or {}).get("findings", [])
+        out["notes"] = [{"id": s["id"], "title": s["title"], "notes": s["notes"]["speaker_text"]} for s in (rev.deck_json or {}).get("slides", [])]
+        out["receipt"] = rev.receipt_json
+    return out
+
+
+def deck_out(session: Session, d: PresentationDeck, full: bool = False) -> dict[str, Any]:
+    head = session.get(PresentationRevision, (d.id, d.head_revision))
+    out = {"id": d.id, "title": d.title, "companyId": d.company_id, "headRevision": d.head_revision, "archived": d.archived, "seriesId": d.series_id, "periodKey": d.period_key,
+           "updatedAt": d.updated_at.isoformat() if d.updated_at else None, "head": revision_out(session, head, full) if head else None}
+    if full:
+        revs = session.execute(select(PresentationRevision).where(PresentationRevision.deck_id == d.id).order_by(PresentationRevision.revision.desc()).limit(50)).scalars()
+        out["revisions"] = [revision_out(session, r) for r in revs]
+    return out
+
+
+class DeckIn(BaseModel):
+    companyId: str
+    storyline: dict[str, Any]
+
+
+@router.post("/decks", status_code=202)
+def create_deck(body: DeckIn, background: BackgroundTasks, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    c = company(session, workspace, body.companyId)
+    kit_of(session, c.id, c.active_brand_version)
+    validate_storyline(body.storyline)
+    d = PresentationDeck(workspace_id=workspace, company_id=c.id, title=str(body.storyline["title"])[:200], head_revision=1)
+    session.add(d)
+    session.flush()
+    session.add(PresentationRevision(deck_id=d.id, revision=1, brand_version=c.active_brand_version, author="person", storyline_json=body.storyline, locks_json=[], state="queued"))
+    session.flush()
+    run = start_run(session, background, d, 1)
+    return {**deck_out(session, d), "run": run_out(run)}
+
+
+@router.get("/decks")
+def list_decks(workspace: str = Depends(access), session: Session = Depends(get_session), companyId: str | None = None, q: str | None = Query(None, max_length=100), archived: bool = False, limit: int = Query(50, ge=1, le=200)) -> dict[str, Any]:
+    on()
+    stmt = select(PresentationDeck).where(PresentationDeck.workspace_id == workspace, PresentationDeck.archived.is_(archived))
+    if companyId:
+        stmt = stmt.where(PresentationDeck.company_id == companyId)
+    if q and q.strip():
+        stmt = stmt.where(PresentationDeck.title.ilike("%" + q.strip().replace("%", "").replace("_", "") + "%"))
+    rows = session.execute(stmt.order_by(PresentationDeck.updated_at.desc()).limit(limit)).scalars()
+    return {"items": [deck_out(session, d) for d in rows]}
+
+
+@router.get("/decks/{deck_id}")
+def get_deck(deck_id: str, background: BackgroundTasks, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    d = deck_of(session, workspace, deck_id)
+    for run_id in worker.recover(session, workspace):
+        background.add_task(worker.execute, run_id)
+    return deck_out(session, d, full=True)
+
+
+@router.get("/decks/{deck_id}/revisions/{revision}")
+def get_revision(deck_id: str, revision: int, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    deck_of(session, workspace, deck_id)
+    rev = session.get(PresentationRevision, (deck_id, revision))
+    if rev is None:
+        raise HTTPException(404, "revision not found")
+    return revision_out(session, rev, full=True)
+
+
+class ReviseIn(BaseModel):
+    storyline: dict[str, Any]
+    expectedRevision: int = Field(..., ge=1)
+    locks: list[str] = Field(default_factory=list, max_length=50)
+    rebrand: bool = False  # move this deck to the company's current brand kit
+
+
+def slide_map(storyline: dict[str, Any]) -> dict[str, Any]:
+    return {s.get("id") or f"s{i + 1}": s for i, s in enumerate(storyline.get("slides", []))}
+
+
+def new_revision(session: Session, background: BackgroundTasks, d: PresentationDeck, storyline: dict[str, Any], expected: int, locks: list[str], author: str, brand_version: int, expert_script: str | None = None) -> dict[str, Any]:
+    parent = session.get(PresentationRevision, (d.id, expected))
+    if parent is None:
+        raise HTTPException(404, "base revision not found")
+    before, after = slide_map(parent.storyline_json), slide_map(storyline)
+    for sid in parent.locks_json or []:
+        if sid in before and before[sid] != after.get(sid):
+            raise HTTPException(409, f"Slide “{before[sid].get('title', sid)}” is locked. Unlock it before changing or removing it.")
+    revision = expected + 1
+    moved = session.execute(
+        update(PresentationDeck).where(PresentationDeck.id == d.id, PresentationDeck.head_revision == expected).values(head_revision=revision, title=str(storyline["title"])[:200], updated_at=datetime.now(timezone.utc))
+    ).rowcount
+    if moved != 1:
+        raise HTTPException(409, "This presentation changed meanwhile. Reload to see the latest revision.")
+    valid_locks = [x for x in dict.fromkeys(locks) if x in after]
+    session.add(PresentationRevision(deck_id=d.id, revision=revision, parent_revision=expected, brand_version=brand_version, author=author, storyline_json=storyline, locks_json=valid_locks, state="queued", expert_script=expert_script))
+    session.flush()
+    run = start_run(session, background, d, revision)
+    session.refresh(d)
+    return {**deck_out(session, d), "run": run_out(run)}
+
+
+@router.post("/decks/{deck_id}/revisions", status_code=202)
+def revise(deck_id: str, body: ReviseIn, background: BackgroundTasks, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Every change is a new revision built from scratch; earlier revisions and files never change."""
+    on()
+    d = deck_of(session, workspace, deck_id)
+    validate_storyline(body.storyline)
+    parent = session.get(PresentationRevision, (d.id, body.expectedRevision))
+    c = company(session, workspace, d.company_id)
+    version = c.active_brand_version if body.rebrand else (parent.brand_version if parent else c.active_brand_version)
+    kit_of(session, c.id, version)
+    return new_revision(session, background, d, body.storyline, body.expectedRevision, body.locks, "person", version)
+
+
+class ExpertIn(BaseModel):
+    script: str = Field(..., min_length=1, max_length=sandbox.MAX_SCRIPT)
+    expectedRevision: int = Field(..., ge=1)
+
+
+@router.post("/decks/{deck_id}/expert", status_code=202)
+def expert(deck_id: str, body: ExpertIn, background: BackgroundTasks, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Opt-in: a reviewed JavaScript builder writes the slides; it runs only inside the sandbox and
+    the file goes through render and file checks. The storyline is kept, so a later normal revision
+    returns to the composed deck."""
+    on()
+    if not expert_enabled():
+        raise HTTPException(404, "Expert builds are not enabled. An administrator can set DAYPILOT_PRESENTATIONS_EXPERT=true.")
+    if not sandbox.available()["ready"]:
+        raise HTTPException(409, "Expert builds are unavailable on this server: the sandbox (setpriv, unshare, prlimit, node) is missing.")
+    problems = sandbox.precheck(body.script)
+    if problems:
+        raise HTTPException(422, " ".join(problems))
+    d = deck_of(session, workspace, deck_id)
+    parent = session.get(PresentationRevision, (d.id, body.expectedRevision))
+    if parent is None:
+        raise HTTPException(404, "base revision not found")
+    if parent.locks_json:
+        raise HTTPException(409, "Unlock all slides before an expert build: the builder replaces every slide.")
+    return new_revision(session, background, d, parent.storyline_json, body.expectedRevision, [], "expert", parent.brand_version, expert_script=body.script)
+
+
+class LocksIn(BaseModel):
+    locks: list[str] = Field(default_factory=list, max_length=50)
+    expectedRevision: int = Field(..., ge=1)
+
+
+@router.post("/decks/{deck_id}/locks")
+def set_locks(deck_id: str, body: LocksIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Locks are stored on the head revision (they describe the next edit, not the built file)."""
+    on()
+    d = deck_of(session, workspace, deck_id)
+    if d.head_revision != body.expectedRevision:
+        raise HTTPException(409, "This presentation changed meanwhile. Reload.")
+    rev = session.get(PresentationRevision, (d.id, d.head_revision))
+    known = slide_map(rev.storyline_json)
+    rev.locks_json = [x for x in dict.fromkeys(body.locks) if x in known]
+    return {"locks": rev.locks_json}
+
+
+class RestoreIn(BaseModel):
+    revision: int = Field(..., ge=1)
+    expectedRevision: int = Field(..., ge=1)
+
+
+@router.post("/decks/{deck_id}/restore", status_code=202)
+def restore(deck_id: str, body: RestoreIn, background: BackgroundTasks, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    d = deck_of(session, workspace, deck_id)
+    old = session.get(PresentationRevision, (d.id, body.revision))
+    if old is None:
+        raise HTTPException(404, "revision not found")
+    head = session.get(PresentationRevision, (d.id, body.expectedRevision))
+    if head is not None:
+        head.locks_json = []  # restoring is an explicit choice to replace the content
+    return new_revision(session, background, d, old.storyline_json, body.expectedRevision, old.locks_json or [], "person", old.brand_version)
+
+
+@router.post("/decks/{deck_id}/archive")
+def archive(deck_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    d = deck_of(session, workspace, deck_id)
+    d.archived = not d.archived
+    return {"archived": d.archived}
+
+
+class ApproveIn(BaseModel):
+    pptxSha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+
+
+@router.post("/decks/{deck_id}/revisions/{revision}/approve")
+def approve(deck_id: str, revision: int, body: ApproveIn, request: Request, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Binds approval to the exact file a reviewer saw. Hard quality failures cannot be approved."""
+    on()
+    workspace, role = access_role(request, session)
+    if ROLE_RANK.get(role, -1) < ROLE_RANK["reviewer"]:
+        raise HTTPException(403, "reviewer role required")
+    deck_of(session, workspace, deck_id)
+    rev = session.get(PresentationRevision, (deck_id, revision))
+    if rev is None:
+        raise HTTPException(404, "revision not found")
+    if rev.state != "review_ready" or not rev.receipt_json or rev.receipt_json.get("hard_failures"):
+        raise HTTPException(409, "Only a revision that passed its checks can be approved.")
+    if rev.pptx_sha256 != body.pptxSha256:
+        raise HTTPException(409, "The file changed since you reviewed it. Review the current file.")
+    rev.state = "approved"
+    rev.approved_by = request.headers.get("x-user-id") or role
+    rev.approved_at = datetime.now(timezone.utc)
+    return revision_out(session, rev)
+
+
+FILE_TYPES = {"pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "pdf": "application/pdf", "png": "image/png"}
+
+
+@router.get("/decks/{deck_id}/revisions/{revision}/files/{kind}")
+def download(deck_id: str, revision: int, kind: str, workspace: str = Depends(access), session: Session = Depends(get_session), slide: int = Query(0, ge=0, le=60)) -> Response:
+    on()
+    d = deck_of(session, workspace, deck_id)
+    if kind not in FILE_TYPES:
+        raise HTTPException(404, "unknown file type")
+    art = session.execute(
+        select(PresentationArtifact).where(PresentationArtifact.deck_id == deck_id, PresentationArtifact.revision == revision, PresentationArtifact.kind == kind, PresentationArtifact.position == (slide if kind == "png" else 0))
+    ).scalars().first()
+    if art is None or art.workspace_id != workspace:
+        raise HTTPException(404, "file not found")
+    rev = session.get(PresentationRevision, (deck_id, revision))
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", d.title).strip("-")[:80] or "presentation"
+    suffix = "" if rev and rev.state == "approved" else "-draft"
+    headers = {"Cache-Control": "private, max-age=600", "X-Content-Type-Options": "nosniff", "ETag": f'"{art.sha256}"'}
+    if kind != "png":
+        headers["Content-Disposition"] = f'attachment; filename="{stem}-r{revision}{suffix}.{kind}"'
+    return Response(store.get(art.store_key), media_type=FILE_TYPES[kind], headers=headers)
+
+
+@router.get("/runs/{run_id}")
+def get_run(run_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    run = session.get(PresentationRun, run_id)
+    if run is None or run.workspace_id != workspace:
+        raise HTTPException(404, "run not found")
+    return run_out(run)
+
+
+@router.post("/runs/{run_id}/cancel")
+def cancel_run(run_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    run = session.get(PresentationRun, run_id)
+    if run is None or run.workspace_id != workspace:
+        raise HTTPException(404, "run not found")
+    if run.status in ("queued", "running"):
+        session.execute(update(PresentationRun).where(PresentationRun.id == run_id).values(status="cancelled", phase="done", lease_expires_at=None))
+        rev = session.get(PresentationRevision, (run.deck_id, run.revision))
+        if rev and rev.state in ("queued", "composing"):
+            rev.state, rev.error = "failed", "cancelled"
+        session.refresh(run)
+    return run_out(run)
+
+
+# ----------------------------------------------------------------------------- weekly series
+
+
+class SeriesIn(BaseModel):
+    companyId: str
+    name: str = Field(..., min_length=1, max_length=120)
+    timezone: str = Field("UTC", max_length=60)
+    weekStartsOn: int = Field(0, ge=0, le=6)
+    rule: str = Field("previous_full_week", max_length=40)
+    storyline: dict[str, Any]
+
+
+def series_out(session: Session, s: PresentationSeries) -> dict[str, Any]:
+    occ = session.execute(select(PresentationOccurrence).where(PresentationOccurrence.series_id == s.id).order_by(PresentationOccurrence.created_at.desc()).limit(20)).scalars().all()
+    r = s.recipe_json
+    try:
+        nxt = weekly.period(r["rule"], r["timezone"], r["week_starts_on"])
+    except ValueError:
+        nxt = None
+    sched = r.get("schedule") or {}
+    upcoming = scheduler.preview(sched, r["timezone"], datetime.now(timezone.utc)) if s.schedule_enabled and sched else []
+    return {"id": s.id, "name": s.name, "companyId": s.company_id, "version": s.version, "paused": s.paused, "timezone": r["timezone"], "rule": r["rule"], "weekStartsOn": r["week_starts_on"],
+            "nextPeriod": nxt, "occurrences": [{"periodKey": o.period_key, "deckId": o.deck_id, "start": o.period_start, "end": o.period_end} for o in occ],
+            "schedule": {"enabled": s.schedule_enabled, "weekday": sched.get("weekday"), "localTime": sched.get("local_time"), "catchUpHours": sched.get("catch_up_hours", 24),
+                         "nextRunAt": s.next_run_at.isoformat() if s.next_run_at else None, "lastFiredAt": s.last_fired_at.isoformat() if s.last_fired_at else None,
+                         "lastResult": s.last_result, "upcoming": upcoming, "schedulerRunning": scheduler.enabled(),
+                         "policy": "Drafts only, never sent. A time skipped by a clock change runs at the first valid moment after it; a repeated time runs the first time it occurs."}}
+
+
+@router.post("/series", status_code=201)
+def create_series(body: SeriesIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    c = company(session, workspace, body.companyId)
+    kit_of(session, c.id, c.active_brand_version)
+    try:
+        weekly.period(body.rule, body.timezone, body.weekStartsOn)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    validate_storyline(body.storyline)
+    s = PresentationSeries(workspace_id=workspace, company_id=c.id, name=" ".join(body.name.split()), version=1,
+                           recipe_json={"rule": body.rule, "timezone": body.timezone, "week_starts_on": body.weekStartsOn, "storyline": body.storyline, "output_mode": "draft_only"})
+    session.add(s)
+    session.flush()
+    return series_out(session, s)
+
+
+@router.get("/series")
+def list_series(workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    rows = session.execute(select(PresentationSeries).where(PresentationSeries.workspace_id == workspace).order_by(PresentationSeries.created_at)).scalars()
+    return {"items": [series_out(session, s) for s in rows]}
+
+
+class PrepareIn(BaseModel):
+    at: datetime | None = None  # for previews and backfills; defaults to now
+
+
+@router.post("/series/{series_id}/prepare", status_code=202)
+def prepare(series_id: str, body: PrepareIn, background: BackgroundTasks, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Prepare this period's draft. Asking twice for the same period returns the same draft."""
+    on()
+    s = session.get(PresentationSeries, series_id)
+    if s is None or s.workspace_id != workspace:
+        raise HTTPException(404, "series not found")
+    if s.paused:
+        raise HTTPException(409, "This series is paused.")
+    return prepare_occurrence(session, s, body.at, background)
+
+
+def prepare_occurrence(session: Session, s: PresentationSeries, at: datetime | None, background: Any) -> dict[str, Any]:
+    """One draft per (series, recipe version, period): manual and scheduled preparation converge here.
+    ``background`` is anything with ``add_task(fn, *args)`` (FastAPI BackgroundTasks or the scheduler's pool)."""
+    workspace = s.workspace_id
+    r = s.recipe_json
+    p = weekly.period(r["rule"], r["timezone"], r["week_starts_on"], at)
+    existing = session.execute(select(PresentationOccurrence).where(PresentationOccurrence.series_id == s.id, PresentationOccurrence.recipe_version == s.version, PresentationOccurrence.period_key == p["key"])).scalar_one_or_none()
+    if existing:
+        d = deck_of(session, workspace, existing.deck_id)
+        return {"created": False, "period": p, "deck": deck_out(session, d)}
+    prev = session.execute(select(PresentationOccurrence).where(PresentationOccurrence.series_id == s.id).order_by(PresentationOccurrence.created_at.desc())).scalars().first()
+    base = r["storyline"]
+    previous_label = None
+    if prev:
+        pd = session.get(PresentationDeck, prev.deck_id)
+        last = session.get(PresentationRevision, (pd.id, pd.head_revision)) if pd else None
+        if last:
+            base, previous_label = last.storyline_json, prev.period_key
+    storyline = weekly.carry_forward(base, p, previous_label)
+    validate_storyline(storyline)
+    c = company(session, workspace, s.company_id)
+    kit_of(session, c.id, c.active_brand_version)
+    d = PresentationDeck(workspace_id=workspace, company_id=c.id, title=str(storyline["title"])[:200], head_revision=1, series_id=s.id, period_key=p["key"])
+    session.add(d)
+    session.flush()
+    try:
+        with session.begin_nested():
+            session.add(PresentationOccurrence(workspace_id=workspace, series_id=s.id, recipe_version=s.version, period_key=p["key"], period_start=p["start"], period_end=p["end_exclusive"], deck_id=d.id))
+            session.flush()
+    except IntegrityError:
+        session.rollback()
+        existing = session.execute(select(PresentationOccurrence).where(PresentationOccurrence.series_id == s.id, PresentationOccurrence.recipe_version == s.version, PresentationOccurrence.period_key == p["key"])).scalar_one()
+        return {"created": False, "period": p, "deck": deck_out(session, deck_of(session, workspace, existing.deck_id))}
+    session.add(PresentationRevision(deck_id=d.id, revision=1, brand_version=c.active_brand_version, author="series", storyline_json=storyline, locks_json=[], state="queued"))
+    session.flush()
+    run = start_run(session, background, d, 1)
+    return {"created": True, "period": p, "deck": {**deck_out(session, d), "run": run_out(run)}}
+
+
+@router.post("/series/{series_id}/pause")
+def pause(series_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    s = session.get(PresentationSeries, series_id)
+    if s is None or s.workspace_id != workspace:
+        raise HTTPException(404, "series not found")
+    s.paused = not s.paused
+    return series_out(session, s)
+
+
+# ----------------------------------------------------------------------------- AI (own models, credits)
+
+
+def connector_for(session: Session, workspace: str):
+    from daypilot_orchestrator.assistant.orchestrator import active_connector
+
+    try:
+        return active_connector(session, workspace)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+class OutlineIn(BaseModel):
+    genre: str = Field("weekly_update", max_length=40)
+    brief: str = Field("", max_length=3000)
+    audience: str = Field("", max_length=120)
+    slideCount: int = Field(8, ge=3, le=30)
+    sources: str = Field("", max_length=20000)
+    diagramId: str | None = Field(None, max_length=36)
+    periodLabel: str = Field("", max_length=80)
+    language: str = Field("en", max_length=10)
+
+
+def map_slide(session: Session, workspace: str, diagram_id: str | None) -> dict[str, Any] | None:
+    if not diagram_id:
+        return None
+    from daypilot_knowledge.db.models import Diagram
+
+    row = session.get(Diagram, diagram_id)
+    if row is None or row.workspace_id != workspace:
+        raise HTTPException(404, "diagram not found")
+    return ai.diagram_slide(row.document_json)
+
+
+@router.post("/outline")
+def outline(body: OutlineIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Propose a storyline. With a connected model it is written by AI (and costs credits); without
+    one it starts from the genre template. Either way the person edits it before anything is built."""
+    on()
+    if body.genre not in genres.GENRES:
+        raise HTTPException(422, "unknown genre")
+    extra = map_slide(session, workspace, body.diagramId)
+    connector = connector_for(session, workspace)
+    topic = body.brief.strip().split("\n")[0][:150] or genres.GENRES[body.genre]
+    if connector is None:
+        story = genres.storyline(body.genre, topic, body.periodLabel, body.audience)
+        if extra:
+            story["slides"].insert(min(2, len(story["slides"])), extra)
+        return {"storyline": story, "mode": "template", "removedNumbers": [], "message": "AI is not connected, so this starts from the template. Connect a provider in Settings for an AI-written draft."}
+    cost = credits.cost_for("presentation_outline") if credits.enabled() else 0
+    if cost:
+        credits.charge(session, workspace, "presentation_outline", cost)
+    try:
+        sources = body.sources + ("\n" + json.dumps(extra) if extra else "")
+        story, removed = ai.outline(connector, body.brief or topic, genres.GENRES[body.genre], body.slideCount - (1 if extra else 0), body.audience, sources, body.language)
+    except ai.AIError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if extra:
+        story["slides"].insert(min(2, len(story["slides"])), extra)
+    if body.periodLabel and story["slides"] and story["slides"][0].get("type") == "cover":
+        story["slides"][0]["kicker"] = body.periodLabel[:80]
+    out: dict[str, Any] = {"storyline": story, "mode": "model", "removedNumbers": removed}
+    if credits.enabled():
+        out["credits"] = {"charged": cost, "balance": credits.account(session, workspace).balance}
+    return out
+
+
+class RegenerateIn(BaseModel):
+    slideIds: list[str] = Field(..., min_length=1, max_length=10)
+    instruction: str = Field("", max_length=1500)
+    expectedRevision: int = Field(..., ge=1)
+
+
+@router.post("/decks/{deck_id}/regenerate", status_code=202)
+def regenerate(deck_id: str, body: RegenerateIn, background: BackgroundTasks, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Rewrite selected slides with AI as a new revision. Locked slides are refused; others unchanged."""
+    on()
+    d = deck_of(session, workspace, deck_id)
+    if d.head_revision != body.expectedRevision:
+        raise HTTPException(409, "This presentation changed meanwhile. Reload.")
+    head = session.get(PresentationRevision, (d.id, d.head_revision))
+    connector = connector_for(session, workspace)
+    if connector is None:
+        raise HTTPException(409, "AI is not connected. Connect a provider in Settings, or edit the slides directly.")
+    cost = credits.cost_for("presentation_slides") * len(body.slideIds) if credits.enabled() else 0
+    if cost:
+        credits.charge(session, workspace, "presentation_slides", cost)
+    try:
+        story, removed = ai.rewrite_slides(connector, head.storyline_json, body.slideIds, body.instruction, head.locks_json or [])
+    except ai.AIError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    out = new_revision(session, background, d, story, body.expectedRevision, head.locks_json or [], "model", head.brand_version)
+    out["removedNumbers"] = removed
+    return out
+
+
+
+# ----------------------------------------------------------------------------- timed speaker scripts
+
+
+class TalkIn(BaseModel):
+    storyline: dict[str, Any]
+    minutes: float = Field(5, ge=1, le=120)
+    pace: str = Field("natural", pattern="^(relaxed|natural|brisk)$")
+
+
+class ScriptIn(TalkIn):
+    sources: str = Field("", max_length=20000)
+    audience: str = Field("", max_length=120)
+    tone: str = Field("", max_length=80)
+    locks: list[str] = Field(default_factory=list, max_length=50)
+    keepExisting: bool = False  # only write slides that have no script yet
+
+
+def _with_ids(storyline: dict[str, Any]) -> dict[str, Any]:
+    validate_storyline(storyline)
+    used: set[str] = set()
+    slides = []
+    for i, sl in enumerate(storyline["slides"]):
+        sid = sl.get("id") or f"s{i + 1}"
+        while sid in used:
+            sid += "x"
+        used.add(sid)
+        slides.append({**sl, "id": sid})
+    return {**storyline, "slides": slides}
+
+
+@router.post("/talk/plan")
+def talk_plan(body: TalkIn, workspace: str = Depends(access)) -> dict[str, Any]:
+    """How long each slide gets and how many words fit, for a talk of this length. Free and instant."""
+    on()
+    return talk.plan(_with_ids(body.storyline), body.minutes, body.pace)
+
+
+@router.post("/talk/script")
+def talk_script(body: ScriptIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Time the talk and write a spoken script for each slide to fit its time. With a connected
+    model the script is written by AI (credits); otherwise it is composed from the slides' own words.
+    Locked slides keep their script. Nothing is saved: the result is edited, then built."""
+    on()
+    story = _with_ids(body.storyline)
+    p = talk.plan(story, body.minutes, body.pace)
+    ids = [s["id"] for s in story["slides"] if s["id"] not in body.locks and not (body.keepExisting and (s.get("script") or "").strip())]
+    removed: list[str] = []
+    connector = connector_for(session, workspace) if ids else None
+    out: dict[str, Any] = {}
+    if not ids:
+        scripts, mode = {}, "kept"  # every slide already has its script (or is locked): only re-timed
+    elif connector is None:
+        drafted = talk.compose(story, p, body.minutes)
+        scripts, mode = {i: drafted[i] for i in ids}, "composed"
+    else:
+        cost = credits.cost_for("presentation_script") if credits.enabled() else 0
+        if cost:
+            credits.charge(session, workspace, "presentation_script", cost)
+        try:
+            scripts, removed = talk.write(connector, story, p, ids, body.sources, body.audience, body.tone)
+        except ai.AIError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        mode = "model"
+        if credits.enabled():
+            out["credits"] = {"charged": cost, "balance": credits.account(session, workspace).balance}
+    timed = talk.apply(story, p, scripts, body.pace)
+    validate_storyline(timed)
+    out.update({"storyline": timed, "plan": talk.plan(timed, body.minutes, body.pace), "mode": mode, "removedNumbers": removed, "written": ids})
+    if mode == "composed":
+        out["message"] = "AI is not connected, so the script is composed from the slides' own words. Edit it, or connect a provider in Settings for a natural spoken draft."
+    return out
+
+
+@router.get("/decks/{deck_id}/revisions/{revision}/script")
+def script_file(deck_id: str, revision: int, workspace: str = Depends(access), session: Session = Depends(get_session)) -> Response:
+    """The speaker script of a revision as Markdown, with the time for each slide."""
+    on()
+    d = deck_of(session, workspace, deck_id)
+    rev = session.get(PresentationRevision, (d.id, revision))
+    if rev is None:
+        raise HTTPException(404, "revision not found")
+    name = re.sub(r"[^A-Za-z0-9._-]+", "-", d.title).strip("-")[:60] or "presentation"
+    return Response(talk.markdown(rev.storyline_json), media_type="text/markdown; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}-r{revision}-script.md"', "X-Content-Type-Options": "nosniff"})
+
+
+class ScheduleIn(BaseModel):
+    enabled: bool
+    weekday: int = Field(0, ge=0, le=6)  # 0 = Monday
+    localTime: str = Field("08:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    catchUpHours: int = Field(24, ge=1, le=168)
+
+
+@router.put("/series/{series_id}/schedule")
+def set_schedule(series_id: str, body: ScheduleIn, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Opt in to (or out of) automatic weekly drafts. Nothing is ever sent automatically."""
+    on()
+    s = session.get(PresentationSeries, series_id)
+    if s is None or s.workspace_id != workspace:
+        raise HTTPException(404, "series not found")
+    recipe = dict(s.recipe_json)
+    recipe["schedule"] = {"weekday": body.weekday, "local_time": body.localTime, "catch_up_hours": body.catchUpHours}
+    s.recipe_json = recipe
+    s.schedule_enabled = body.enabled
+    s.next_run_at = scheduler.next_run(recipe["schedule"], recipe["timezone"], datetime.now(timezone.utc)).replace(tzinfo=None) if body.enabled else None
+    session.flush()
+    return series_out(session, s)
+
+
+POOL = scheduler.Pool()
+
+
+def notify(session: Session, s: PresentationSeries, title: str, summary: str) -> None:
+    from daypilot_orchestrator.integrations.notifications import normalize, record_notification
+
+    record_notification(session, s.workspace_id, normalize("presentations", "draft.prepared", title, summary, "info", seriesId=s.id))
+
+
+def scheduler_tick(now: datetime | None = None, pool: Any = None) -> list[dict[str, Any]]:
+    """One pass of the scheduler with its own session (used by the background loop and tests)."""
+    from ..db import _get_sessionmaker
+
+    with _get_sessionmaker()() as session:
+        return scheduler.tick(
+            session, now or datetime.now(timezone.utc),
+            lambda sess, series, at: prepare_occurrence(sess, series, at, pool or POOL),
+            notify,
+        )
+
+
+
+# ----------------------------------------------------------------------------- imported templates
+
+
+def template_of(session: Session, workspace: str, template_id: str) -> PresentationTemplate:
+    t = session.get(PresentationTemplate, template_id)
+    if t is None or t.workspace_id != workspace:
+        raise HTTPException(404, "template not found")
+    return t
+
+
+def template_out(t: PresentationTemplate) -> dict[str, Any]:
+    return {"id": t.id, "companyId": t.company_id, "filename": t.filename, "sha256": t.sha256, "bytes": t.byte_size,
+            "createdAt": t.created_at.isoformat() if t.created_at else None, "report": {k: v for k, v in t.report_json.items() if k != "thumbnailKeys"}}
+
+
+@router.post("/companies/{company_id}/templates", status_code=201)
+async def import_template(company_id: str, file: UploadFile = File(...), workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Keep the uploaded template exactly as it is and report what DayPilot can use from it."""
+    on()
+    company(session, workspace, company_id)
+    data = await file.read(template_import.MAX_FILE + 1)
+    try:
+        parsed = template_import.read(data)
+    except template_import.TemplateError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    report = parsed["report"]
+    keys: list[str] = []
+    try:
+        rendered = render.render(data, "." + parsed["kind"])
+        keys = [store.put(workspace, "png", png)[1] for png in rendered.pages[:30]]
+        report["rendered"] = True
+    except Exception as exc:  # noqa: BLE001 - previews are a convenience; the import itself stands
+        report["rendered"] = False
+        report["renderNote"] = f"Previews could not be rendered here ({type(exc).__name__})."
+    report["thumbnailKeys"] = keys
+    report["thumbnails"] = len(keys)
+    name = re.sub(r"[^\w.\- ]", "_", file.filename or f"template.{parsed['kind']}")[:200]
+    t = PresentationTemplate(workspace_id=workspace, company_id=company_id, filename=name, sha256=hashlib.sha256(data).hexdigest(), byte_size=len(data), data=data, report_json=report)
+    session.add(t)
+    session.flush()
+    return template_out(t)
+
+
+@router.get("/companies/{company_id}/templates")
+def list_templates(company_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    company(session, workspace, company_id)
+    rows = session.execute(select(PresentationTemplate).where(PresentationTemplate.company_id == company_id).order_by(PresentationTemplate.created_at.desc())).scalars()
+    return {"items": [template_out(t) for t in rows]}
+
+
+@router.get("/templates/{template_id}")
+def get_template(template_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> dict[str, Any]:
+    on()
+    return template_out(template_of(session, workspace, template_id))
+
+
+@router.get("/templates/{template_id}/thumbs/{n}")
+def template_thumb(template_id: str, n: int, workspace: str = Depends(access), session: Session = Depends(get_session)) -> Response:
+    on()
+    t = template_of(session, workspace, template_id)
+    keys = t.report_json.get("thumbnailKeys", [])
+    if not 1 <= n <= len(keys):
+        raise HTTPException(404, "preview not found")
+    return Response(store.get(keys[n - 1]), media_type="image/png", headers={"Cache-Control": "private, max-age=600", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/templates/{template_id}/logo/{index}")
+def template_logo(template_id: str, index: int, workspace: str = Depends(access), session: Session = Depends(get_session)) -> Response:
+    on()
+    t = template_of(session, workspace, template_id)
+    found = template_import.read(t.data)["logos"]
+    if not 0 <= index < len(found) or not found[index]["data"] or found[index]["mediaType"] == "image/svg+xml":
+        raise HTTPException(404, "preview not available")
+    return Response(found[index]["data"], media_type=found[index]["mediaType"], headers={"Cache-Control": "private, max-age=600", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/templates/{template_id}/file")
+def template_file(template_id: str, workspace: str = Depends(access), session: Session = Depends(get_session)) -> Response:
+    """The original upload, byte for byte."""
+    on()
+    t = template_of(session, workspace, template_id)
+    kind = "potx" if t.report_json.get("kind") == "potx" else "pptx"
+    mime = FILE_TYPES["pptx"] if kind == "pptx" else "application/vnd.openxmlformats-officedocument.presentationml.template"
+    return Response(t.data, media_type=mime, headers={"Content-Disposition": f'attachment; filename="{t.filename}"', "X-Content-Type-Options": "nosniff"})

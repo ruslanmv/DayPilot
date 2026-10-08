@@ -1,0 +1,71 @@
+{
+  "schema_version": "daypilot.generation-manifest/v1",
+  "fixture_only": true,
+  "id": "manifest_example",
+  "deck_id": "deck_weekly_example",
+  "revision_id": "revision_example",
+  "run_id": "run_example",
+  "created_at": "2026-09-28T06:35:00Z",
+  "deck_spec_sha256": "1b9ec81270145d2a62621517ac7925dfc7927974f72a8e735d9df97224f5c928",
+  "brand_ref": {
+    "id": "brand_example",
+    "version": 1,
+    "sha256": "7363d3638578fff5ed76beb2205bbe07f12a13cbd9e71d25490f0b825e43642a"
+  },
+  "template_ref": {
+    "id": "template_weekly_example",
+    "version": 1,
+    "sha256": "03412edfa1361a07a734885d49c9c3f2e21be1a8ef04cd96a8804aa112818246"
+  },
+  "compiler": {
+    "name": "proposed-compiler-fixture",
+    "version": "not-implemented",
+    "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "adapter": {
+    "name": "proposed-pptx-adapter",
+    "version": "not-implemented"
+  },
+  "renderer": {
+    "name": "proposed-renderer",
+    "version": "not-implemented",
+    "font_manifest_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "source_snapshot_hashes": [
+    {
+      "id": "snapshot_metrics",
+      "sha256": "04f2f176b241340b16eeb0723cc6e025a549b407014fee3a921172ad68d8ab8f"
+    },
+    {
+      "id": "snapshot_flow",
+      "sha256": "17f9b88a8bcf93531e82a22f0635be4edaa4f4016558162a5a3a36300eaf5fda"
+    }
+  ],
+  "assets": [
+    {
+      "id": "logo_example_placeholder",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "rights": "fixture_placeholder"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "output_placeholder",
+      "kind": "pptx",
+      "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "media_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    }
+  ],
+  "quality": {
+    "receipt_id": null,
+    "pptx_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "slides_reviewed": 0,
+    "total_slides": 6,
+    "hard_failure_count": 0,
+    "status": "not_evaluated",
+    "review_method": "none"
+  },
+  "limitations": [
+    "No output file exists. Hashes and artifact IDs are placeholders; this fixture makes no quality or generation claim."
+  ]
+}

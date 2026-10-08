@@ -66,8 +66,8 @@ export const api = {
     request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body), headers: opts?.headers }),
   put: <T>(path: string, body?: unknown, opts?: CallOpts) =>
     request<T>(path, { method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body), headers: opts?.headers }),
-  postForm: <T>(path: string, form: FormData) =>
-    request<T>(path, { method: 'POST', body: form }),
+  postForm: <T>(path: string, form: FormData, opts?: CallOpts) =>
+    request<T>(path, { method: 'POST', body: form, headers: opts?.headers }),
   patch: <T>(path: string, body?: unknown, opts?: CallOpts) =>
     request<T>(path, { method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body), headers: opts?.headers }),
   del: <T>(path: string, opts?: CallOpts) => request<T>(path, { method: 'DELETE', headers: opts?.headers }),
