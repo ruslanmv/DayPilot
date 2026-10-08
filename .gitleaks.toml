@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Fictional reporting-period ID in the presentation contract example"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^2026-W39-Europe-Rome$''']
+paths = ['''^docs/presentations/examples/deck-spec\.example\.json$''']

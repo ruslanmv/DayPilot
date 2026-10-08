@@ -1,0 +1,173 @@
+{
+  "schema_version": "daypilot.storyline/v1",
+  "title": "Superintelligence: where we are and what comes next",
+  "subtitle": "The evidence today, the expert outlook, and how to prepare",
+  "audience": "Leadership team",
+  "purpose": "Give a clear, sourced picture of AI progress toward superintelligence and agree how we track it",
+  "slides": [
+    {
+      "id": "cover",
+      "type": "cover",
+      "title": "Superintelligence: where we are and what comes next",
+      "subtitle": "The evidence today, the expert outlook, and how to prepare",
+      "kicker": "Briefing · October 2026",
+      "script": "Good morning. In the next five minutes I want to answer one question: how close are we to superintelligence, and what should we do about it? I'll show where AI really stands today, what experts expect, and a simple way for us to prepare.",
+      "seconds": 20
+    },
+    {
+      "id": "definition",
+      "type": "quote",
+      "title": "What we mean by superintelligence",
+      "quote": "Any intellect that greatly exceeds the cognitive performance of humans in virtually all domains of interest.",
+      "attribution": "Nick Bostrom, Superintelligence (2014)",
+      "sources": [
+        "N. Bostrom, Superintelligence: Paths, Dangers, Strategies, Oxford University Press, 2014"
+      ],
+      "script": "First, a definition, so that we are all arguing about the same thing. The philosopher Nick Bostrom put it this way: an intellect that greatly exceeds human performance in virtually all domains of interest. Not one narrow task. Not chess, and not only coding. Virtually everything we care about, from science to strategy.",
+      "seconds": 25
+    },
+    {
+      "id": "status",
+      "type": "kpis",
+      "title": "Capability is compounding on several fronts at once",
+      "kpis": [
+        {
+          "value": "4–5×",
+          "label": "Yearly growth in frontier training compute"
+        },
+        {
+          "value": "2–6×",
+          "label": "Yearly gain in algorithmic efficiency"
+        },
+        {
+          "value": "700M+",
+          "label": "People using leading AI systems weekly"
+        },
+        {
+          "value": "Gold",
+          "label": "Olympiad-level maths performance (2025)"
+        }
+      ],
+      "footnote": "Sources: Epoch AI (2024–25); International AI Safety Report 2026",
+      "sources": [
+        "Epoch AI, Training compute of frontier AI models grows by 4-5x per year",
+        "International AI Safety Report 2026 (published 3 February 2026)"
+      ],
+      "script": "So where are we today? Progress is compounding on several fronts at once. The compute used to train frontier models has grown four to five times every single year. On top of that, algorithms become two to six times more efficient each year, so the same hardware buys more capability. More than seven hundred million people now use leading AI systems every week. And in 2025, AI reached gold-medal level on International Mathematical Olympiad problems. None of these on its own is superintelligence. Together, they explain why the question has moved from science fiction to board agendas.",
+      "seconds": 45
+    },
+    {
+      "id": "forecasts",
+      "type": "chart",
+      "title": "Experts keep pulling their forecasts forward",
+      "chart": {
+        "type": "line",
+        "title": "Year with a 50% chance of human-level AI, by survey",
+        "unit": "forecast year",
+        "categories": [
+          "2016 survey",
+          "2022 survey",
+          "2023 survey",
+          "2024 survey"
+        ],
+        "series": [
+          {
+            "name": "50% forecast year",
+            "values": [
+              2061,
+              2059,
+              2047,
+              2042
+            ]
+          }
+        ]
+      },
+      "insights": [
+        "The horizon shrank from 45 years to 18 in eight years",
+        "About 3.4 years closer for every year that passed",
+        "Researchers stress the uncertainty is still very wide"
+      ],
+      "sources": [
+        "Grace et al., Advanced AI according to 1,580 researchers (AI Impacts, September 2026)"
+      ],
+      "script": "Here is what the experts think, and how fast that view is moving. The same survey has asked thousands of AI researchers when there will be an even chance of human-level AI. In 2016 the answer was 2061. In the 2022 survey it was 2059. Then it dropped sharply, and by the 2024 survey it was 2042. In other words, the horizon shrank from forty-five years to eighteen in just eight years. The uncertainty is still very wide, and nobody should treat 2042 as a date. But the direction of travel is clear: sooner than people thought.",
+      "seconds": 45
+    },
+    {
+      "id": "gap",
+      "type": "comparison",
+      "title": "Today's frontier AI is not superintelligence yet",
+      "left": {
+        "heading": "Frontier AI in 2026",
+        "points": [
+          "Gold-medal level on olympiad maths problems",
+          "Passes licensing exams in medicine and law",
+          "Agents complete software tasks of about 30 minutes",
+          "Still fails in unexpected, hard-to-predict ways"
+        ]
+      },
+      "right": {
+        "heading": "Superintelligence",
+        "points": [
+          "Beats the best humans in virtually every domain",
+          "Plans and acts reliably over long horizons",
+          "Could speed up AI research itself",
+          "Outcome hinges on goals staying aligned with ours"
+        ]
+      },
+      "sources": [
+        "International AI Safety Report 2026"
+      ],
+      "script": "Let's be precise about the gap that remains. On the left is frontier AI today. It solves olympiad maths, passes licensing exams in medicine and law, and AI agents now complete software tasks that take a person about half an hour. But it still fails in surprising ways that are hard to predict. On the right is superintelligence: better than the best people almost everywhere, acting reliably over long horizons, and perhaps speeding up AI research itself. Whether that future goes well depends on one thing above all: whether its goals stay aligned with ours.",
+      "seconds": 50
+    },
+    {
+      "id": "researchers",
+      "type": "statement",
+      "title": "Most AI researchers want safety work to move faster",
+      "statement": "72% of surveyed AI researchers want AI-risk research prioritised more than it is today.",
+      "support": "Same survey of 1,580 researchers (December 2024): the median respondent put a 10% chance on outcomes as severe as human extinction or permanent disempowerment.",
+      "sources": [
+        "Grace et al., Advanced AI according to 1,580 researchers (AI Impacts, September 2026)"
+      ],
+      "script": "That is why the people building these systems are asking for more caution, not less. In the latest survey, seventy-two percent of AI researchers want risk research to be prioritised more than it is today. The median researcher puts a ten percent chance on outcomes as severe as human extinction or permanent disempowerment. That is not a fringe view held by a few critics. It is the middle of the field.",
+      "seconds": 35
+    },
+    {
+      "id": "open",
+      "type": "bullets",
+      "title": "Four open problems will decide how this goes",
+      "bullets": [
+        "Alignment: keeping goals and behaviour matched to human intent as capability grows",
+        "Evidence: capability moves faster than proof about risks and safeguards",
+        "Security: misuse in cyberattacks and fraud is already being observed",
+        "Governance: 12 firms publish safety frameworks, but rules stay uneven"
+      ],
+      "takeaway": "Capability is no longer the only question; control and access are.",
+      "sources": [
+        "International AI Safety Report 2026"
+      ],
+      "script": "Four open problems will decide how this goes. Alignment: keeping goals and behaviour matched to what we intend, even as capability grows. Evidence: capability moves faster than proof that our safeguards actually work. Security: misuse in cyberattacks and fraud is not hypothetical; it is already being observed. And governance: twelve companies now publish safety frameworks, but the rules differ widely between countries. The point to remember is this: capability is no longer the only question. Control and fair access matter just as much.",
+      "seconds": 45
+    },
+    {
+      "id": "close",
+      "type": "closing",
+      "title": "Prepare for superintelligence without betting on a date",
+      "subtitle": "Treat it as a planning scenario, not a prediction",
+      "next_steps": [
+        "Review capability, cost and adoption signals every quarter",
+        "Set our AI use policy, evaluations and incident response",
+        "Back independent evaluation and common standards",
+        "First horizon review: next quarter's leadership meeting"
+      ],
+      "script": "So here is my recommendation. Prepare for superintelligence without betting on a date. Treat it as a planning scenario, not a prediction. Concretely, three things: review capability, cost and adoption signals every quarter; set our AI use policy, evaluations and incident response now; and back independent evaluation and common standards. I'd like us to hold the first horizon review at next quarter's leadership meeting. Thank you, and I'm happy to take questions.",
+      "seconds": 35
+    }
+  ],
+  "talk": {
+    "minutes": 5.0,
+    "wpm": 140,
+    "pace": "natural"
+  }
+}

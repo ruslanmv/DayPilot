@@ -12,8 +12,10 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    LargeBinary,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -1289,6 +1291,9 @@ class Diagram(TimestampMixin, Base):
     revision: Mapped[int] = mapped_column(Integer, default=1)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     document_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # Derived from document metadata (tags, project_id) so lists can filter without parsing JSON.
+    project_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    tags_text: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class DiagramRevision(Base):
@@ -1297,4 +1302,211 @@ class DiagramRevision(Base):
     diagram_id: Mapped[str] = mapped_column(ForeignKey("diagrams.id"), primary_key=True)
     revision: Mapped[int] = mapped_column(Integer, primary_key=True)
     document_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DiagramShare(Base):
+    """A read-only, expiring link to one pinned revision of a diagram. Only the token's SHA-256 is stored."""
+    __tablename__ = "diagram_shares"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    diagram_id: Mapped[str] = mapped_column(ForeignKey("diagrams.id"), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    include_notes: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    views: Mapped[int] = mapped_column(Integer, default=0)
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiCreditAccount(Base):
+    """AI credits for one workspace: a balance that refills from a monthly allowance."""
+    __tablename__ = "ai_credit_accounts"
+
+    workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
+    monthly_allowance: Mapped[int] = mapped_column(Integer, default=0)
+    period: Mapped[str] = mapped_column(String(7), default="")  # YYYY-MM of the last refill
+
+
+class AiCreditEvent(Base):
+    """Append-only ledger: usage (negative), grants and refills (positive). Never holds prompt text."""
+    __tablename__ = "ai_credit_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # use | grant | refill
+    action: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    balance_after: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+# ---------------------------------------------------------------------------
+# Presentations (additive). A company is a brand namespace inside a workspace, not a tenant.
+# Brand kit versions, assets, revisions and artifacts are immutable once written.
+# ---------------------------------------------------------------------------
+
+
+class PresentationCompany(TimestampMixin, Base):
+    __tablename__ = "presentation_companies"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    active_brand_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class PresentationBrandKit(Base):
+    __tablename__ = "presentation_brand_kits"
+    __table_args__ = (UniqueConstraint("company_id", "version", name="uq_presentation_brand_kit_version"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    company_id: Mapped[str] = mapped_column(ForeignKey("presentation_companies.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    kit_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    sha256: Mapped[str] = mapped_column(String(64))
+    warnings_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PresentationAsset(Base):
+    __tablename__ = "presentation_assets"
+    __table_args__ = (UniqueConstraint("company_id", "sha256", name="uq_presentation_asset_hash"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    company_id: Mapped[str] = mapped_column(ForeignKey("presentation_companies.id"), index=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    media_type: Mapped[str] = mapped_column(String(40))
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    byte_size: Mapped[int] = mapped_column(Integer)
+    filename: Mapped[str] = mapped_column(String(200))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # A rendered variant (e.g. the PNG made from a sanitised SVG) points at its original.
+    source_asset_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class PresentationDeck(TimestampMixin, Base):
+    __tablename__ = "presentation_decks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    company_id: Mapped[str] = mapped_column(ForeignKey("presentation_companies.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    head_revision: Mapped[int] = mapped_column(Integer, default=1)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    series_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    period_key: Mapped[str | None] = mapped_column(String(60), nullable=True)
+
+
+class PresentationRevision(Base):
+    __tablename__ = "presentation_revisions"
+
+    deck_id: Mapped[str] = mapped_column(ForeignKey("presentation_decks.id"), primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, primary_key=True)
+    parent_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    brand_version: Mapped[int] = mapped_column(Integer)
+    author: Mapped[str] = mapped_column(String(20), default="person")  # person | model | series
+    storyline_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    locks_json: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    deck_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    state: Mapped[str] = mapped_column(String(20), default="queued")  # queued|composing|review_ready|failed|approved
+    receipt_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    pptx_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    slide_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Expert mode: a reviewed JavaScript builder that produced this revision in the sandbox.
+    expert_script: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PresentationRun(Base):
+    """One build of one revision. Only the holder of the current lease epoch may publish."""
+    __tablename__ = "presentation_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    deck_id: Mapped[str] = mapped_column(String(36), index=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(20), default="queued")  # queued|running|succeeded|failed|cancelled
+    phase: Mapped[str] = mapped_column(String(30), default="queued")
+    epoch: Mapped[int] = mapped_column(Integer, default=0)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class PresentationArtifact(Base):
+    __tablename__ = "presentation_artifacts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    deck_id: Mapped[str] = mapped_column(String(36), index=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(10))  # pptx | pdf | png
+    position: Mapped[int] = mapped_column(Integer, default=0)  # slide number for png
+    sha256: Mapped[str] = mapped_column(String(64))
+    byte_size: Mapped[int] = mapped_column(Integer)
+    store_key: Mapped[str] = mapped_column(String(200))
+    run_id: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PresentationSeries(TimestampMixin, Base):
+    """A saved weekly recipe: company, timezone, reporting rule and the storyline to carry forward."""
+    __tablename__ = "presentation_series"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    company_id: Mapped[str] = mapped_column(ForeignKey("presentation_companies.id"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    recipe_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Opt-in automatic drafts. next_run_at is advanced with a compare-and-swap so only one worker fires.
+    schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    last_fired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_result: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
+class PresentationOccurrence(Base):
+    __tablename__ = "presentation_occurrences"
+    __table_args__ = (UniqueConstraint("series_id", "recipe_version", "period_key", name="uq_presentation_occurrence"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    series_id: Mapped[str] = mapped_column(ForeignKey("presentation_series.id"), index=True)
+    recipe_version: Mapped[int] = mapped_column(Integer)
+    period_key: Mapped[str] = mapped_column(String(60))
+    period_start: Mapped[str] = mapped_column(String(40))
+    period_end: Mapped[str] = mapped_column(String(40))
+    deck_id: Mapped[str] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PresentationTemplate(Base):
+    """An uploaded .pptx/.potx, kept byte-for-byte, with what DayPilot could and could not take from it."""
+    __tablename__ = "presentation_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    company_id: Mapped[str] = mapped_column(ForeignKey("presentation_companies.id"), index=True)
+    filename: Mapped[str] = mapped_column(String(200))
+    sha256: Mapped[str] = mapped_column(String(64))
+    byte_size: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    report_json: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

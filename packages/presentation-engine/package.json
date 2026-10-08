@@ -1,0 +1,18 @@
+{
+  "name": "@daypilot/presentation-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Compiles a DayPilot DeckSpec and brand kit into a native, editable PowerPoint file.",
+  "main": "src/index.mjs",
+  "bin": { "daypilot-deck": "bin/build.mjs" },
+  "scripts": {
+    "build": "node --check src/index.mjs",
+    "test": "node test/engine.test.mjs",
+    "lint": "echo placeholder lint"
+  },
+  "dependencies": {
+    "pptxgenjs": "4.0.1",
+    "jszip": "3.10.1"
+  }
+}

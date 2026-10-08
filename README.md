@@ -38,6 +38,10 @@ while keeping every sensitive action human-approved, audited, and reversible. It
 of the **HomePilot Family** and shares its calm, obsidian design language across desktop,
 web, and a mobile PWA.
 
+## Presentation workspace proposal
+
+An additive [DayPilot Presentations design](docs/presentations/README.md) defines company brand kits and templates, a brief-to-deck wizard, editable PowerPoint export with actual-file visual checks, immutable revisions, and weekly draft series. The package includes an implementation roadmap, quality benchmark and validated draft contracts. It is a design proposal; no presentation feature or recurring schedule is enabled by this documentation.
+
 ## Table of contents
 
 - [Product tour](#product-tour) · [Why DayPilot](#why-daypilot) · [Architecture](#architecture)
@@ -688,6 +692,57 @@ Licensed under Apache 2.0.
 <sub>DayPilot is part of the HomePilot Family. HomePilot creates portable AI identities; DayPilot governs them in professional workflows.</sub>
 </div>
 
+### Presentations
+
+Weekly and one-off decks in your company's brand, built as **native, editable PowerPoint** (real text, charts, tables and shapes, not pictures) and checked by rendering the actual file before anyone reviews it. Turn it on with `DAYPILOT_PRESENTATIONS=true`.
+
+<img src="docs/assets/screenshots/presentations/3-review.png" alt="Reviewing a deck: rendered slides, checks and speaker notes" width="100%" />
+
+<img src="docs/assets/screenshots/presentations/sheet.png" alt="Every slide of a generated weekly deck, rendered from the exported PowerPoint" width="100%" />
+
+<img src="docs/assets/screenshots/presentations/1-brand.png" alt="Company brand setup" width="49%" /> <img src="docs/assets/screenshots/presentations/2-outline.png" alt="Editable outline" width="49%" />
+
+<img src="docs/assets/screenshots/presentations/5-talk-length.png" alt="Choosing the talk length and pace in the new-presentation wizard" width="100%" />
+
+<img src="docs/assets/screenshots/presentations/7-script-editor.png" alt="Script editor: time per slide and a word meter" width="49%" /> <img src="docs/assets/screenshots/presentations/8-rehearse.png" alt="Rehearsal: slide, script, per-slide countdown and ahead/behind" width="49%" />
+
+Example: a 5-minute [superintelligence briefing](docs/presentations/examples/superintelligence/README.md) built end to end with these tools — PowerPoint, timed script and sources included.
+
+#### How to use it
+
+1. **Brand once.** Open **Presentations → Set up brand**: company name, logo (PNG, JPEG or SVG — SVGs are cleaned and converted), main and accent colours, fonts and footer. Each save is a new version; existing decks keep theirs. Already have a PowerPoint template? Upload the `.pptx`/`.potx` under **Brand → Start from your PowerPoint template**: DayPilot keeps the original, shows what it uses (colours, fonts, size, footer, logo) and what it does not reproduce, and creates the brand from it.
+2. **New presentation.** Pick a kind (weekly update, executive update, kickoff, quarterly review, launch, incident review, proposal, training), say what it is about, paste the facts and figures it may use, and optionally include a dmind map.
+3. **Approve the outline.** Draft it (written by your connected AI model, or from the template when none is connected) and edit every slide as plain fields. Numbers that are not in your sources are removed, never invented.
+4. **Build and review.** DayPilot lays out the slides, writes the PowerPoint, renders it and checks every slide (text fit, contrast, logo proportions, native charts and tables, slide count, evidence). Review the real rendered slides with notes and findings; lock slides you are happy with, rewrite one with AI, edit and rebuild; every change is a new revision.
+5. **Approve and download.** Approval binds the exact file. Download PowerPoint or PDF.
+6. **Every week.** **Make it weekly**, then **Prepare this week**: the same structure and wording for the new period, with last week's numbers cleared. Asking twice for the same week opens the same draft; nothing is sent automatically. To have the draft waiting for you, open **Automatic drafts** on the series and pick a day and time (needs `DAYPILOT_PRESENTATIONS_SCHEDULER=true` on the server); you get a notification when it is ready.
+7. **Timed speaker script.** Say how long you will speak (3, 5, 10 or 15 minutes, or any length) and at what pace. Each slide gets its share of the time and a script sized to it — written by your AI model, or composed from the slides when none is connected — with a word meter per slide. **Rehearse** shows the rendered slide, what to say, a countdown for the slide and whether you are ahead of or behind plan; **Download script** gives the script with timings, and the PowerPoint notes carry it too. **Script and timing** re-times the same deck for another length.
+8. **Optional extras.** Agents can use the same features through MCP at `POST /v1/presentations/mcp` (draft-only tools). With `DAYPILOT_PRESENTATIONS_EXPERT=true`, the **Expert builder (JavaScript)** panel on a deck runs your own PptxGenJS script in an isolated sandbox on your brand's layouts; the result is checked like any other revision.
+
+Design and plan: [docs/presentations](docs/presentations/README.md) · build and feasibility notes: [implementation plan](docs/presentations/implementation-plan.md) · checks: `make presentations-e2e`, `node packages/presentation-engine/test/engine.test.mjs` · screenshots: `scripts/presentations_screenshots.sh`.
+
 ### dmind diagrams
 
-Open **Diagrams** to turn topics, brainstorms and text attachments into editable mind maps, flows or system graphs. Save revision history, export/share portable snapshots and prepare Claude Code/Codex briefs or fresh Matrix Designer proposals. See [the complete dmind development plan](docs/dmind-development-plan.md) for delivery scope and follow-up phases.
+Open **Diagrams** to turn topics, brainstorms and text attachments into editable mind maps, flows or system graphs. Save revision history, export/share portable snapshots and prepare Claude Code/Codex briefs or fresh Matrix Designer proposals. The native file format is `.dmind`. See [the complete dmind development plan](docs/dmind-development-plan.md) for the batch plan (B0 to B10), the B0 verification record and acceptance gates. Run `make dmind-e2e` for the browser end-to-end test.
+
+<img src="docs/assets/screenshots/dmind/3-editor.png" alt="dmind editor: a mind map with topic details, appearance and layout controls" width="100%" />
+
+<img src="docs/assets/screenshots/dmind/1-start.png" alt="dmind start: topic and outline, with document and web page sources" width="49%" /> <img src="docs/assets/screenshots/dmind/2-preview.png" alt="dmind preview before it replaces anything" width="49%" />
+
+#### How to use it
+
+1. **Start.** Open **Diagrams → New diagram**. Type a topic and one idea per line (indent for child topics), or attach a `.txt`/`.md` file, a `.dmind` file, a DOCX/PDF/image, or import an `.opml` / `.xmind` file (import only; what could not be carried over is listed).
+2. **Preview.** Pick mind map, flowchart or system, then **Generate preview**. Nothing is saved or replaced until you press **Use this diagram**.
+3. **Edit.** Click a topic to rename it, add children or siblings, move, fold, colour or link it; drag to reposition; right-click for more. **Undo/Redo**, **Auto-layout** (tree, org chart, radial, fishbone, grid, columns, layered) and the outline view are always at hand.
+4. **Check and refine.** Open **Check and refine** for solver findings (loops without an exit, unreachable or unconnected topics) and to review a pasted `dmind-patch/v1` proposal as a diff before applying it.
+5. **Save and share.** **Save** keeps revision history; **Save a copy** forks. **Export / share…** gives `.dmind` (a ZIP bundle when attachments are present), Markdown, Mermaid, SVG, a read-only HTML snapshot and a Claude Code / Codex brief. Read-only expiring links exist but are off unless `DAYPILOT_DMIND_SHARING=true`.
+
+<img src="docs/assets/screenshots/dmind/5-tasks-timeline.png" alt="dmind tasks and Gantt timeline" width="49%" /> <img src="docs/assets/screenshots/dmind/6-present.png" alt="dmind presentation mode" width="49%" />
+
+**Faster starts, no AI needed.** In step 1 pick one of 14 templates (project plan, SWOT, OKRs, user journey, system design…) or a brainstorming method (SCAMPER, 5 Whys, pros/cons, six hats, pre-mortem, stakeholders), or press **Dictate** to speak your ideas. All of them only fill the outline box; you still review the preview.
+
+**Ask AI (your own models).** The **Ask AI** panel and the right-click menu (`AI: Suggest subtopics`, `Explain`, `Polish wording`) chat, grow, explain, tidy, shorten, translate or break a topic into tasks using the provider you connected in Settings. The AI only proposes: you see the differences and press **Apply suggestions**; Undo brings the old map back. Set `DAYPILOT_AI_CREDITS=true` to meter usage in credits (monthly allowance, owner top-ups, ledger); see [the AI plan](docs/dmind-ai-parity-plan.md).
+
+**Plan and present.** **Tasks and timeline** turns leaf topics into tasks, schedules phases and dependencies, draws a Gantt chart and sends open tasks to your DayPilot task list (once each). **Present** walks the map as slides with the keyboard. For scripts and AI tools see [dmind agent tools](docs/dmind-agent-tools.md).
+
+Screenshots are regenerated with `scripts/dmind_screenshots.sh`.

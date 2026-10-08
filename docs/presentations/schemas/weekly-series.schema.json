@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://daypilot.example/schemas/presentations/weekly-series.schema.json",
+  "title": "DayPilot weekly-series (draft)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "daypilot.weekly-series/v1"
+    },
+    "fixture_only": {
+      "type": "boolean"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,95}$"
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,95}$"
+    },
+    "company_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,95}$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "owner_user_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,95}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "timezone": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "brand_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,95}$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "sha256"
+      ]
+    },
+    "template_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,95}$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "sha256"
+      ]
+    },
+    "reporting_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "previous_full_week"
+          ]
+        },
+        "week_starts_on": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "cutoff_local_time": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        },
+        "max_source_age_hours": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 720
+        },
+        "missing_source_policy": {
+          "type": "string",
+          "enum": [
+            "block",
+            "visible_gap"
+          ]
+        },
+        "late_recovery": {
+          "type": "string",
+          "enum": [
+            "latest_only"
+          ]
+        },
+        "catch_up_hours": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 168
+        }
+      },
+      "required": [
+        "kind",
+        "week_starts_on",
+        "cutoff_local_time",
+        "max_source_age_hours",
+        "missing_source_policy",
+        "late_recovery",
+        "catch_up_hours"
+      ]
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "weekday": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "local_time": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        },
+        "gap_policy": {
+          "type": "string",
+          "enum": [
+            "first_valid_instant"
+          ]
+        },
+        "fold_policy": {
+          "type": "string",
+          "enum": [
+            "first_occurrence"
+          ]
+        }
+      },
+      "required": [
+        "enabled",
+        "weekday",
+        "local_time",
+        "gap_policy",
+        "fold_policy"
+      ]
+    },
+    "output_mode": {
+      "const": "draft_only"
+    },
+    "source_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,95}$"
+      },
+      "minItems": 1,
+      "maxItems": 100
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,95}$"
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "carry_forward": {
+            "type": "string",
+            "enum": [
+              "none",
+              "locked_structure_only",
+              "explicit_locked_content"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "purpose",
+          "required",
+          "carry_forward"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 30
+    },
+    "slide_count": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimum": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "maximum": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "required": [
+        "minimum",
+        "maximum"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "fixture_only",
+    "id",
+    "workspace_id",
+    "company_id",
+    "version",
+    "owner_user_id",
+    "name",
+    "timezone",
+    "brand_ref",
+    "template_ref",
+    "reporting_rule",
+    "schedule",
+    "output_mode",
+    "source_ids",
+    "sections",
+    "slide_count"
+  ]
+}
