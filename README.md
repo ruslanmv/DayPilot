@@ -521,6 +521,11 @@ browser's same-origin `/api/*` calls are routed to the API automatically. Set
 `DAYPILOT_AUTO_MIGRATE=0` if your deployment applies migrations as a separate,
 gated release step.
 
+For a checkout on a Windows drive in WSL (for example, `/mnt/c/workspace/daypilot`),
+uv's cache may be on a different filesystem. Use `UV_LINK_MODE=copy make start`
+to install dependencies by copying and avoid the hardlink fallback warning.
+If the default port is occupied, use the free port printed by `make start`.
+
 Health check:
 
 ```bash
