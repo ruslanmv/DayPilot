@@ -90,7 +90,9 @@ def _store_prefs(connection_id: str, prefs: dict[str, Any]) -> None:
 
 def _client_for(row: IntegrationConnection) -> HomePilotClient | None:
     secret = _secret(row.id)
-    base = secret.get("base_url") or _default_base_url()
+    # An older process-local store may already have lost this connection. Do
+    # not silently switch saved agents to an unrelated default installation.
+    base = secret.get("base_url")
     if not base:
         return None
     return HomePilotClient(base_url=base, api_key=secret.get("api_key") or None)
@@ -148,11 +150,12 @@ def _public(row: IntegrationConnection) -> dict[str, Any]:
     """Safe view — base host + bound account, never the key."""
     secret = _secret(row.id)
     base = secret.get("base_url") or _default_base_url()
+    configured = bool(secret.get("base_url"))
     return {
         "id": row.id,
         "workspaceId": row.workspace_id,
         "baseUrl": base,
-        "status": row.status,
+        "status": row.status if configured else "unconfigured",
         "capabilities": list(row.capabilities or []),
         # Which HomePilot account this connection is bound to (multi-account
         # security). Label is safe to show; the ref is opaque; the key is never here.
@@ -165,7 +168,10 @@ def _public(row: IntegrationConnection) -> dict[str, Any]:
         "bridgeVersion": secret.get("bridge_version") or "",
         "prefs": _prefs(row.id),
         "lastTestedAt": row.last_activity_at.isoformat() if row.last_activity_at else None,
-        "lastError": row.detail or None,
+        "lastError": (
+            (row.detail or None) if configured
+            else "Reconnect HomePilot to restore its address and credentials."
+        ),
     }
 
 
@@ -243,7 +249,7 @@ def setup_status(session: Session, workspace_id: str) -> dict[str, Any]:
 
     pub = _public(row)
     count = _agent_count(session, workspace_id, row.id)
-    state = _CONNECTION_STATE_BY_STATUS.get(row.status, "needs_attention")
+    state = _CONNECTION_STATE_BY_STATUS.get(pub["status"], "needs_attention")
     return {
         "featureEnabled": True,
         "adminLocked": False,
@@ -255,7 +261,7 @@ def setup_status(session: Session, workspace_id: str) -> dict[str, Any]:
             "displayName": "HomePilot",
             "browserUrl": _browser_url(pub["baseUrl"], _secret(row.id).get("browser_url")),
             "apiUrl": pub["baseUrl"],
-            "health": _HEALTH_BY_STATUS.get(row.status, "unreachable"),
+            "health": _HEALTH_BY_STATUS.get(pub["status"], "unreachable"),
             "version": "",
             "agentCount": count,
             "chatMode": pub["chatMode"],
@@ -843,7 +849,7 @@ def fetch_avatar(session: Session, workspace_id: str, link_id: str) -> tuple[byt
     for ref in (link.thumbnail_ref, link.avatar_ref):
         if not ref:
             continue
-        found = client.asset(ref)
+        found = client.asset(ref, project_id=link.homepilot_project_id)
         if found is not None:
             return found
     return None

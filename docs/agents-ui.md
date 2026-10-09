@@ -26,6 +26,16 @@ agent, so the photo shows even with no HomePilot reachable. When a persona has n
 avatar — or the portrait fails to load — the card falls back to the agent's
 initials, never an empty circle. The proxy fetches from HomePilot's asset
 origin (`/files/...` sits at the app root, not under the `/api` prefix) and
+resolves gallery filenames inside the owning project's `persona/appearance`
+directory, with a fallback for older files in flat uploads. Stored `/files/`
+URLs are resolved against the current connection, including its proxy mount.
+The configured HomePilot address, credentials and account binding survive
+gateway restarts in DayPilot's private local credential store. Keep
+`local_data/credentials` (or `DAYPILOT_CREDENTIALS_DIR`) with your local data.
+If an older gateway already lost its in-memory configuration, reconnect once in
+Settings → HomePilot; subsequent restarts retain it.
+
+For successful portraits,
 the response is cacheable, so a directory of dozens of agents is dozens of
 cache hits rather than dozens of round trips.
 

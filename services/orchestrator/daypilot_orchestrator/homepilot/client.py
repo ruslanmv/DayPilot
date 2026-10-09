@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 
@@ -74,19 +75,43 @@ class HomePilotClient:
         return base or self.base_url.rstrip("/")
 
     # -- assets --------------------------------------------------------------
-    def asset(self, ref: str) -> tuple[bytes, str] | None:
+    def asset(self, ref: str, *, project_id: str | None = None) -> tuple[bytes, str] | None:
         """Fetch one persona asset by its HomePilot-relative reference.
 
         ``ref`` is what a persona's appearance stores — either a bare relative
-        path (``projects/<id>/persona/appearance/thumb_avatar_x.webp``) or an
-        already-rooted ``/files/...`` URL. Returns ``(content, content_type)``,
+        path (``projects/<id>/persona/appearance/thumb_avatar_x.webp``), a
+        ``/files/...`` URL, or a gallery filename resolved using ``project_id``.
+        Returns ``(content, content_type)``,
         or ``None`` for anything that isn't a usable image so the caller can
         fall back to initials rather than serve a broken picture.
         """
         ref = (ref or "").strip()
         if not ref:
             return None
-        path = ref if ref.startswith("/") else f"/files/{ref}"
+        try:
+            parsed = urlsplit(ref)
+        except ValueError:
+            return None
+        path = unquote(parsed.path)
+        # Imported metadata may carry a URL from the exporting machine. Resolve
+        # its file path against this connection, never send credentials there.
+        if parsed.netloc or parsed.scheme:
+            if "/files/" not in path:
+                return None
+            path = path.split("/files/", 1)[1]
+        else:
+            path = path.lstrip("/")
+            if path.startswith("files/"):
+                path = path[len("files/"):]
+        if not path or ".." in path.split("/") or "\\" in path:
+            return None
+        paths = [f"files/{quote(path, safe='/')}"]
+        # Gallery blueprints use bare filenames, but HomePilot imports the
+        # bundled assets into projects/<id>/persona/appearance, not flat uploads.
+        # Try the owning project first; keep flat uploads for older personas.
+        if project_id and "/" not in path:
+            project_path = f"projects/{quote(project_id, safe='')}/persona/appearance"
+            paths.insert(0, f"files/{project_path}/{quote(path, safe='')}")
         try:
             with httpx.Client(
                 base_url=self.asset_base_url(),
@@ -94,18 +119,15 @@ class HomePilotClient:
                 timeout=self.timeout,
                 transport=self.transport,
             ) as c:
-                r = c.get(path, follow_redirects=True)
+                for path in paths:
+                    r = c.get(path, follow_redirects=True)
+                    content_type = (r.headers.get("content-type") or "").split(";")[0].strip()
+                    # Some deployments return a 200 HTML error page for files.
+                    if r.status_code == 200 and r.content and content_type.startswith("image/"):
+                        return r.content, content_type
         except httpx.HTTPError:
             return None
-        if r.status_code != 200 or not r.content:
-            return None
-        content_type = (r.headers.get("content-type") or "").split(";")[0].strip()
-        # HomePilot answers an unauthenticated request for a private file with an
-        # HTML error page and a 200 in some deployments; serving that as an image
-        # gives a broken card instead of an honest fallback.
-        if not content_type.startswith("image/"):
-            return None
-        return r.content, content_type
+        return None
 
     # -- discovery -----------------------------------------------------------
     def health(self) -> HealthResult:
