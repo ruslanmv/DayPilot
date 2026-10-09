@@ -9,6 +9,14 @@ const apiTarget = process.env.DAYPILOT_API_TARGET || process.env.VITE_DAYPILOT_A
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Keep React out of the main application chunk and cache it separately.
+        manualChunks: { 'react-vendor': ['react', 'react-dom'] },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,

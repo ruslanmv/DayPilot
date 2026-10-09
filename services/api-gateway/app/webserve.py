@@ -20,6 +20,21 @@ from pathlib import Path
 from fastapi import FastAPI
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.websockets import WebSocket
+
+
+class HttpOnlyStaticFiles(StaticFiles):
+    """Reject unsupported upgrades before StaticFiles' HTTP-only assertion.
+
+    The catch-all mount also matches WebSockets, including stale dev-server
+    connections. Registered WebSocket routes still take precedence over it.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "websocket":
+            await WebSocket(scope, receive=receive, send=send).close(code=1008)
+            return
+        await super().__call__(scope, receive, send)
 
 
 class ApiPrefixStripMiddleware:
@@ -63,5 +78,5 @@ def mount_web(app: FastAPI) -> str:
         return "api-only"
     # Mounted last (after routers) so API routes always win; html=True serves
     # index.html at `/` and static assets under it.
-    app.mount("/", StaticFiles(directory=str(dist), html=True), name="web")
+    app.mount("/", HttpOnlyStaticFiles(directory=str(dist), html=True), name="web")
     return f"serving web from {dist}"
