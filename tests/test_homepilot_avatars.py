@@ -95,6 +95,38 @@ def test_an_already_rooted_reference_is_not_prefixed_twice():
     assert asked == [f"http://localhost:8000/files/{THUMB_REF}"]
 
 
+@pytest.mark.parametrize("ref", [
+    THUMB_REF,
+    f"/{THUMB_REF}",
+    f"files/{THUMB_REF}",
+    f"/files/{THUMB_REF}",
+    f"https://old-homepilot.example/files/{THUMB_REF}",
+])
+def test_stored_file_reference_forms_use_the_connected_homepilot(ref):
+    client, asked = _client("http://homepilot:7860/api")
+    assert client.asset(ref) == (_IMAGE, "image/webp")
+    assert asked == [f"http://homepilot:7860/files/{THUMB_REF}"]
+
+
+def test_gallery_filename_is_resolved_inside_its_project():
+    client, asked = _client("http://homepilot:7860/api")
+    assert client.asset("thumb_avatar_scarlett.webp", project_id="scarlett-project-id") == (_IMAGE, "image/webp")
+    assert asked == [f"http://homepilot:7860/files/{THUMB_REF}"]
+
+
+def test_project_lookup_keeps_legacy_flat_files_working():
+    client, asked = _client("http://homepilot:7860/api", serve="/files/thumb_avatar_scarlett.webp")
+    assert client.asset("thumb_avatar_scarlett.webp", project_id="scarlett-project-id") == (_IMAGE, "image/webp")
+    assert asked == [f"http://homepilot:7860/files/{THUMB_REF}",
+                     "http://homepilot:7860/files/thumb_avatar_scarlett.webp"]
+
+
+def test_asset_mount_prefix_survives_file_url_normalization():
+    client, asked = _client("https://example.test/homepilot/api", serve=f"/homepilot/files/{THUMB_REF}")
+    assert client.asset(f"https://old.example/homepilot/files/{THUMB_REF}") == (_IMAGE, "image/webp")
+    assert asked == [f"https://example.test/homepilot/files/{THUMB_REF}"]
+
+
 def test_a_missing_asset_is_none_rather_than_an_exception():
     client, _ = _client("http://homepilot:7860/api")
     assert client.asset("projects/nope/persona/appearance/thumb_avatar_gone.webp") is None
@@ -193,6 +225,34 @@ def test_fetch_avatar_prefers_the_thumbnail_and_falls_back(monkeypatch):
     with session_scope(eng) as s:
         assert hp.fetch_avatar(s, ws, link_id) == (_IMAGE, "image/png")
     assert asked2[-1] == f"http://homepilot:7860/files/{full}"
+
+
+def test_synced_gallery_portrait_is_served_through_the_gateway(monkeypatch):
+    """Gallery appearance filenames are basenames; assets live in the project."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app import homepilot_platform as hp
+
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
+    ws = _ws()
+    project = _fixture("projects.json")["projects"][0]
+    project["persona_appearance"] = {
+        "selected_filename": "avatar_scarlett.png",
+        "selected_thumb_filename": "thumb_avatar_scarlett.webp",
+    }
+    eng = create_engine_from_settings()
+    with session_scope(eng) as s:
+        sync_agents(s, ws, "gallery-connection", _FakeDiscovery([project], []))
+    remote, asked = _client("http://homepilot:7860/api")
+    monkeypatch.setattr(hp, "_get_connection", lambda *_a: object())
+    monkeypatch.setattr(hp, "_client_for", lambda _row: remote)
+    with TestClient(app) as gateway:
+        profiles = gateway.get("/v1/agents/profiles", params={"workspaceId": ws}).json()["profiles"]
+        response = gateway.get(profiles[0]["avatarUrl"])
+        assert response.status_code == 200
+        assert response.content == _IMAGE
+        assert response.headers["content-type"] == "image/webp"
+    assert asked == [f"http://homepilot:7860/files/{THUMB_REF}"]
 
 
 # ── A sync must not delete an imported agent's embedded portrait ────────────

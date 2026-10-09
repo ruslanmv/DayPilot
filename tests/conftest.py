@@ -12,6 +12,7 @@ from pathlib import Path
 
 _TEST_DB = Path(tempfile.mkdtemp(prefix="daypilot-test-")) / "daypilot_test.db"
 os.environ.setdefault("DATABASE_URL", f"sqlite:///{_TEST_DB}")
+os.environ.setdefault("DAYPILOT_CREDENTIALS_DIR", str(_TEST_DB.parent / "credentials"))
 
 # Create the schema on the configured test database before any app import
 # triggers the (lru-cached) engine.

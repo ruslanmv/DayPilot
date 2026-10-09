@@ -12,4 +12,5 @@ local_data/sqlite/*.db
 local_data/vector_index/*
 local_data/documents/*
 local_data/traces/*
+local_data/credentials/
 !local_data/**/.gitkeep
