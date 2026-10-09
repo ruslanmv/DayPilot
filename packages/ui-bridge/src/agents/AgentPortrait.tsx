@@ -1,4 +1,6 @@
 import React from 'react'
+import { apiBase } from '../env'
+import { portraitUrl } from './portraitUrl'
 
 /**
  * An agent's portrait, with initials as the fallback.
@@ -27,12 +29,14 @@ export function AgentPortrait({
   className,
   initialsClassName = 'dp-agentcard__initials',
   maxInitials = 2,
+  as: Tag = 'div',
 }: {
   name: string
   avatarUrl?: string | null
   className?: string
   initialsClassName?: string
   maxInitials?: number
+  as?: 'div' | 'span'
 }) {
   const [failed, setFailed] = React.useState(false)
 
@@ -43,17 +47,17 @@ export function AgentPortrait({
   const showImage = Boolean(avatarUrl) && !failed
 
   return (
-    <div className={className} aria-hidden="true">
+    <Tag className={className} aria-hidden="true">
       {showImage
         ? (
           <img
-            src={avatarUrl as string}
+            src={portraitUrl(avatarUrl, apiBase())}
             alt=""
             loading="lazy"
             onError={() => setFailed(true)}
           />
           )
         : <span className={initialsClassName}>{agentInitials(name, maxInitials)}</span>}
-    </div>
+    </Tag>
   )
 }

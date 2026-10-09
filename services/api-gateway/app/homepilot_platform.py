@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -515,7 +515,8 @@ def _public_profile(link: HomePilotAgentLink) -> dict[str, Any]:
         "name": link.name,
         "role": link.role,
         "description": link.description,
-        "avatarUrl": f"/v1/agents/profiles/{link.id}/avatar"
+        # Images cannot send the workspace header used by JSON API calls.
+        "avatarUrl": f"/v1/agents/profiles/{link.id}/avatar?{urlencode({'workspaceId': link.workspace_id})}"
         if (link.thumbnail_ref or link.avatar_ref or (link.snapshot_json or {}).get("avatar_data_uri"))
         else None,
         "capabilities": list(link.capabilities_json or []),
