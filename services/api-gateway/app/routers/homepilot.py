@@ -225,16 +225,23 @@ def get_avatar(link_id: str, workspaceId: str = "default", session: Session = De
     immutable once committed and only change when the persona is re-synced.
     """
     _require_runtime()
-    result = hp.fetch_avatar(session, workspaceId, link_id)
+    result = hp.fetch_avatar_with_source(session, workspaceId, link_id)
     if result is None:
         # No avatar — the UI falls back to initials. 404 rather than 204 so the
-        # <img> onError handler fires reliably across browsers.
-        return Response(status_code=404)
-    content, content_type = result
+        # <img> onError handler fires reliably across browsers. The header says
+        # why (reconnect / unreachable / none) without exposing any address.
+        return Response(status_code=404, headers={"X-Portrait-Status": hp.portrait_problem(session, workspaceId, link_id),
+                                                  "Cache-Control": "no-store"})
+    content, content_type, source = result
     return Response(
         content=content,
         media_type=content_type,
-        headers={"Cache-Control": "private, max-age=3600"},
+        headers={
+            # A saved copy is shown while HomePilot is away; ask again soon.
+            "Cache-Control": "private, max-age=3600" if source != "saved" else "private, max-age=60",
+            "X-Portrait-Source": source,
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
