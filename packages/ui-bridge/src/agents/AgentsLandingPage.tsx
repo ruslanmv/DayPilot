@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 
+import { homepilotApi, type HomePilotSetupStatus } from '../settings/homepilotClient'
 import { AddAgentPanel } from './AddAgentPanel'
 import { AgentCard } from './AgentCard'
 import { AgentFilters } from './AgentFilters'
@@ -35,6 +36,16 @@ export function AgentsLandingPage({
   const liveRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<number>(0)
   const [bannerOpen, setBannerOpen] = useState(true)
+  const [setup, setSetup] = useState<HomePilotSetupStatus | null>(null)
+
+  // Agents stay listed when the HomePilot connection breaks (they live in
+  // DayPilot's database), but new portraits and chat need the connection. Say so
+  // instead of leaving a page of initials with no explanation.
+  useEffect(() => {
+    let live = true
+    homepilotApi.setupStatus().then((r) => { if (live && r.ok) setSetup(r.data) }).catch(() => undefined)
+    return () => { live = false }
+  }, [load])
 
   useEffect(() => {
     if (liveRef.current && load === 'ready') {
@@ -101,6 +112,8 @@ export function AgentsLandingPage({
         </div>
       )}
 
+      {load === 'ready' && agents.length > 0 && <ConnectionNotice setup={setup} onFix={onAddAgent} />}
+
       {load === 'loading' && (
         <div className="dp-agents__grid" aria-hidden="true">
           {Array.from({ length: 8 }).map((_, i) => <div key={i} className="dp-agentcard dp-agentcard--skeleton" />)}
@@ -160,5 +173,34 @@ export function AgentsLandingPage({
 
       <div className="dp-sr-live" role="status" aria-live="polite" ref={liveRef} />
     </section>
+  )
+}
+
+const NOTICE: Partial<Record<HomePilotSetupStatus['connectionState'], { text: string; action: string }>> = {
+  not_connected: {
+    text: 'HomePilot needs to be reconnected. DayPilot no longer has this connection’s address, so it can’t load new portraits or chat. Portraits it saved earlier still show.',
+    action: 'Reconnect HomePilot',
+  },
+  offline: {
+    text: 'HomePilot isn’t reachable right now. Saved portraits are shown, and chat resumes when it’s back.',
+    action: 'Check connection',
+  },
+  needs_attention: {
+    text: 'HomePilot rejected DayPilot’s key, so portraits and chat can’t be refreshed.',
+    action: 'Fix connection',
+  },
+}
+
+/** Shown only when there are agents and their HomePilot connection can't be used. */
+function ConnectionNotice({ setup, onFix }: { setup: HomePilotSetupStatus | null; onFix: () => void }) {
+  if (!setup || !setup.featureEnabled || !setup.connection) return null
+  const notice = NOTICE[setup.connectionState]
+  if (!notice) return null
+  return (
+    <div className="dp-agents__banner dp-agents__banner--warn" role="status">
+      <span className="dp-agents__banner-icon" aria-hidden="true">⚠</span>
+      <span>{notice.text}</span>
+      <button type="button" className="dp-ghost-button dp-agents__banner-action" onClick={onFix}>{notice.action}</button>
+    </div>
   )
 }

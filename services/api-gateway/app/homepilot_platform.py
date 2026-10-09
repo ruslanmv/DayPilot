@@ -8,7 +8,10 @@ path. It reuses the Integration credential store for the base URL + API key
 """
 from __future__ import annotations
 
+import dataclasses
+import hashlib
 import os
+import time
 from typing import Any
 from urllib.parse import urlencode, urlsplit
 
@@ -18,6 +21,7 @@ from sqlalchemy.orm import Session
 from daypilot_knowledge.db import Approval, HomePilotAgentLink, IntegrationConnection, Task
 from daypilot_knowledge.db.models import utcnow
 from daypilot_orchestrator.homepilot import action_mapping as hp_actions
+from daypilot_orchestrator.homepilot import portraits
 from daypilot_orchestrator.homepilot import session as hp_session
 from daypilot_orchestrator.homepilot import task_mapper as hp_mapper
 from daypilot_orchestrator.homepilot.client import HomePilotClient
@@ -376,6 +380,8 @@ def connect(session: Session, workspace_id: str, base_url: str | None, api_key: 
     credential_store().put(f"homepilot:{row.id}", secret)
 
     result = _probe(row)
+    if result["code"] == "connected" and _correct_address(row):
+        result = _probe(row)
     row.status = result["status"]
     row.detail = result.get("detail", "")
     row.last_activity_at = utcnow()
@@ -384,6 +390,26 @@ def connect(session: Session, workspace_id: str, base_url: str | None, api_key: 
         _store_chat_mode(row)   # probe bridge capability (A11): bridge vs legacy chat-only
     session.flush()
     return {"connection": _public(row), "code": result["code"]}
+
+
+def _correct_address(row: IntegrationConnection) -> bool:
+    """HomePilot answers its health check with a 404 on some installs, so "reachable"
+    does not prove the address is right: ``http://host:8000/api`` against a backend
+    serving ``/projects`` at its root looks connected but lists no agents. When the
+    personas can't be listed at the address given but can at its other form (with
+    or without the trailing ``/api``), keep the working one. Returns whether it changed."""
+    client = _client_for(row)
+    if not isinstance(client, HomePilotClient) or client._projects_raw() is not None:
+        return False
+    base = client.base_url.rstrip("/")
+    other = base[: -len("/api")] if base.endswith("/api") else base + "/api"
+    if not other or HomePilotClient(base_url=other, api_key=client.api_key, timeout=10.0)._projects_raw() is None:
+        return False
+    secret = _secret(row.id)
+    secret["base_url"] = other
+    secret["browser_url"] = _browser_url(other, None) if not secret.get("browser_url") else secret["browser_url"]
+    credential_store().put(f"homepilot:{row.id}", secret)
+    return True
 
 
 def _store_account(row: IntegrationConnection) -> dict[str, str]:
@@ -507,10 +533,18 @@ def sync(session: Session, workspace_id: str, connection_id: str) -> dict[str, A
     if result.get("code") == "discovery_failed":
         row.detail = "Couldn't read personas from HomePilot; agents left unchanged."
         return {"code": "discovery_failed", **result}
-    return {"code": "synced", **result}
+    return {"code": "synced", **result, "portraitsSaved": _prefetch_portraits(session, workspace_id, connection_id, client)}
 
 
 # ---- agent profiles ---------------------------------------------------------
+
+def _avatar_url(link: HomePilotAgentLink) -> str | None:
+    ref = link.thumbnail_ref or link.avatar_ref or (link.snapshot_json or {}).get("avatar_data_uri")
+    if not ref:
+        return None
+    version = hashlib.sha256(str(ref).encode()).hexdigest()[:10]
+    return f"/v1/agents/profiles/{link.id}/avatar?{urlencode({'workspaceId': link.workspace_id, 'v': version})}"
+
 
 def _public_profile(link: HomePilotAgentLink) -> dict[str, Any]:
     return {
@@ -521,10 +555,9 @@ def _public_profile(link: HomePilotAgentLink) -> dict[str, Any]:
         "name": link.name,
         "role": link.role,
         "description": link.description,
-        # Images cannot send the workspace header used by JSON API calls.
-        "avatarUrl": f"/v1/agents/profiles/{link.id}/avatar?{urlencode({'workspaceId': link.workspace_id})}"
-        if (link.thumbnail_ref or link.avatar_ref or (link.snapshot_json or {}).get("avatar_data_uri"))
-        else None,
+        # Images cannot send the workspace header used by JSON API calls. ``v``
+        # changes with the portrait, so a new one is not hidden by the browser cache.
+        "avatarUrl": _avatar_url(link),
         "capabilities": list(link.capabilities_json or []),
         "memoryMode": link.memory_mode,
         "sourceVersion": link.source_version,
@@ -828,6 +861,14 @@ def on_approval_decided(session: Session, approval: Approval) -> dict[str, Any] 
 def fetch_avatar(session: Session, workspace_id: str, link_id: str) -> tuple[bytes, str] | None:
     """Proxy the persona avatar from HomePilot (the browser never calls it).
     Best-effort — returns None so the UI falls back to initials."""
+    found = fetch_avatar_with_source(session, workspace_id, link_id)
+    return (found[0], found[1]) if found else None
+
+
+def fetch_avatar_with_source(session: Session, workspace_id: str, link_id: str) -> tuple[bytes, str, str] | None:
+    """``(content, content_type, source)`` where source is ``embedded``, ``live``
+    (just fetched from HomePilot, and kept) or ``saved`` (the last good copy,
+    because HomePilot could not be asked or no longer has the file)."""
     link = _get_link(session, workspace_id, link_id)
     if link is None:
         return None
@@ -837,19 +878,77 @@ def fetch_avatar(session: Session, workspace_id: str, link_id: str) -> tuple[byt
 
     embedded = decode_avatar_data_uri((link.snapshot_json or {}).get("avatar_data_uri"))
     if embedded is not None:
-        return embedded
+        return embedded[0], embedded[1], "embedded"
     row = _get_connection(session, workspace_id, link.connection_id)
-    if row is None:
+    client = _client_for(row) if row is not None else None
+    if client is not None:
+        live = _fetch_portrait(client, link)
+        if live is not None:
+            return live[0], live[1], "live"
+    saved = portraits.load(workspace_id, link.id)
+    if saved is not None:
+        return saved[0], saved[1], "saved"
+    return None
+
+
+PORTRAIT_TIMEOUT = 8.0
+
+
+def _fetch_portrait(client: HomePilotClient, link: HomePilotAgentLink) -> tuple[bytes, str] | None:
+    """Thumbnail first (256px, what the card actually needs), full portrait as the
+    fallback for a persona committed before thumbnails existed. A portrait that
+    arrives is kept so the directory survives HomePilot being unreachable. A short
+    timeout: a page asks for dozens of these, and a saved copy is a fine answer."""
+    if isinstance(client, HomePilotClient) and client.timeout > PORTRAIT_TIMEOUT:
+        client = dataclasses.replace(client, timeout=PORTRAIT_TIMEOUT)
+    asset = getattr(client, "asset", None)
+    if not callable(asset):
         return None
-    client = _client_for(row)
-    if client is None:
-        return None
-    # Thumbnail first (256px, what the card actually needs), full portrait as the
-    # fallback for a persona committed before thumbnails existed.
     for ref in (link.thumbnail_ref, link.avatar_ref):
         if not ref:
             continue
-        found = client.asset(ref, project_id=link.homepilot_project_id)
+        try:
+            found = asset(ref, project_id=link.homepilot_project_id)
+        except Exception:  # noqa: BLE001 - a portrait is never worth failing a page or a sync
+            found = None
         if found is not None:
+            portraits.save(link.workspace_id, link.id, ref, found[0])
             return found
     return None
+
+
+def portrait_problem(session: Session, workspace_id: str, link_id: str) -> str:
+    """Why an agent has no portrait to show, for the response header and the UI:
+    ``reconnect`` (the saved connection lost its address), ``unreachable`` or ``none``."""
+    link = _get_link(session, workspace_id, link_id)
+    if link is None or not (link.thumbnail_ref or link.avatar_ref):
+        return "none"
+    row = _get_connection(session, workspace_id, link.connection_id)
+    if row is None or _client_for(row) is None:
+        return "reconnect"
+    return "unreachable"
+
+
+PREFETCH_SECONDS = 20.0
+
+
+def _prefetch_portraits(session: Session, workspace_id: str, connection_id: str, client: HomePilotClient) -> int:
+    """After a sync, keep a copy of every portrait that is missing or changed, so
+    the directory still shows faces when HomePilot is later unreachable. Bounded
+    in time so a slow HomePilot never stalls the sync."""
+    deadline = time.monotonic() + PREFETCH_SECONDS
+    stored = 0
+    links = session.execute(
+        select(HomePilotAgentLink).where(
+            HomePilotAgentLink.workspace_id == workspace_id, HomePilotAgentLink.connection_id == connection_id
+        )
+    ).scalars().all()
+    for link in links:
+        if time.monotonic() > deadline:
+            break
+        ref = link.thumbnail_ref or link.avatar_ref
+        if not ref or portraits.has(workspace_id, link.id, ref):
+            continue
+        if _fetch_portrait(client, link) is not None:
+            stored += 1
+    return stored

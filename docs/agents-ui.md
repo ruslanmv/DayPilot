@@ -35,9 +35,34 @@ gateway restarts in DayPilot's private local credential store. Keep
 If an older gateway already lost its in-memory configuration, reconnect once in
 Settings → HomePilot; subsequent restarts retain it.
 
-For successful portraits,
-the response is cacheable, so a directory of dozens of agents is dozens of
-cache hits rather than dozens of round trips.
+**Saved portraits.** Every portrait fetched from HomePilot is also kept in
+DayPilot's private portrait folder (`local_data/agent-portraits`, or
+`DAYPILOT_AGENT_PORTRAITS_DIR`; only real PNG, JPEG, WebP or GIF bytes are
+kept), and each sync saves the ones not seen yet. When HomePilot is down, slow,
+or the saved connection has lost its address, the last good copy is served
+instead of a 404, so the directory keeps its faces. Response headers say what
+happened: `X-Portrait-Source: live | saved | embedded`, or on a 404
+`X-Portrait-Status: reconnect | unreachable | none`.
+
+When the HomePilot connection can't be used, the Agents page says so above the
+grid (reconnect, unreachable or rejected key) with a button to the HomePilot
+settings, instead of leaving a page of initials unexplained.
+
+The portrait URL carries a short version of the portrait reference (`&v=…`),
+so a changed portrait is not hidden by the browser cache, while successful
+portraits stay cacheable — a directory of dozens of agents is dozens of cache
+hits rather than dozens of round trips.
+
+When connecting, DayPilot checks that personas can actually be listed. Some
+HomePilot installs answer the health check with a 404, so "reachable" alone did
+not prove the address: `http://host:8000/api` against a backend serving
+`/projects` at its root looked connected but listed nothing. If personas can
+only be listed at the other form of the address (with or without `/api`), that
+form is kept.
+
+![Agents directory with HomePilot portraits](assets/screenshots/agents/directory-portraits.png)
+
+![The same directory after the saved connection lost its address: saved portraits and a reconnect notice](assets/screenshots/agents/directory-reconnect.png)
 
 Portrait requests use the same configured gateway base as JSON requests
 (`VITE_DAYPILOT_API_BASE`, `/api` by default), so they also work through Vite's

@@ -182,7 +182,8 @@ def test_public_portrait_url_fetches_the_image_in_its_own_workspace(monkeypatch,
         with TestClient(app) as client:
             profiles = client.get("/v1/agents/profiles", params={"workspaceId": workspace}).json()["profiles"]
             profile = next(p for p in profiles if p["id"] == link_id)
-            assert parse_qs(urlsplit(profile["avatarUrl"]).query) == {"workspaceId": [workspace]}
+            query = parse_qs(urlsplit(profile["avatarUrl"]).query)
+            assert query["workspaceId"] == [workspace] and len(query["v"][0]) == 10
             response = client.get(profile["avatarUrl"])
             assert response.status_code == 200
             assert response.content == image
