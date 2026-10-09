@@ -29,6 +29,12 @@ origin (`/files/...` sits at the app root, not under the `/api` prefix) and
 the response is cacheable, so a directory of dozens of agents is dozens of
 cache hits rather than dozens of round trips.
 
+Portrait requests use the same configured gateway base as JSON requests
+(`VITE_DAYPILOT_API_BASE`, `/api` by default), so they also work through Vite's
+development proxy. Each portrait URL includes its workspace ID; image elements
+cannot send the workspace header themselves. The directory, agent workspace,
+chat and HomePilot setup wizard all use the same portrait component.
+
 Synced agents arrive **disabled** on purpose — adding an agent to DayPilot is
 a deliberate act, never a side effect of connecting HomePilot. Each card
 carries the **Turn on / Turn off** button that performs it.

@@ -146,9 +146,9 @@ def test_imported_persona_photo_is_served_offline(monkeypatch):
 
     profiles = client.get(f"/v1/agents/profiles?workspaceId={ws}").json()["profiles"]
     nova = next(p for p in profiles if p["id"] == link_id)
-    assert nova["avatarUrl"] == f"/v1/agents/profiles/{link_id}/avatar"
+    assert nova["avatarUrl"] == f"/v1/agents/profiles/{link_id}/avatar?workspaceId={ws}"
 
-    avatar = client.get(f"/v1/agents/profiles/{link_id}/avatar?workspaceId={ws}")
+    avatar = client.get(nova["avatarUrl"])
     assert avatar.status_code == 200
     assert avatar.headers["content-type"].startswith("image/")
     assert avatar.content == _PNG_1x1  # the exact bundled portrait, served locally

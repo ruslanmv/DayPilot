@@ -19,6 +19,7 @@ embedded portrait of an agent imported from a ``.hpersona`` package.
 """
 from __future__ import annotations
 
+import base64
 import json
 import uuid
 from pathlib import Path
@@ -121,6 +122,45 @@ def test_an_empty_reference_asks_for_nothing():
 
 # ── The proxy prefers the thumbnail and falls back to the full portrait ─────
 
+@pytest.mark.parametrize("workspace", ["default", "crew & planning"])
+def test_public_portrait_url_fetches_the_image_in_its_own_workspace(monkeypatch, workspace):
+    """An img cannot send X-Workspace-Id; its URL must carry the scope itself."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    monkeypatch.setenv("DAYPILOT_HOMEPILOT_RUNTIME_ENABLED", "true")
+    image = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+        "890000000d49444154789c636060606000000005000109f60b210000000049454e44ae426082"
+    )
+    eng = create_engine_from_settings()
+    with session_scope(eng) as s:
+        link = HomePilotAgentLink(
+            workspace_id=workspace, connection_id="portrait-url-test",
+            homepilot_project_id="portrait-" + uuid.uuid4().hex[:8], name="Scarlett",
+            snapshot_json={"avatar_data_uri": "data:image/png;base64," + base64.b64encode(image).decode()},
+        )
+        s.add(link)
+        s.flush()
+        link_id = link.id
+
+    try:
+        with TestClient(app) as client:
+            profiles = client.get("/v1/agents/profiles", params={"workspaceId": workspace}).json()["profiles"]
+            profile = next(p for p in profiles if p["id"] == link_id)
+            assert parse_qs(urlsplit(profile["avatarUrl"]).query) == {"workspaceId": [workspace]}
+            response = client.get(profile["avatarUrl"])
+            assert response.status_code == 200
+            assert response.content == image
+            assert response.headers["content-type"] == "image/png"
+            assert client.get(f"/v1/agents/profiles/{link_id}/avatar?workspaceId=other").status_code == 404
+    finally:
+        with session_scope(eng) as s:
+            s.delete(s.get(HomePilotAgentLink, link_id))
+
+
 def test_fetch_avatar_prefers_the_thumbnail_and_falls_back(monkeypatch):
     from app import homepilot_platform as hp
 
@@ -210,7 +250,8 @@ def test_the_portrait_component_falls_back_to_initials_on_a_failed_load():
 
 def test_every_surface_uses_the_one_portrait_component():
     """Three call sites had three different fallbacks; one had none that worked."""
-    for rel in ("AgentCard.tsx", "workspace/AgentWorkspaceHeader.tsx", "workspace/AgentChatPanel.tsx"):
+    for rel in ("AgentCard.tsx", "workspace/AgentWorkspaceHeader.tsx", "workspace/AgentChatPanel.tsx",
+                "../settings/HomePilotSetupWizard.tsx"):
         source = (SRC / rel).read_text(encoding="utf-8")
         assert "<AgentPortrait" in source, f"{rel} still renders its own portrait"
         assert "<img src={agent.avatarUrl}" not in source, f"{rel} still has a raw <img>"

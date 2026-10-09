@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { AgentPortrait } from '../agents/AgentPortrait'
 
 import {
   homepilotApi,
@@ -274,7 +275,7 @@ export function HomePilotSetupWizard({ onClose, onOpenAgents }: { onClose: () =>
                     <input type="checkbox" checked={selected.has(p.id)} onChange={(e) => {
                       setSelected((cur) => { const n = new Set(cur); e.target.checked ? n.add(p.id) : n.delete(p.id); return n })
                     }} />
-                    <span className="dp-hpw__avatar" aria-hidden="true">{p.avatarUrl ? <img src={p.avatarUrl} alt="" /> : (p.name[0] || 'A')}</span>
+                    <AgentPortrait as="span" name={p.name} avatarUrl={p.avatarUrl} className="dp-hpw__avatar" maxInitials={1} />
                     <span className="dp-hpw__agentmeta"><strong>{p.name}</strong><span className="dp-muted">{p.role}</span></span>
                   </label>
                 ))}
