@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -82,6 +82,54 @@ def list_events(session: Session, workspace_id: str = "default") -> list[dict[st
         ).order_by(CalendarEvent.start_at.asc())
     ).scalars()
     return [_serialize(r) for r in rows]
+
+
+def _utc_naive(value: datetime) -> datetime:
+    """Aware times in UTC, naive ones as stored, so the two can be compared."""
+    if value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def events_in_window(
+    session: Session,
+    workspace_id: str,
+    start: datetime | None,
+    end: datetime | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Events overlapping ``[start, end)`` and the conflicts among only those.
+
+    For displays that show a few days (the Echo dashboard): the payload and the
+    pairwise conflict check stay proportional to the window rather than to the
+    whole calendar. Events without a start time cannot be placed in a window and
+    are left out. A naive stored time is compared as UTC, so callers that think
+    in local days should pass a day of margin on each side and trim locally.
+    """
+    lo = _utc_naive(start) if start else None
+    hi = _utc_naive(end) if end else None
+    rows = session.execute(
+        select(CalendarEvent).where(
+            CalendarEvent.workspace_id == workspace_id,
+            CalendarEvent.start_at.isnot(None),
+        ).order_by(CalendarEvent.start_at.asc())
+    ).scalars()
+    picked = []
+    for ev in rows:
+        ev_start = _utc_naive(ev.start_at)
+        ev_end = _utc_naive(ev.end_at) if ev.end_at else ev_start
+        if hi is not None and ev_start >= hi:
+            continue
+        if lo is not None and ev_end < lo:
+            continue
+        picked.append(ev)
+    live = [ev for ev in picked if ev.status != "cancelled"]
+    conflicts: list[dict[str, Any]] = []
+    for i in range(len(live)):
+        for j in range(i + 1, len(live)):
+            a, b = live[i], live[j]
+            if a.end_at and b.start_at and _utc_naive(b.start_at) < _utc_naive(a.end_at):
+                conflicts.append({"a": a.id, "b": b.id, "aTitle": a.title, "bTitle": b.title})
+    return [_serialize(ev) for ev in picked], conflicts
 
 
 def detect_conflicts(session: Session, workspace_id: str = "default") -> list[dict[str, Any]]:

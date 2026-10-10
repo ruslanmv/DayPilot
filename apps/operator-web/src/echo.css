@@ -1,0 +1,23 @@
+/* The shared sign-in page (AppGate / LoginPage) is styled by the workspace stylesheet. */
+@import "../../../packages/ui-bridge/src/space-bridge.css";
+@import "../../../packages/ui-bridge/src/echo/echo.css";
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: #000;
+}
+
+body {
+  color-scheme: dark;
+  font-family: var(--hp-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}

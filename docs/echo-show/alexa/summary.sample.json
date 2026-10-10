@@ -1,0 +1,15 @@
+{
+  "summary": {
+    "greeting": "Good morning, Alex",
+    "updatedAt": "10:40",
+    "now": { "title": "Patch auth token refresh", "time": "09:30 – 12:00" },
+    "next": { "title": "Finish Client Alpha release notes", "time": "10:00 – 11:30" },
+    "tiles": [
+      { "label": "Approvals waiting", "value": 3, "color": "#F5B14C" },
+      { "label": "Blocked tasks", "value": 2, "color": "#F87171" },
+      { "label": "AI runs active", "value": 2, "color": "#7CB4FF" },
+      { "label": "Projects need attention", "value": 3, "color": "#B49CFF" }
+    ],
+    "nextEvent": { "title": "Client Alpha weekly sync", "startsAt": "11:00" }
+  }
+}

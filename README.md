@@ -230,6 +230,17 @@ commitment gets approved, wherever you are.
 <img src="docs/assets/screenshots/agents/agent-workspace-mobile.png" alt="Agent workspace on a phone" width="30%" />
 </p>
 
+### On an Echo Show 21 — a wall display at `/echo`
+
+Open `https://<your-daypilot>/echo` in the Silk browser of a 21-inch **Amazon Echo Show** for a
+landscape, touch-first dashboard: Today, Calendar, Tasks, Projects, the Assistant, Agents and
+Approvals, from the same server, sign-in and permissions as the console. Real data only, a second
+tap before any decision, and clear offline, stale and error states. It is additive — the console
+and the mobile PWA are unchanged — and it is verified in Chromium emulation, not yet on the
+device; DayPilot does not claim kiosk support. See [`docs/echo-show/`](docs/echo-show/README.md).
+
+<img src="docs/assets/screenshots/echo/today-1920x1080.jpg" alt="The /echo display on a 1920 × 1080 Echo Show viewport" width="100%" />
+
 ### Calendar — show up prepared for every meeting
 
 Connect **Outlook** or **Google Calendar** and DayPilot plans around your real
@@ -636,6 +647,8 @@ The [`docs/`](docs/) folder is the production knowledge base.
 | [`meeting-intelligence.md`](docs/meeting-intelligence.md) | Everyone | Connecting Outlook / Google Calendar: how to set it up, what each setting does, the meeting-context allow-list, and the design for calendar-aware planning. |
 | [`slack-workspace.md`](docs/slack-workspace.md) | Everyone | The optional Slack workspace: setup, the decision inbox, drafting restraint, the context allow-list, recipient protection, and why nothing is ever auto-sent. |
 | [`agents-ui.md`](docs/agents-ui.md) | Product & design | The agents directory, agent workspace, portraits and the add-agent flow. |
+| [`echo-show/README.md`](docs/echo-show/README.md) | Everyone | The `/echo` display for Amazon Echo Show 21: setup over HTTPS, refresh and failure behaviour, permissions, Silk/Echo limitations and the on-device checklist. |
+| [`echo-show/alexa-skill-plan.md`](docs/echo-show/alexa-skill-plan.md) | Product & engineers | Plan (not built) for a read-only Alexa skill and APL widget, with draft interaction model and APL document. |
 | [`integrations.md`](docs/integrations.md) | Platform & integrators | Using the Integration Gateway: connect providers, attach MCP servers, notifications, workflows, catalog/SDK, and the full API. |
 | [`integration-platform-plan.md`](docs/integration-platform-plan.md) | Platform & integrators | Additive, non-destructive batch roadmap (I0–I10) for the Integration Gateway, Slack, MCP, unified notifications, and the private integration platform. |
 | [`setup-and-onboarding.md`](docs/setup-and-onboarding.md) | New users & integrators | First-run wizard, project wizard, Ollabridge pairing (local **and** cloud), and the week simulation. |

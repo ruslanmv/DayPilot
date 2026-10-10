@@ -58,12 +58,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
   }
 }
 
-type CallOpts = { headers?: Record<string, string> }
+// `signal` is optional and only passed through; callers without it are unchanged.
+type CallOpts = { headers?: Record<string, string>; signal?: AbortSignal }
 
 export const api = {
-  get: <T>(path: string, opts?: CallOpts) => request<T>(path, { headers: opts?.headers }),
+  get: <T>(path: string, opts?: CallOpts) => request<T>(path, { headers: opts?.headers, signal: opts?.signal }),
   post: <T>(path: string, body?: unknown, opts?: CallOpts) =>
-    request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body), headers: opts?.headers }),
+    request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body), headers: opts?.headers, signal: opts?.signal }),
   put: <T>(path: string, body?: unknown, opts?: CallOpts) =>
     request<T>(path, { method: 'PUT', body: body === undefined ? undefined : JSON.stringify(body), headers: opts?.headers }),
   postForm: <T>(path: string, form: FormData, opts?: CallOpts) =>

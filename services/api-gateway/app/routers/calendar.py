@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,14 +30,36 @@ class SettingsBody(BaseModel):
     model_config = {"extra": "allow"}
 
 
+def _window_bound(value: str | None, name: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"{name} must be an ISO 8601 date-time") from None
+
+
 @router.get("/events")
-def events(session: Session = Depends(get_session), workspaceId: str = "default") -> dict[str, Any]:
+def events(
+    session: Session = Depends(get_session),
+    workspaceId: str = "default",
+    start: str | None = None,
+    end: str | None = None,
+) -> dict[str, Any]:
     """Read the local event store.
 
     This used to call ``sync_events()``, which made rendering the calendar
     perform a write and put a provider round-trip on a read path. Syncing is now
     ``POST /v1/calendar/sync`` and belongs to the job queue.
+
+    Optional ``start``/``end`` (ISO 8601) limit the events and conflicts to that
+    window; without them every event is returned, as before.
     """
+    if start or end:
+        items, conflicts = calendar_service.events_in_window(
+            session, workspaceId, _window_bound(start, "start"), _window_bound(end, "end")
+        )
+        return {"items": items, "conflicts": conflicts, "provider": calendar_service.calendar_provider()}
     return {
         "items": calendar_service.list_events(session, workspaceId),
         "conflicts": calendar_service.detect_conflicts(session, workspaceId),
