@@ -17,7 +17,7 @@ export type AuthConfig = {
 export type AuthUser = { id: string; email: string; displayName: string; role: string; workspaceId: string; mfaState: string }
 export type AuthResult<T> = { ok: true; data: T } | { ok: false; error: string; status?: number }
 
-function csrfToken(): string {
+export function csrfToken(): string {
   const m = typeof document !== 'undefined' && document.cookie.match(/(?:^|;\s*)dp_csrf=([^;]+)/)
   return m ? decodeURIComponent(m[1]) : ''
 }

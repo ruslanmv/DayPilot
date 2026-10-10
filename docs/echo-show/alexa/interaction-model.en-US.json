@@ -1,0 +1,52 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "day pilot",
+      "intents": [
+        {
+          "name": "TodaySummaryIntent",
+          "slots": [],
+          "samples": [
+            "what's next",
+            "what is next",
+            "what am I doing now",
+            "how does my day look",
+            "summarize my day"
+          ]
+        },
+        {
+          "name": "ApprovalsSummaryIntent",
+          "slots": [],
+          "samples": [
+            "what needs my approval",
+            "how many approvals are waiting",
+            "do I have approvals"
+          ]
+        },
+        {
+          "name": "CalendarSummaryIntent",
+          "slots": [],
+          "samples": [
+            "what's on my calendar",
+            "what's my next meeting",
+            "what meetings do I have today"
+          ]
+        },
+        {
+          "name": "ProjectsAtRiskIntent",
+          "slots": [],
+          "samples": [
+            "which projects are at risk",
+            "which projects need attention"
+          ]
+        },
+        { "name": "AMAZON.HelpIntent", "samples": [] },
+        { "name": "AMAZON.CancelIntent", "samples": [] },
+        { "name": "AMAZON.StopIntent", "samples": [] },
+        { "name": "AMAZON.NavigateHomeIntent", "samples": [] },
+        { "name": "AMAZON.FallbackIntent", "samples": [] }
+      ],
+      "types": []
+    }
+  }
+}

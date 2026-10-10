@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build --config vite.echo.config.ts",
     "typecheck": "tsc --noEmit",
     "lint": "echo placeholder lint",
     "test": "echo placeholder test"

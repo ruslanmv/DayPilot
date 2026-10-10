@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Echo Show display mode. `interactive-widget=resizes-content` asks Chromium-based
+      browsers (Silk included) to shrink the page when the on-screen keyboard opens, so the
+      assistant's input stays visible. Zoom is left enabled for accessibility.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="referrer" content="same-origin" />
+    <link rel="icon" type="image/svg+xml" href="/daypilot-icon.svg" />
+    <title>DayPilot</title>
+  </head>
+  <body style="margin: 0; background: #000">
+    <div id="root"></div>
+    <noscript>DayPilot needs JavaScript.</noscript>
+    <script type="module" src="/src/echo.tsx"></script>
+  </body>
+</html>

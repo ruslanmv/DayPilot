@@ -7,7 +7,8 @@ try DayPilot — so the gateway can serve the built web app itself:
   * an `/api` prefix-strip so the browser's same-origin `/api/...` calls reach
     the real routes (`/api/v1/...` → `/v1/...`, `/api/health` → `/health`),
     mirroring exactly what the dev proxy does; and
-  * the compiled SPA mounted at `/` when a build is present.
+  * the compiled SPA mounted at `/` when a build is present, and the Echo Show
+    display mode at `/echo` when the build includes it.
 
 Result: `uvicorn app.main:app` on one port serves the whole product. This is
 opt-in by build presence, so tests and the dev flow are unaffected.
@@ -18,6 +19,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI
+from starlette.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocket
@@ -76,7 +78,29 @@ def mount_web(app: FastAPI) -> str:
     dist = _web_dist()
     if dist is None:
         return "api-only"
+    mount_echo(app, dist)
     # Mounted last (after routers) so API routes always win; html=True serves
     # index.html at `/` and static assets under it.
     app.mount("/", HttpOnlyStaticFiles(directory=str(dist), html=True), name="web")
     return f"serving web from {dist}"
+
+
+def mount_echo(app: FastAPI, dist: Path) -> bool:
+    """Serve the Echo Show display mode at `/echo` when the build contains it.
+
+    StaticFiles would answer `/echo` with a redirect to `/echo/` built from the
+    scheme the gateway saw — `http://` behind a TLS-terminating proxy, which the
+    Echo's browser would then follow off HTTPS. Serving the page directly at
+    both addresses avoids the redirect. The page is revalidated on every load
+    (its assets are content-hashed), so a reloaded Echo picks up a new release.
+    """
+    page = dist / "echo" / "index.html"
+    if not page.exists():
+        return False
+
+    async def echo_page() -> FileResponse:
+        return FileResponse(page, media_type="text/html", headers={"Cache-Control": "no-cache"})
+
+    for path in ("/echo", "/echo/"):
+        app.add_api_route(path, echo_page, methods=["GET", "HEAD"], include_in_schema=False)
+    return True
