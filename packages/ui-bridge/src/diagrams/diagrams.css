@@ -36,9 +36,27 @@
   gap: 1rem;
 }
 .dmind-brand {
-  font-weight: 800;
-  color: #a5b4fc;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--hp-accent-cyan, #00c2d1);
+}
+.dmind-header h2 {
+  letter-spacing: -0.03em;
+}
+.dmind-header p {
+  max-width: 36rem;
+  margin: 0.2rem 0 0;
+}
+.dmind .dmind-primary {
+  background: var(--hp-accent-blue, var(--dp-blue, #007aff));
+  color: #fff;
+  border-color: transparent;
+  font-weight: 620;
+}
+.dmind .dmind-primary:hover {
+  filter: brightness(1.08);
 }
 .dmind h2 {
   margin: 0.25rem 0;
@@ -182,8 +200,97 @@
 .dmind-file {
   display: none;
 }
-.dmind-empty {
-  padding: 3rem 1rem;
+.dmind-land {
+  min-width: 0;
+  max-height: 78vh;
+  overflow: auto;
+  padding: 0.2rem 0.15rem 1.2rem;
+}
+.dmind-land-lead {
+  margin: 0 0 1.1rem;
+  max-width: 38rem;
+  color: var(--hp-text-muted, var(--dp-text-muted));
+}
+.dmind-land-block {
+  margin: 0 0 1.15rem;
+}
+.dmind-land-block h3 {
+  margin: 0 0 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--hp-text-muted, var(--dp-text-muted));
+}
+.dmind-kinds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+.dmind .dmind-kind,
+.dmind .dmind-template,
+.dmind .dmind-recent-item {
+  text-align: left;
+  background: var(--hp-surface, var(--dp-surface, #111625));
+  border: 1px solid var(--hp-border-strong, var(--dmind-border));
+  border-radius: 14px;
+}
+.dmind .dmind-kind {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-height: 8.5rem;
+  padding: 0.9rem 0.95rem 1rem;
+  border-top: 3px solid var(--dmind-kind, var(--hp-accent-blue));
+}
+.dmind .dmind-kind svg {
+  display: block;
+  margin-bottom: 0.55rem;
+  color: var(--dmind-kind, var(--hp-accent-blue));
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dmind .dmind-kind strong,
+.dmind .dmind-template strong,
+.dmind .dmind-recent-item strong {
+  display: block;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+}
+.dmind .dmind-kind span,
+.dmind .dmind-template small,
+.dmind .dmind-recent-item small {
+  display: block;
+  margin-top: 0.28rem;
+  color: var(--hp-text-muted, var(--dp-text-muted));
+  font-size: 0.78rem;
+  line-height: 1.4;
+  opacity: 1;
+}
+.dmind-kind--map { --dmind-kind: var(--hp-accent-cyan, #00c2d1); }
+.dmind-kind--flow { --dmind-kind: var(--hp-accent-blue, #007aff); }
+.dmind-kind--system { --dmind-kind: var(--hp-accent-purple, #af52de); }
+.dmind .dmind-kind:hover,
+.dmind .dmind-template:hover,
+.dmind .dmind-recent-item:hover {
+  border-color: var(--dmind-kind, var(--hp-accent-blue));
+}
+.dmind-templates,
+.dmind-recent {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+.dmind .dmind-template,
+.dmind .dmind-recent-item {
+  padding: 0.75rem 0.85rem;
+}
+.dmind-recent {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .dmind-inspector ul {
   padding-left: 1rem;
@@ -219,6 +326,18 @@
   }
   .dmind-wizard ol {
     font-size: 0.8rem;
+  }
+  .dmind-kinds,
+  .dmind-templates,
+  .dmind-recent {
+    grid-template-columns: 1fr;
+  }
+  .dmind-land {
+    max-height: none;
+    order: 1;
+  }
+  .dmind-library {
+    order: 2;
   }
   .dmind {
     padding: 0.5rem;
