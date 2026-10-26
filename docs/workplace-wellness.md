@@ -9,7 +9,7 @@ Both routes appear in desktop navigation and the responsive mobile drawer. The w
 
 ## Screen-break behavior
 
-- Default timer: 120 minutes; break: 15 minutes. The screen break timer is started by the user and automatically marks a completed 15-minute interval after its countdown ends.
+- Default timer: 120 minutes; break: 15 minutes. The elapsed-time work timer starts when the app opens (unless monitoring is paused). The user explicitly starts the break, and a completed 15-minute interval is automatically recorded when its countdown ends.
 - A persistent in-app reminder appears when the work timer reaches 120 minutes. A browser/OS notification is attempted **only** if the user explicitly grants the Notifications permission. Unsupported/denied permission leaves the in-app reminder intact.
 - The monitor and counts are stored only in `localStorage` under `daypilot-workplace-wellness-v1` and survive a brief refresh. An absence longer than one hour starts a fresh session. Pausing and resuming also starts a fresh work interval.
 - The timer measures **elapsed time since starting a session**, not actual screen activity, keyboard activity, legal compliance, employee performance, exercise completion, or biometric information. Do not use it for employee surveillance or payroll.
