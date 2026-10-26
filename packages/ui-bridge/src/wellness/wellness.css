@@ -1,0 +1,98 @@
+/* Workplace wellness and weather views. Inherit DayPilot's theme tokens. */
+.dp-wellness-page {
+  height: 100%;
+  overflow: auto;
+  padding: clamp(1rem, 3vw, 2.3rem);
+  color: var(--dp-text);
+  background: radial-gradient(circle at 100% 0%, rgba(46, 160, 190, .10), transparent 38rem);
+}
+.dp-wellness-page * { box-sizing: border-box; }
+.dp-wellness-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1.2rem; margin-bottom: 1.4rem; }
+.dp-wellness-heading h1 { font-size: clamp(1.45rem, 2.6vw, 2.1rem); line-height: 1.15; letter-spacing: -.035em; margin: .3rem 0 .55rem; }
+.dp-wellness-heading p,.dp-wellness-card p { line-height: 1.55; color: var(--dp-text-muted); }
+.dp-wellness-heading p { margin: 0; }
+.dp-wellness-kicker { font-size: .66rem; letter-spacing: .18em; color: var(--dp-cyan); font-weight: 760; }
+.dp-wellness-chip { color: var(--dp-text-muted); font-size: .72rem; border: 1px solid var(--dp-border); padding: .45rem .8rem; border-radius: 2rem; white-space: nowrap; }
+.dp-wellness-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 1rem; margin-bottom: 1rem; }
+.dp-wellness-card { border: 1px solid var(--dp-border); background: var(--dp-surface-glass, rgba(24,32,49,.65)); border-radius: 1.15rem; padding: clamp(1rem, 2.4vw, 1.4rem); min-width: 0; }
+.dp-wellness-section-title { display: flex; align-items: center; justify-content: space-between; gap: .6rem; margin-bottom: 1rem; }
+.dp-wellness-section-title h2 { font-size: 1rem; margin: 0; letter-spacing: -.02em; }
+.dp-wellness-section-title span { color: var(--dp-text-muted); font-size: .72rem; text-align: right; }
+.dp-wellness-timer { display: flex; flex-direction: column; align-items: stretch; }
+.dp-wellness-meter { width: min(270px, 100%); aspect-ratio: 1; align-self: center; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--dp-cyan, #4dbcca) var(--progress), rgba(135, 165, 198, .14) 0); margin: 0 auto 1rem; }
+.dp-wellness-meter > div { background: var(--dp-bg, #101725); width: 85%; height: 85%; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .55rem; }
+.dp-wellness-meter small { font-size: .75rem; color: var(--dp-text-muted); }
+.dp-wellness-meter strong { font-size: clamp(1.3rem, 3vw, 2rem); font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+.dp-wellness-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .45rem 0; }
+.dp-wellness-page button { cursor: pointer; font: inherit; }
+.dp-wellness-actions button,.dp-wellness-coach button,.dp-weather-city button { border-radius: .7rem; padding: .7rem .9rem; border: 1px solid var(--dp-border); color: var(--dp-text); background: rgba(155, 170, 195, .09); font-weight: 620; font-size: .8rem; }
+.dp-wellness-actions button:hover,.dp-wellness-coach button:hover,.dp-weather-city button:hover { border-color: var(--dp-cyan, #4dbcca); }
+.dp-wellness-actions .dp-wellness-primary,.dp-weather-city button { background: var(--dp-blue, #317fdf); color: #fff; border-color: transparent; }
+.dp-wellness-page button:disabled { opacity: .55; cursor: not-allowed; }
+.dp-wellness-small { font-size: .73rem; line-height: 1.5; color: var(--dp-text-muted); }
+.dp-wellness-link { color: var(--dp-cyan, #64bedd); background: none; padding: .25rem 0; border: 0; align-self: flex-start; text-decoration: underline; font-size: .8rem; }
+.dp-wellness-desk-svg { width: 100%; height: auto; max-height: 330px; color: var(--dp-text-muted); }
+.dp-wellness-checks { display: flex; flex-wrap: wrap; gap: .4rem; }
+.dp-wellness-checks span { border: 1px solid var(--dp-border); padding: .37rem .57rem; border-radius: .6rem; color: var(--dp-text); font-size: .73rem; }
+.dp-wellness-exercises { margin-bottom: 1rem; }
+.dp-wellness-moves { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .7rem; }
+.dp-wellness-move { min-height: 135px; background: rgba(110, 135, 165, .08); border: 1px solid var(--dp-border); border-radius: .85rem; color: var(--dp-text); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .6rem; padding: .6rem; }
+.dp-wellness-move.is-selected { border-color: var(--dp-cyan, #4dbcca); background: rgba(48, 150, 170, .10); }
+.dp-wellness-move-icon { display: inline-block; font-size: 2.2rem; line-height: 1.3; transform-origin: 50% 70%; }
+.dp-wellness-move strong { font-size: .8rem; text-align: center; }
+.dp-wellness-move small { color: var(--dp-text-muted); font-size: .7rem; }
+.dp-wellness-coach { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem 1rem; border-top: 1px solid var(--dp-border); margin-top: 1rem; padding-top: 1rem; font-size: .84rem; }
+.dp-wellness-coach span { flex: 1 1 13rem; color: var(--dp-text-muted); }
+.dp-wellness-reminder { z-index: 35; position: fixed; right: 1rem; bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100vw - 2rem)); color: var(--dp-text); border: 1px solid var(--dp-cyan, #48b8cb); background: var(--dp-bg, #111827); border-radius: 1rem; box-shadow: var(--hp-shadow-lg, 0 1.3rem 3rem rgba(0,0,0,.24)); padding: 1rem; display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.dp-wellness-reminder strong { width: 100%; }
+.dp-wellness-reminder span { font-size: .8rem; color: var(--dp-text-muted); width: 100%; }
+.dp-wellness-reminder button { cursor: pointer; border: 1px solid var(--dp-border); background: rgba(80, 130, 190, .12); border-radius: .65rem; color: var(--dp-text); padding: .52rem .7rem; font: inherit; font-size: .78rem; }
+.dp-wellness-motion-shoulder { animation: dp-wellness-tilt 2.3s ease-in-out infinite alternate; }
+.dp-wellness-motion-eyes { animation: dp-wellness-pulse 2s ease-in-out infinite; }
+.dp-wellness-motion-hands { animation: dp-wellness-wave 1.7s ease-in-out infinite alternate; }
+.dp-wellness-motion-walk { animation: dp-wellness-bob 1.2s ease-in-out infinite; }
+@keyframes dp-wellness-tilt { to { transform: rotate(16deg); } }
+@keyframes dp-wellness-pulse { 50% { transform: scale(1.12); } }
+@keyframes dp-wellness-wave { to { transform: rotate(-14deg); } }
+@keyframes dp-wellness-bob { 50% { transform: translateY(-7px); } }
+.dp-weather-city label,.dp-weather-fields label,.dp-weather-notes { display: block; font-size: .77rem; font-weight: 650; }
+.dp-weather-city > div { display: flex; gap: .5rem; margin: .5rem 0 1rem; }
+.dp-weather-city input,.dp-weather-fields input,.dp-weather-notes textarea { font: inherit; color: var(--dp-text); border-radius: .6rem; border: 1px solid var(--dp-border); background: rgba(140, 160, 190, .08); padding: .7rem .75rem; width: 100%; min-width: 0; }
+.dp-weather-city input { flex: 1; }
+.dp-weather-city button { white-space: nowrap; }
+.dp-weather-hero { display: flex; gap: 1rem; align-items: center; margin: 1.3rem 0; }
+.dp-weather-hero > span { font-size: 3.5rem; }
+.dp-weather-hero strong { font-size: 2.7rem; font-variant-numeric: tabular-nums; letter-spacing: -.05em; }
+.dp-weather-hero p { margin: .2rem 0; }
+.dp-weather-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; margin-bottom: 1rem; }
+.dp-weather-metrics div { background: rgba(120,160,190,.09); padding: .65rem; border-radius: .65rem; display: grid; gap: .5rem; }
+.dp-weather-metrics span { color: var(--dp-text-muted); font-size: .67rem; }
+.dp-weather-metrics strong { font-size: 1rem; }
+.dp-weather-placeholder { padding: 1rem 0; }
+.dp-weather-error { color: var(--hp-accent-red, #ef8b88); font-size: .8rem; }
+.dp-weather-fields { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; margin: 1rem 0; }
+.dp-weather-fields input { display: block; margin-top: .5rem; }
+.dp-weather-advice { border: 1px solid var(--dp-border); border-radius: .8rem; padding: .7rem 1rem; background: rgba(100,160,140,.06); }
+.dp-weather-advice h3 { margin: .3rem 0 .8rem; font-size: .9rem; }
+.dp-weather-advice ul { padding-left: 1.25rem; margin: 0 0 .5rem; }
+.dp-weather-advice li { margin: .35rem 0; line-height: 1.5; color: var(--dp-text-muted); font-size: .83rem; }
+.dp-weather-checklist { margin: 0 0 1rem; }
+.dp-weather-checks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: .4rem 0 1.1rem; }
+.dp-weather-checks div { display: flex; flex-direction: column; gap: .4rem; }
+.dp-weather-checks span { font-size: 1.9rem; }
+.dp-weather-checks strong { font-size: .86rem; }
+.dp-weather-checks p { font-size: .8rem; margin: 0; }
+.dp-weather-notes textarea { resize: vertical; display: block; margin-top: .5rem; }
+.dp-weather-page a { color: var(--dp-cyan, #64bedd); }
+@media (max-width: 900px) { .dp-wellness-grid { grid-template-columns: 1fr; } .dp-wellness-moves { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 550px) {
+  .dp-wellness-heading { flex-direction: column; }
+  .dp-weather-fields,.dp-weather-checks { grid-template-columns: 1fr; }
+  .dp-weather-city > div { flex-wrap: wrap; }
+  .dp-weather-city button { width: 100%; }
+  .dp-weather-metrics { grid-template-columns: 1fr 1fr; }
+  .dp-wellness-move { min-height: 120px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp-wellness-move-icon { animation: none !important; }
+}

@@ -22,6 +22,8 @@ import { HomeWorkspace } from './home/HomeWorkspace'
 import { PlanningWorkspace } from './planning/PlanningWorkspace'
 import { AgentsLandingPage } from './agents/AgentsLandingPage'
 import { StandupWorkspace } from './standup/StandupWorkspace'
+import { WellnessWorkspace, WellnessReminder, useWellnessMonitor, type WellnessMonitor } from './wellness/WellnessWorkspace'
+import { WeatherWorkspace } from './wellness/WeatherWorkspace'
 import { useRoute, type PortalView } from './shell/route'
 import { OnboardingWizard } from './onboarding/OnboardingWizard'
 import { ProjectWizard, type NewProject } from './projects/ProjectWizard'
@@ -51,6 +53,9 @@ const NAV_BASE: NavItem[] = [
   { id: 'documents', label: 'Documents', icon: 'documents' },
   { id: 'agents', label: 'Agents', icon: 'agents' },
   { id: 'diagrams', label: 'Diagrams', icon: 'diagrams' },
+  // After the original rail so ⌘1–6 still open Home through Documents.
+  { id: 'wellness', label: 'Wellness', icon: 'wellness' },
+  { id: 'weather', label: 'Weather', icon: 'weather' },
 ]
 // Email and Slack are optional, feature-flagged tabs, both inserted before
 // Documents; DayPilot works without either. Slack sits after Email because
@@ -186,7 +191,7 @@ function createAiTask(input: string): DayPilotTask {
   }
 }
 
-type NavIconName = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'email' | 'slack' | 'documents' | 'agents' | 'diagrams' | 'presentations' | 'settings'
+type NavIconName = 'home' | 'planning' | 'calendar' | 'tasks' | 'projects' | 'email' | 'slack' | 'documents' | 'agents' | 'diagrams' | 'presentations' | 'wellness' | 'weather' | 'settings'
 
 function NavIcon({ name }: { name: NavIconName }) {
   const p: Record<NavIconName, React.ReactNode> = {
@@ -200,6 +205,8 @@ function NavIcon({ name }: { name: NavIconName }) {
     // colour and active state like every other icon here.
     slack: <><path d="M6.5 14.5h-2a2 2 0 1 0 2 2Z" /><path d="M9.5 14.5a2 2 0 1 1 4 0v5a2 2 0 1 1-4 0Z" /><path d="M9.5 6.5v2a2 2 0 1 1-2-2Z" /><path d="M9.5 9.5a2 2 0 1 1 0 4h-5a2 2 0 1 1 0-4Z" /><path d="M17.5 9.5h2a2 2 0 1 0-2-2Z" /><path d="M14.5 9.5a2 2 0 1 1-4 0v-5a2 2 0 1 1 4 0Z" /><path d="M14.5 17.5v-2a2 2 0 1 1 2 2Z" /><path d="M14.5 14.5a2 2 0 1 1 0-4h5a2 2 0 1 1 0 4Z" /></>,
     diagrams: <><rect x="3" y="8" width="6" height="6" rx="1" /><rect x="15" y="3" width="6" height="6" rx="1" /><rect x="15" y="15" width="6" height="6" rx="1" /><path d="M9 11h3V6h3M12 11v7h3" /></>,
+    wellness: <><path d="M3 12h3l2.5-5 4 10 3-6 2 1h3.5" /><path d="M12 3.5a8.5 8.5 0 1 1-8.5 8.5" /></>,
+    weather: <><circle cx="8" cy="8" r="3" /><path d="M8 2v1M2 8h1M3.8 3.8l.7.7M12.5 4.5l-.7.7" /><path d="M6 19h12a4 4 0 0 0 .1-8A5.5 5.5 0 0 0 8 12a3.5 3.5 0 0 0-2 7Z" /></>,
     presentations: <><rect x="3" y="4" width="18" height="12" rx="1.5" /><path d="M12 16v4M8 20h8M7 12l3-3 2 2 4-4" /></>,
     documents: <><path d="M6 3h7l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" /><path d="M13 3v5h5M8.5 13h7M8.5 16.5h7" /></>,
     agents: <><circle cx="12" cy="8" r="3.2" /><path d="M5 20c0-3.5 3.1-5.5 7-5.5s7 2 7 5.5" /></>,
@@ -607,6 +614,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackE
   // when the host app didn't call initTheme() itself.
   useEffect(() => { initTheme() }, [])
   const presentationsEnabled = usePresentationsEnabled()
+  const wellness = useWellnessMonitor()
   const NAV_VIEWS = navViews(emailEnabled, slackEnabled, presentationsEnabled)
   // Deep-linkable hash routing (Batch A3). `setView` keeps the old call sites
   // working; navigating also updates the URL and browser history.
@@ -731,7 +739,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackE
 
   // Phones get a dedicated ChatGPT-style shell (hamburger drawer, single-page
   // views, full-screen AI) rather than a squeezed desktop layout.
-  if (isMobile) return <MobilePortal emailEnabled={emailEnabled} slackEnabled={slackEnabled} user={user} onSignOut={onSignOut} />
+  if (isMobile) return <MobilePortal emailEnabled={emailEnabled} slackEnabled={slackEnabled} user={user} onSignOut={onSignOut} wellness={wellness} />
 
   return (
     <div className={cx('dp-shell', compact && 'dp-shell--compact')}>
@@ -779,7 +787,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackE
                 chip and the view's own controls belong on one row there, and a
                 second generic title above it just repeats the nav item you
                 already clicked. */}
-            {view !== 'calendar' && view !== 'slack' && view !== 'diagrams' && view !== 'presentations' && (
+            {view !== 'calendar' && view !== 'slack' && view !== 'diagrams' && view !== 'presentations' && view !== 'wellness' && view !== 'weather' && (
               <header className="dp-topbar">
                 <div>
                   <h2>{view === 'planning' ? 'Day Planner' : view === 'tasks' ? 'You vs AI' : view === 'projects' ? 'Project Continuity' : view === 'documents' ? 'My Documents' : view === 'email' ? 'Email' : view === 'standup' ? 'Daily Standup' : 'Agents'}</h2>
@@ -810,6 +818,8 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackE
               {view === 'email' && <EmailWorkspace />}
               {view === 'slack' && <SlackWorkspace onOpenSettings={() => setSettingsSection('slack')} />}
               {view === 'standup' && <StandupWorkspace />}
+              {view === 'wellness' && <WellnessWorkspace monitor={wellness} />}
+              {view === 'weather' && <WeatherWorkspace />}
               {view === 'diagrams' && <React.Suspense fallback={<p role="status">Loading dmind…</p>}><DiagramsWorkspace accountKey={user?.email || 'local'} /></React.Suspense>}
               {view === 'presentations' && <React.Suspense fallback={<p role="status">Loading presentations…</p>}><PresentationsWorkspace /></React.Suspense>}
             </div>
@@ -847,6 +857,7 @@ export function SpaceBridgeShell({ compact = false, emailEnabled = false, slackE
         onCreate={(np) => { createProject(np, newProjectFrom).then((p) => { setView('projects'); setSelected({ kind: 'project', item: p }) }) }}
       />
       <OnboardingWizard />
+      <WellnessReminder monitor={wellness} onOpen={() => setView('wellness')} />
     </div>
   )
 }
@@ -886,15 +897,18 @@ const MOBILE_TITLES: Record<PortalView, string> = {
   agents: 'Agents',
   slack: 'Slack',
   standup: 'Standup',
+  wellness: 'Wellness',
+  weather: 'Weather',
 }
 
 const RECENT_AI = isDemoMode() ? ['Email workspace status', 'Prepare Client Alpha meeting', "Today's plan"] : []
 
-function MobilePortal({ emailEnabled, slackEnabled, user, onSignOut }: {
+function MobilePortal({ emailEnabled, slackEnabled, user, onSignOut, wellness }: {
   emailEnabled: boolean
   slackEnabled: boolean
   user?: { displayName?: string | null; email?: string | null; role?: string | null } | null
   onSignOut?: () => void
+  wellness: WellnessMonitor
 }) {
   const presentationsEnabled = usePresentationsEnabled()
   const NAV = navViews(emailEnabled, slackEnabled, presentationsEnabled)
@@ -992,8 +1006,10 @@ function MobilePortal({ emailEnabled, slackEnabled, user, onSignOut }: {
         {view === 'email' && <EmailWorkspace />}
         {view === 'slack' && <SlackWorkspace onOpenSettings={() => setSettingsSection('slack')} />}
         {view === 'standup' && <StandupWorkspace />}
-              {view === 'diagrams' && <React.Suspense fallback={<p role="status">Loading dmind…</p>}><DiagramsWorkspace accountKey={user?.email || 'local'} /></React.Suspense>}
-              {view === 'presentations' && <React.Suspense fallback={<p role="status">Loading presentations…</p>}><PresentationsWorkspace /></React.Suspense>}
+        {view === 'wellness' && <WellnessWorkspace monitor={wellness} />}
+        {view === 'weather' && <WeatherWorkspace />}
+        {view === 'diagrams' && <React.Suspense fallback={<p role="status">Loading dmind…</p>}><DiagramsWorkspace accountKey={user?.email || 'local'} /></React.Suspense>}
+        {view === 'presentations' && <React.Suspense fallback={<p role="status">Loading presentations…</p>}><PresentationsWorkspace /></React.Suspense>}
       </main>
 
       {/* Off-canvas navigation drawer */}
@@ -1065,6 +1081,7 @@ function MobilePortal({ emailEnabled, slackEnabled, user, onSignOut }: {
         onCreate={(np) => { createProject(np, newProjectFrom).then((p) => { go('projects'); setSelected({ kind: 'project', item: p }) }) }}
       />
       <OnboardingWizard />
+      <WellnessReminder monitor={wellness} onOpen={() => go('wellness')} />
     </div>
   )
 }
