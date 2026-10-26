@@ -13,6 +13,7 @@ import { relativeTime } from './format'
 import { SourcePanel } from './SourcePanel'
 import { RefinePanel } from './RefinePanel'
 import { AssistPanel, type AssistTrigger } from './AssistPanel'
+import { DiagramLanding } from './Landing'
 import { QuickStart } from './QuickStart'
 import { TasksPanel } from './TasksPanel'
 import { PresentMode } from './PresentMode'
@@ -465,6 +466,18 @@ export function DiagramsWorkspace({
       )
     )
   }
+  function startFresh(next?: { kind?: DiagramKind; topic?: string; content?: string; note?: string }) {
+    if (!canLeave()) return
+    setWizard(1)
+    setPreview(null)
+    // Sending text to a provider is an opt-in for this run only.
+    setUseDesigner(false)
+    setSources([])
+    setTopic(next?.topic ?? '')
+    setContent(next?.content ?? '')
+    if (next?.kind) setKind(next.kind)
+    setMessage(next?.note ?? '')
+  }
   function commit(d: Diagram, key?: string) {
     try {
       const next = validateDiagram(d)
@@ -881,18 +894,9 @@ export function DiagramsWorkspace({
           </p>
         </div>
         <button
+          className="dmind-primary"
           disabled={busy}
-          onClick={() => {
-            if (canLeave()) {
-              setWizard(1)
-              setPreview(null)
-              // Sending text to a provider is an opt-in for this run only.
-              setUseDesigner(false)
-              setSources([])
-              setTopic('')
-              setContent('')
-            }
-          }}
+          onClick={() => startFresh()}
         >
           New diagram
         </button>
@@ -974,7 +978,7 @@ export function DiagramsWorkspace({
                   onRemove={(id) => setSources(sources.filter((s) => s.ref.id !== id))}
                   disabled={busy}
                 />
-                <button disabled={!topic.trim()} onClick={() => setWizard(2)}>
+                <button className="dmind-primary" disabled={!topic.trim()} onClick={() => setWizard(2)}>
                   Next: structure
                 </button>
               </>
@@ -1023,7 +1027,7 @@ export function DiagramsWorkspace({
                   </label>
                 )}
                 <button onClick={() => setWizard(1)}>Back</button>
-                <button onClick={() => void generate()}>
+                <button className="dmind-primary" onClick={() => void generate()}>
                   Generate preview
                 </button>
               </>
@@ -1042,6 +1046,7 @@ export function DiagramsWorkspace({
                 </ul>
                 <button onClick={() => setWizard(2)}>Back</button>
                 <button
+                  className="dmind-primary"
                   onClick={() => {
                     if (!canLeave()) return
                     open(preview)
@@ -1186,14 +1191,25 @@ export function DiagramsWorkspace({
             </button>
           </aside>
           {!diagram && !wizard && (
-            <div className="dmind-empty">
-              <h3>A clear place to think</h3>
-              <p>
-                Create a mind map, flowchart, or system diagram from a topic,
-                brainstorm or attachment.
-              </p>
-              <button onClick={() => setWizard(1)}>Start the wizard</button>
-            </div>
+            <DiagramLanding
+              recent={items.slice(0, 4)}
+              onOpen={(id) => void load(id)}
+              onCreate={(kind) => {
+                const name = kind === 'flowchart' ? 'Flowchart' : kind === 'system' ? 'System diagram' : 'Mind map'
+                startFresh({
+                  kind,
+                  note: `${name} selected. Type a topic, one idea per line, then press Next.`,
+                })
+              }}
+              onTemplate={(template) => {
+                startFresh({
+                  kind: template.kind,
+                  topic: template.name,
+                  content: template.outline,
+                  note: `${template.name} is ready. Edit the lines, then press Next.`,
+                })
+              }}
+            />
           )}
           {diagram && (
             <div className="dmind-editor">
