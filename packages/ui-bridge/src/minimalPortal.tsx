@@ -48,13 +48,14 @@ const NAV_BASE: NavItem[] = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'planning', label: 'Planning', icon: 'planning' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar' },
-  { id: 'wellness', label: 'Wellness', icon: 'wellness' },
-  { id: 'weather', label: 'Weather', icon: 'weather' },
   { id: 'tasks', label: 'Tasks', icon: 'tasks' },
   { id: 'projects', label: 'Projects', icon: 'projects' },
   { id: 'documents', label: 'Documents', icon: 'documents' },
   { id: 'agents', label: 'Agents', icon: 'agents' },
   { id: 'diagrams', label: 'Diagrams', icon: 'diagrams' },
+  // After the original rail so ⌘1–6 still open Home through Documents.
+  { id: 'wellness', label: 'Wellness', icon: 'wellness' },
+  { id: 'weather', label: 'Weather', icon: 'weather' },
 ]
 // Email and Slack are optional, feature-flagged tabs, both inserted before
 // Documents; DayPilot works without either. Slack sits after Email because
@@ -1007,8 +1008,8 @@ function MobilePortal({ emailEnabled, slackEnabled, user, onSignOut, wellness }:
         {view === 'standup' && <StandupWorkspace />}
         {view === 'wellness' && <WellnessWorkspace monitor={wellness} />}
         {view === 'weather' && <WeatherWorkspace />}
-              {view === 'diagrams' && <React.Suspense fallback={<p role="status">Loading dmind…</p>}><DiagramsWorkspace accountKey={user?.email || 'local'} /></React.Suspense>}
-              {view === 'presentations' && <React.Suspense fallback={<p role="status">Loading presentations…</p>}><PresentationsWorkspace /></React.Suspense>}
+        {view === 'diagrams' && <React.Suspense fallback={<p role="status">Loading dmind…</p>}><DiagramsWorkspace accountKey={user?.email || 'local'} /></React.Suspense>}
+        {view === 'presentations' && <React.Suspense fallback={<p role="status">Loading presentations…</p>}><PresentationsWorkspace /></React.Suspense>}
       </main>
 
       {/* Off-canvas navigation drawer */}

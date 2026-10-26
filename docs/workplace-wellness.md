@@ -5,7 +5,7 @@ The operator web shell now includes two cross-device hash routes:
 - `#/wellness` — an elapsed-time reminder for screen work, a 15-minute break timer, an original illustrated ergonomic station, and animated movement tips.
 - `#/weather` — city-search weather from Open-Meteo plus **manually entered** indoor temperature/humidity and actionable comfort prompts.
 
-Both routes appear in desktop navigation and the responsive mobile drawer. The wellness reminder remains mounted while navigating between views; it is not a separate background service.
+Both routes appear in desktop navigation and the responsive mobile drawer, after Diagrams, so the existing ⌘1–6 shortcuts still open Home, Planning, Calendar, Tasks, Projects, and Documents. The wellness reminder stays mounted while navigating between views; it sits under menus, Settings, and the command palette. It is not a separate background service.
 
 ## Screen-break behavior
 
