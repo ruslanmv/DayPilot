@@ -113,7 +113,7 @@ def test_local_probe_normalizes_stored_v1_base(monkeypatch):
     assert seen["root"] == "http://localhost:11435"  # /v1 stripped → no doubling
 
 
-def _tiny_gateway(models_status: int, models_body: dict | None = None):
+def _tiny_gateway(models_status: int, models_body: dict | None = None, health_body: dict | None = None):
     """A throwaway local gateway: public /health, gated/variable /v1/models."""
     import json as _json
     import threading
@@ -125,7 +125,7 @@ def _tiny_gateway(models_status: int, models_body: dict | None = None):
 
         def do_GET(self):  # noqa: N802
             if self.path.rstrip("/").endswith("/health"):
-                body = _json.dumps({"status": "ok", "nodes": 1}).encode()
+                body = _json.dumps(health_body or {"status": "ok", "nodes": 1}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -277,3 +277,170 @@ def test_public_view_never_leaks_secrets(monkeypatch):
     body = client.get(f"/v1/providers/status?workspaceId={ws}").json()
     blob = str(body)
     assert "sk-secret-key" not in blob and "secret_reference" not in blob and "apiKey" not in blob
+
+
+# ---- v2: read-only status, race-safe rows, API-key cloud, local model list ---
+
+def test_status_is_read_only_and_creates_no_rows():
+    """GET /status must never insert. Several first-load callers (Settings, the
+    onboarding wizard, the assistant badge) run at once, and a read-then-insert
+    on the unique (workspace, kind) index was the 500 behind the UI's
+    "Couldn't load providers"."""
+    ws = _ws()
+    body = client.get(f"/v1/providers/status?workspaceId={ws}").json()
+    assert {c["kind"] for c in body["connections"]} == {"local", "ollabridge_cloud"}
+    assert all(c["state"] == "unconfigured" and c["authMethod"] is None for c in body["connections"])
+    with session_scope(ENGINE) as s:
+        assert s.query(ProviderConnection).filter_by(workspace_id=ws).count() == 0
+
+
+def test_get_or_create_adopts_a_concurrently_inserted_row(monkeypatch):
+    """The first-load race, made deterministic: another request commits the
+    same (workspace, kind) row between our SELECT and our INSERT. We must adopt
+    that row instead of raising, and the session must stay usable."""
+    from sqlalchemy.orm import Session as _Session
+
+    ws = _ws()
+    real_flush = _Session.flush
+    fired = {"done": False}
+
+    def racing_flush(self, *a, **k):
+        if not fired["done"]:
+            fired["done"] = True
+            with session_scope(ENGINE) as other:  # a different request wins the insert
+                other.add(ProviderConnection(workspace_id=ws, kind="local", state="connected",
+                                             base_url="http://localhost:11435/v1"))
+        return real_flush(self, *a, **k)
+
+    monkeypatch.setattr(_Session, "flush", racing_flush)
+    with session_scope(ENGINE) as s:
+        row = pp._get_or_create(s, ws, "local")
+        assert row.state == "connected"  # the winner's row, not a fresh duplicate
+        assert pp._get_or_create(s, ws, "ollabridge_cloud").kind == "ollabridge_cloud"
+    with session_scope(ENGINE) as s:
+        assert s.query(ProviderConnection).filter_by(workspace_id=ws, kind="local").count() == 1
+
+
+def _tiny_cloud(models: list[str], expect_key: str):
+    """A throwaway 'Ollabridge Cloud': public /health, Bearer-gated /v1/models."""
+    import json as _json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class _H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, body=None):
+            data = _json.dumps(body).encode() if body is not None else b""
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):  # noqa: N802
+            path = self.path.rstrip("/")
+            if path.endswith("/health"):
+                self._send(200, {"status": "ok", "mode": "cloud"})
+            elif path.endswith("/v1/models"):
+                if self.headers.get("Authorization") == f"Bearer {expect_key}":
+                    self._send(200, {"data": [{"id": m} for m in models]})
+                else:
+                    self._send(401, {"detail": "invalid key"})
+            else:
+                self._send(404)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.server_address[1]}/v1"
+
+
+def test_cloud_connect_key_stores_by_reference_and_lists_models(monkeypatch):
+    srv, base = _tiny_cloud(["qwen2.5", "llama3.1"], "ob_test_good")
+    monkeypatch.setattr(pp, "CLOUD_API_BASE", base)
+    ws = _ws()
+    try:
+        out = client.post("/v1/providers/cloud/connect-key",
+                          json={"workspaceId": ws, "apiKey": "ob_test_good"}).json()
+        status_body = client.get(f"/v1/providers/status?workspaceId={ws}").json()
+        activate = client.patch("/v1/providers/active", json={"workspaceId": ws, "kind": "ollabridge_cloud"})
+    finally:
+        srv.shutdown()
+    assert out["code"] == "connected" and out["models"] == ["qwen2.5", "llama3.1"]
+    conn = out["connection"]
+    assert conn["state"] == "connected" and conn["modelsCount"] == 2 and conn["defaultModel"] == "qwen2.5"
+    assert conn["authMethod"] == "api_key" and conn["account"]["displayName"] == "API key"
+    # The key itself never leaves the server.
+    assert "ob_test_good" not in str(out) and "ob_test_good" not in str(status_body)
+    assert activate.status_code == 200  # a key-connected cloud can be activated
+
+
+def test_cloud_connect_key_rejects_bad_or_missing_keys(monkeypatch):
+    srv, base = _tiny_cloud(["qwen2.5"], "ob_test_good")
+    monkeypatch.setattr(pp, "CLOUD_API_BASE", base)
+    try:
+        bad = client.post("/v1/providers/cloud/connect-key",
+                          json={"workspaceId": _ws(), "apiKey": "ob_test_wrong"}).json()
+    finally:
+        srv.shutdown()
+    assert bad["code"] == "unauthorized" and bad["connection"]["state"] == "unauthorized"
+    empty = client.post("/v1/providers/cloud/connect-key", json={"workspaceId": _ws(), "apiKey": "  "}).json()
+    assert empty["code"] == "key_required"
+
+
+def test_local_models_lists_from_the_stored_connection():
+    srv, base = _tiny_gateway(200, {"data": [{"id": "llama3.1"}, {"id": "deepseek-r1"}]})
+    ws = _ws()
+    try:
+        with session_scope(ENGINE) as s:
+            assert pp.local_connect(s, ws, base, None)["code"] == "connected"
+        out = client.get(f"/v1/providers/local/models?workspaceId={ws}").json()
+    finally:
+        srv.shutdown()
+    assert out["models"] == ["llama3.1", "deepseek-r1"] and out["state"] == "connected"
+    assert out["gateway"] and out["gateway"]["status"] == "ok"
+    # An unconfigured workspace answers calmly — no probe, no error.
+    assert client.get(f"/v1/providers/local/models?workspaceId={_ws()}").json() == {
+        "models": [], "state": "unconfigured", "defaultModel": None, "gateway": None,
+    }
+
+
+def test_local_recheck_reuses_the_stored_key(monkeypatch):
+    """Re-check from Settings sends no key (the browser never holds it); the
+    backend probes with the stored one so a key-protected gateway does not
+    flip from connected to unauthorized on every re-check."""
+    seen: dict = {}
+
+    def fake_probe(base, key):
+        seen["key"] = key
+        return {"code": "connected", "latencyMs": 3.0, "models": ["m"],
+                "resolvedBaseUrl": pp.normalize_gateway_root(base) + "/v1"}
+
+    monkeypatch.setattr(pp, "_probe_local", fake_probe)
+    ws = _ws()
+    with session_scope(ENGINE) as s:
+        pp.local_connect(s, ws, "http://localhost:11435/v1", "sk-ollabridge-stored")
+    with session_scope(ENGINE) as s:
+        out = pp.local_test(s, ws, "http://localhost:11435/v1", None)
+    assert out["code"] == "connected" and seen["key"] == "sk-ollabridge-stored"
+
+
+def test_default_model_rejects_unknown_provider():
+    resp = client.patch("/v1/providers/default-model", json={"workspaceId": _ws(), "kind": "nope", "model": "x"})
+    assert resp.status_code == 400
+
+
+def test_local_connect_prefers_the_gateways_own_default_model():
+    """Ollabridge announces its configured default model on /health; a fresh
+    connection adopts it (when it is actually served) instead of whatever the
+    model list happens to put first."""
+    srv, base = _tiny_gateway(200, {"data": [{"id": "llama3.1"}, {"id": "deepseek-r1"}]},
+                              health_body={"status": "ok", "default_model": "deepseek-r1"})
+    ws = _ws()
+    try:
+        with session_scope(ENGINE) as s:
+            out = pp.local_connect(s, ws, base, None)
+    finally:
+        srv.shutdown()
+    assert out["code"] == "connected" and out["connection"]["defaultModel"] == "deepseek-r1"

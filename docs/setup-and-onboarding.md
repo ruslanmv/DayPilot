@@ -102,9 +102,30 @@ OLLABRIDGE_DEFAULT_MODEL=llama3.1
 
 `OLLABRIDGE_MODE` selects the default endpoint; an explicit `OLLABRIDGE_URL` /
 `OLLABRIDGE_BASE_URL` always wins. Keys are sent as a Bearer token and are never
-logged. In the UI, **Settings → AI providers** shows both modes side by side with
-the active one highlighted, a *Test connection* action, and a *Pair with Cloud
-(device code)* action.
+logged. In the UI, **Settings → AI providers** shows both targets as cards with
+the active one highlighted. The **Local Gateway** card detects a running
+gateway (with WSL2/Docker host fallbacks and a scan of nearby ports), tells a
+key-protected gateway apart from an offline one, and offers *Test & connect*,
+*Re-check*, a link to the OllaBridge dashboard and a default-model picker fed
+by the gateway's live model list. The **Ollabridge Cloud** card signs in with
+email/password *or* an API key (`ob_live_…` / `ob_test_…` from the Cloud
+dashboard), with links to the web login (Google/SSO) and registration pages.
+Provider state is owned by the backend (`/v1/providers/*`) — the browser never
+stores a key — and the page reconnects on its own while the API gateway is
+still starting.
+
+#### Troubleshooting: “Couldn’t load providers”
+
+That message comes from the DayPilot gateway (`/api/v1/providers/status`), not
+from Ollabridge. The panel retries automatically and names the cause:
+
+- **API not reachable** — `make run` starts the web UI a few seconds before the
+  gateway finishes importing; the panel reconnects as soon as it is up. If it
+  never does, start the API with `make run-api`.
+- **Page instead of JSON** — `/api` is not proxied to the gateway. Point
+  `DAYPILOT_API_TARGET` (dev) or `VITE_DAYPILOT_API_BASE` (build) at it.
+- **HTTP 500** — the gateway hit an error reading provider state; the panel
+  shows the detail and the gateway log has the traceback.
 
 ### How it maps to code
 

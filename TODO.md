@@ -252,3 +252,27 @@ DayPilot can be considered enterprise production-ready when:
 8. Thousands of tasks and documents remain searchable, filterable, and summarized without UI overload.
 9. All sensitive actions are approval-gated, audited, and reversible where possible.
 10. Documentation, tests, observability, deployment, and security controls are complete enough for an enterprise operator to run and maintain the system.
+
+
+
+
+
+WE are interested to integrate the feature of meetings transcripts and
+managment of meetings and also
+integration optional of Jira Tickets but only my tickets not for the momeent for all people because I want optimize MY tickets .
+
+
+
+The issue that we are facing is that the idea of DayPilot is not has a complex
+backend of inference, llm and video.
+
+We have created a fully meeeting recordings in HomePilot however 
+I DONT know How we can integrate The meetings in the DayPilot, 
+
+I dont want have two programs that repeat or overlap same features,
+however DayPilot MUST BE the MAin app of everyday.
+
+and the integration of Meeting Is Crucial also we are interested to optimize this application such can be ran on a tablet in particular echo show, such at home we can use it or my tablet.  The idea is that the echo show 21 can be for example setup the calendar showing this widget and in my tablet close to my computer I add some activities to do and automatically all my devices ar eupdated in local house. The privacy is first.
+
+
+For the Meetings let assume we process  all meetings in the homepilot, but now for productivity also can maybe sync the things of HomePilot, we must think and divide the roles of Daypilot and HomePilot in meeting and not overlap. But keep alwasys simple how to use all th ething.s 

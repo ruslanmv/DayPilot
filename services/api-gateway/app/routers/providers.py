@@ -42,6 +42,11 @@ class WsBody(BaseModel):
     workspaceId: str = "default"
 
 
+class CloudKeyBody(BaseModel):
+    workspaceId: str = "default"
+    apiKey: str
+
+
 @router.get("/status")
 def provider_status(workspaceId: str = "default", session: Session = Depends(get_session)) -> dict[str, Any]:
     """Backend-owned provider state (the browser never fabricates it)."""
@@ -62,6 +67,21 @@ def local_test(body: LocalTestBody, session: Session = Depends(get_session)) -> 
 @router.post("/local/connect")
 def local_connect(body: LocalTestBody, session: Session = Depends(get_session)) -> dict[str, Any]:
     return pp.local_connect(session, body.workspaceId, body.baseUrl, body.apiKey)
+
+
+@router.get("/local/models")
+def local_models(workspaceId: str = "default", session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Live model list (+ gateway facts) for the stored local connection, probed
+    server-side with the stored key. Feeds the Settings default-model picker."""
+    return pp.local_models(session, workspaceId)
+
+
+@router.post("/cloud/connect-key")
+def cloud_connect_key(body: CloudKeyBody, session: Session = Depends(get_session)) -> dict[str, Any]:
+    """Connect Ollabridge Cloud with a dashboard API key (ob_live_/ob_test_)
+    instead of an email/password sign-in. Validated against /v1/models and
+    stored by reference; never echoed back."""
+    return pp.cloud_connect_key(session, body.workspaceId, body.apiKey)
 
 
 @router.post("/cloud/login")
@@ -91,7 +111,10 @@ def set_active(body: ActiveBody, session: Session = Depends(get_session)) -> dic
 
 @router.patch("/default-model")
 def set_default_model(body: DefaultModelBody, session: Session = Depends(get_session)) -> dict[str, Any]:
-    return pp.set_default_model(session, body.workspaceId, body.kind, body.model)
+    try:
+        return pp.set_default_model(session, body.workspaceId, body.kind, body.model)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="unknown_provider")
 
 
 @router.get("/health")

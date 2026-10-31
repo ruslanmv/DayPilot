@@ -60,6 +60,8 @@ export function classifyFailure(
   const detail = r.error || 'error'
   if (ctx.timedOut) return { kind: 'timeout', detail }
   if (detail === 'gateway_html_response') return { kind: 'misrouted', status: r.status, detail }
+  // Nothing answered behind the proxy (empty 500 from the dev proxy, 502-504 from a reverse proxy).
+  if (detail === 'gateway_unreachable') return { kind: 'unreachable', status: r.status, detail }
   const s = r.status
   if (s === undefined || s === 0) return { kind: ctx.online ? 'unreachable' : 'offline', detail }
   if (s === 401) return { kind: 'auth', status: s, detail }

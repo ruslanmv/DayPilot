@@ -51,19 +51,22 @@ export const INTEGRATIONS: IntegrationRow[] = [
 export type ProviderRoute = {
   role: string
   model: string
-  tier: 'Local' | 'Hybrid' | 'Cloud'
-  latencyMs: number
-  status: 'healthy' | 'degraded' | 'offline'
+  tier: 'local' | 'hybrid' | 'cloud'
+  /** Latency budget the policy allows for this role — a target, not a measurement. */
+  latencyBudgetMs: number
   fallback: string[]
 }
 
-// Mirrors the backend routing policy (daypilot_models/routing.py). The live
-// values come from GET /v1/providers/health + /routes once data-fetching lands.
+// Mirrors the backend routing policy (daypilot_models/routing.py) and is only
+// the offline fallback: Settings → AI providers reads the live policy from
+// GET /v1/providers/routes. No latencies or health are invented here.
 export const PROVIDER_ROUTES: ProviderRoute[] = [
-  { role: 'Scheduler', model: 'llama3.1', tier: 'Local', latencyMs: 210, status: 'healthy', fallback: ['mistral'] },
-  { role: 'Email Sentinel', model: 'llama3.1', tier: 'Local', latencyMs: 240, status: 'healthy', fallback: ['mistral'] },
-  { role: 'Document Assistant', model: 'mixtral', tier: 'Hybrid', latencyMs: 680, status: 'healthy', fallback: ['llama3.1'] },
-  { role: 'Coding agents', model: 'deepseek-coder', tier: 'Hybrid', latencyMs: 920, status: 'degraded', fallback: ['qwen2.5-coder', 'llama3.1'] },
+  { role: 'scheduler', model: 'llama3.1', tier: 'local', latencyBudgetMs: 800, fallback: ['mistral'] },
+  { role: 'email_sentinel', model: 'llama3.1', tier: 'local', latencyBudgetMs: 1200, fallback: ['mistral'] },
+  { role: 'document_assistant', model: 'mixtral', tier: 'hybrid', latencyBudgetMs: 2500, fallback: ['llama3.1'] },
+  { role: 'project_analyst', model: 'mixtral', tier: 'hybrid', latencyBudgetMs: 2500, fallback: ['llama3.1'] },
+  { role: 'coding_agent', model: 'deepseek-coder', tier: 'hybrid', latencyBudgetMs: 4000, fallback: ['qwen2.5-coder', 'llama3.1'] },
+  { role: 'planner', model: 'llama3.1', tier: 'local', latencyBudgetMs: 1500, fallback: ['mixtral'] },
 ]
 
 export const PROVIDER_SUMMARY = {

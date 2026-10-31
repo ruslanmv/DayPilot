@@ -44,6 +44,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
           const body = JSON.parse(text) as { detail?: unknown }
           if (typeof body.detail === 'string') detail = body.detail
         } catch { /* keep the status text */ }
+      } else if ((res.status >= 502 && res.status <= 504) || (res.status === 500 && !text.trim())) {
+        // Nothing behind the proxy answered: Vite's dev proxy replies with an
+        // empty text/plain 500 on ECONNREFUSED, a reverse proxy with 502/504.
+        // Distinct from a gateway that ran and failed (JSON `detail`, or
+        // Starlette's "Internal Server Error" text) — callers can say
+        // "start the API" instead of "the API crashed".
+        return { ok: false, error: 'gateway_unreachable', status: res.status }
       }
       return { ok: false, error: detail, status: res.status }
     }

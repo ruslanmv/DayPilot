@@ -18,6 +18,7 @@ from typing import Any
 from urllib.parse import urlparse, urlsplit, urlunsplit
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from daypilot_knowledge.db import ProviderConnection
@@ -32,6 +33,9 @@ from daypilot_orchestrator.integrations.credentials import credential_store
 
 LOCAL = "local"
 CLOUD = "ollabridge_cloud"
+# ``account_subject`` marker for a Cloud connection made with a pasted API key
+# (there is no account identity to show) rather than an email/password sign-in.
+API_KEY_SUBJECT = "api_key"
 
 # The canonical Cloud API (overridable). The HF Space is only a compat override.
 CLOUD_API_BASE = os.getenv("OLLABRIDGE_CLOUD_URL", CLOUD_DEFAULT_URL)
@@ -87,19 +91,40 @@ def _is_allowed_local(url: str) -> bool:
 
 # ---- persistence helpers ----------------------------------------------------
 
-def _get_or_create(session: Session, workspace_id: str, kind: str) -> ProviderConnection:
-    row = session.execute(
+def _find(session: Session, workspace_id: str, kind: str) -> ProviderConnection | None:
+    return session.execute(
         select(ProviderConnection).where(
             ProviderConnection.workspace_id == workspace_id, ProviderConnection.kind == kind
         )
     ).scalar_one_or_none()
-    if row is None:
-        row = ProviderConnection(
-            workspace_id=workspace_id, kind=kind, state="unconfigured",
-            base_url=(LOCAL_DEFAULT_URL if kind == LOCAL else CLOUD_API_BASE),
-        )
-        session.add(row)
-        session.flush()
+
+
+def _get_or_create(session: Session, workspace_id: str, kind: str) -> ProviderConnection:
+    """Fetch the connection row, creating it on first use — race-safely.
+
+    The first page load fires several requests that touch provider state at
+    once (Settings, the onboarding wizard, the assistant badge). Two of them
+    used to both see "no row", both insert, and the loser died on the unique
+    (workspace, kind) index — a 500 the UI showed as "Couldn't load providers".
+    The insert now runs in a SAVEPOINT, so a loser simply adopts the row the
+    winner created and the request-level transaction stays usable.
+    """
+    row = _find(session, workspace_id, kind)
+    if row is not None:
+        return row
+    row = ProviderConnection(
+        workspace_id=workspace_id, kind=kind, state="unconfigured",
+        base_url=(LOCAL_DEFAULT_URL if kind == LOCAL else CLOUD_API_BASE),
+    )
+    try:
+        with session.begin_nested():
+            session.add(row)
+            session.flush()
+    except IntegrityError:
+        existing = _find(session, workspace_id, kind)
+        if existing is None:  # pragma: no cover - the conflict was not ours
+            raise
+        return existing
     return row
 
 
@@ -120,16 +145,58 @@ def _public(row: ProviderConnection) -> dict[str, Any]:
         "lastTestedAt": row.last_tested_at.isoformat() if row.last_tested_at else None,
         "lastLatencyMs": row.last_latency_ms,
         "lastErrorCode": row.last_error_code,
+        "authMethod": _auth_method(row),
+    }
+
+
+def _auth_method(row: ProviderConnection) -> str | None:
+    """How the stored credential was obtained — ``api_key`` (pasted key),
+    ``account`` (Cloud email/password sign-in) or None (no credential, e.g. a
+    local-trust gateway). Never the credential itself."""
+    if not row.secret_reference:
+        return None
+    if row.kind == CLOUD and row.account_subject != API_KEY_SUBJECT:
+        return "account"
+    return "api_key"
+
+
+def _default_public(kind: str) -> dict[str, Any]:
+    """The view of a connection that has never been touched. Lets ``status`` be
+    a pure read: no row is created just to describe "unconfigured"."""
+    return {
+        "kind": kind,
+        "baseUrl": LOCAL_DEFAULT_URL if kind == LOCAL else CLOUD_API_BASE,
+        "state": "unconfigured",
+        "active": False,
+        "account": None,
+        "defaultModel": None,
+        "modelsCount": 0,
+        "lastTestedAt": None,
+        "lastLatencyMs": None,
+        "lastErrorCode": None,
+        "authMethod": None,
     }
 
 
 def status(session: Session, workspace_id: str) -> dict[str, Any]:
-    local = _get_or_create(session, workspace_id, LOCAL)
-    cloud = _get_or_create(session, workspace_id, CLOUD)
-    active = next((c.kind for c in (local, cloud) if c.active), None)
-    session.flush()
+    """Backend-owned provider state (the browser never fabricates it).
+
+    Read-only by design: a GET never inserts, so any number of simultaneous
+    status calls — the first page load makes several — cannot collide on the
+    unique (workspace, kind) index. Rows are created lazily by the mutations.
+    """
+    rows = {
+        r.kind: r
+        for r in session.execute(
+            select(ProviderConnection).where(ProviderConnection.workspace_id == workspace_id)
+        ).scalars()
+    }
+    connections = [
+        _public(rows[kind]) if kind in rows else _default_public(kind) for kind in (LOCAL, CLOUD)
+    ]
+    active = next((c["kind"] for c in connections if c["active"]), None)
     return {
-        "connections": [_public(local), _public(cloud)],
+        "connections": connections,
         "active": active,
         # Deep links to the OllaBridge Cloud web app so the UI can offer
         # "log in on the web" (Google/SSO, password reset, create account).
@@ -378,9 +445,13 @@ def local_test(session: Session, workspace_id: str, base_url: str, api_key: str 
     if not _is_allowed_local(base_url):
         return {"code": "invalid_response", "detail": "url_not_allowed"}
     row = _get_or_create(session, workspace_id, LOCAL)
+    # A re-check from Settings carries no key (the browser never holds it), so
+    # fall back to the stored one — otherwise a key-protected gateway would flip
+    # from connected to unauthorized on every re-check.
+    key = (api_key or "").strip() or _stored_secret(row, "api_key")
     row.state = "testing"
     session.flush()
-    result = _probe_local(base_url, api_key)
+    result = _probe_local(base_url, key)
     code = result["code"]
     # Persist the host that actually answered (may be a WSL/Docker host fallback),
     # so later chat calls reuse the reachable address rather than a dead loopback.
@@ -391,6 +462,8 @@ def local_test(session: Session, workspace_id: str, base_url: str, api_key: str 
     row.models_count = len(result["models"])
     if code == "connected":
         row.state = "connected"
+        if not row.default_model and result["models"]:
+            row.default_model = _preferred_default_model(result["models"], row.base_url)
     elif code == "no_models":
         row.state = "degraded"  # reachable & authorized, just no models loaded yet
     elif code in ("unauthorized", "key_required"):
@@ -411,10 +484,90 @@ def local_connect(session: Session, workspace_id: str, base_url: str, api_key: s
     if api_key:
         credential_store().put(ref, {"api_key": api_key})
         row.secret_reference = ref
-    if not row.default_model and out["models"]:
-        row.default_model = out["models"][0]
     session.flush()
     return {"code": "connected", "connection": _public(row)}
+
+
+def _stored_secret(row: ProviderConnection, field: str) -> str | None:
+    """Read one field of the connection's stored credential by reference.
+    Missing or unreadable entries just mean "no credential" — never an error
+    on a status / model-list path."""
+    if not row.secret_reference:
+        return None
+    try:
+        value = credential_store().get(row.secret_reference).get(field)
+    except Exception:  # noqa: BLE001
+        return None
+    return str(value) if value else None
+
+
+def _gateway_info(root: str, timeout: float = 4.0) -> dict[str, Any] | None:
+    """Credential-free facts from an Ollabridge gateway's public ``/health``
+    (mode, auth mode, default model). None when unreachable; never raises."""
+    import httpx
+
+    try:
+        with httpx.Client(base_url=root, timeout=timeout) as c:
+            r = c.get("/health")
+        data = r.json() if r.status_code < 500 else None
+    except (httpx.HTTPError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return {
+        "status": data.get("status"),
+        "mode": data.get("mode"),
+        "defaultModel": data.get("default_model"),
+        "authMode": data.get("auth_mode"),
+        "version": data.get("version"),
+    }
+
+
+def _preferred_default_model(models: list[str], base_url: str) -> str | None:
+    """DayPilot's default model for a freshly connected local gateway: the
+    gateway's own configured default (Ollabridge ``/health`` → ``default_model``)
+    when it is actually served, else the first model listed."""
+    if not models:
+        return None
+    info = _gateway_info(normalize_gateway_root(base_url))
+    wanted = str((info or {}).get("defaultModel") or "")
+    if wanted:
+        for m in models:
+            if m == wanted or m.startswith(wanted + ":") or m.endswith("/" + wanted):
+                return m
+    return models[0]
+
+
+def local_models(session: Session, workspace_id: str) -> dict[str, Any]:
+    """Live model list + gateway facts for the stored local connection.
+
+    Probed server-side with the stored key (never returned), so the Settings
+    default-model picker can list exactly what this gateway serves. An
+    unconfigured or offline connection answers calmly with an empty list.
+    """
+    row = _find(session, workspace_id, LOCAL)
+    if row is None or row.state not in ("connected", "degraded"):
+        return {
+            "models": [],
+            "state": row.state if row else "unconfigured",
+            "defaultModel": row.default_model if row else None,
+            "gateway": None,
+        }
+    root = normalize_gateway_root(row.base_url)
+    key = _stored_secret(row, "api_key")
+    try:
+        models = OllabridgeConnector(base_url=root, api_key=key, mode="local", timeout=8.0).list_models()
+    except Exception:  # noqa: BLE001 - reachable-but-empty is not an error here
+        models = []
+    if models and row.models_count != len(models):
+        row.models_count = len(models)
+        session.flush()
+    return {
+        "models": models,
+        "state": row.state,
+        "defaultModel": row.default_model,
+        "gateway": _gateway_info(root),
+    }
 
 
 # ---- Ollabridge Cloud (server-side auth) ------------------------------------
@@ -471,11 +624,60 @@ def cloud_login(session: Session, workspace_id: str, email: str, password: str) 
     return {"code": "connected", "connection": _public(row)}
 
 
-def _cloud_fail(session: Session, row: ProviderConnection, code: str) -> dict[str, Any]:
-    row.state = "offline"
+def cloud_connect_key(session: Session, workspace_id: str, api_key: str) -> dict[str, Any]:
+    """Connect Ollabridge Cloud with a dashboard API key (``ob_live_``/``ob_test_``).
+
+    The alternative to the email/password sign-in for people who use Google/SSO
+    on the web or simply prefer keys. The key is validated against the
+    OpenAI-compatible ``/v1/models`` (present on every Ollabridge deployment),
+    then stored by reference — it is never echoed back or logged.
+    """
+    import httpx
+
+    key = (api_key or "").strip()
+    if not key:
+        return {"code": "key_required"}
+    row = _get_or_create(session, workspace_id, CLOUD)
+    row.state = "testing"
+    session.flush()
+    try:
+        models = OllabridgeConnector(
+            base_url=CLOUD_API_BASE, api_key=key, mode="cloud", timeout=10.0
+        ).list_models()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in (401, 403):
+            return _cloud_fail(session, row, "unauthorized", state="unauthorized")
+        return _cloud_fail(session, row, "invalid_response")
+    except httpx.ConnectError:
+        return _cloud_fail(session, row, "connection_refused")
+    except httpx.TimeoutException:
+        return _cloud_fail(session, row, "timeout")
+    except Exception:  # noqa: BLE001
+        return _cloud_fail(session, row, "invalid_response")
+
+    ref = f"provider:{row.id}"
+    credential_store().put(ref, {"token": key, "auth": "api_key"})
+    row.secret_reference = ref
+    row.account_subject = API_KEY_SUBJECT
+    row.account_email = None
+    row.account_display_name = "API key"
+    row.state = "connected"
+    row.last_error_code = None
+    row.last_tested_at = utcnow()
+    row.models_count = len(models)
+    if not row.default_model and models:
+        row.default_model = models[0]
+    session.flush()
+    return {"code": "connected", "models": models, "connection": _public(row)}
+
+
+def _cloud_fail(
+    session: Session, row: ProviderConnection, code: str, state: str = "offline"
+) -> dict[str, Any]:
+    row.state = state
     row.last_error_code = code
     session.flush()
-    return {"code": code}
+    return {"code": code, "connection": _public(row)}
 
 
 def _load_cloud_models(row: ProviderConnection, token: str) -> None:
@@ -495,9 +697,9 @@ def cloud_models(session: Session, workspace_id: str) -> dict[str, Any]:
     row = _get_or_create(session, workspace_id, CLOUD)
     if row.state != "connected" or not row.secret_reference:
         return {"models": [], "state": row.state}
-    token = credential_store().get(row.secret_reference).get("token", "")
+    token = _stored_secret(row, "token") or ""
     try:
-        models = OllabridgeConnector(base_url=CLOUD_API_BASE, api_key=token).list_models()
+        models = OllabridgeConnector(base_url=CLOUD_API_BASE, api_key=token, mode="cloud").list_models()
     except Exception:  # noqa: BLE001
         models = []
     return {"models": models}
@@ -536,8 +738,10 @@ def set_active(session: Session, workspace_id: str, kind: str) -> dict[str, Any]
 
 
 def set_default_model(session: Session, workspace_id: str, kind: str, model: str) -> dict[str, Any]:
+    if kind not in (LOCAL, CLOUD):
+        raise ValueError("unknown_provider")
     row = _get_or_create(session, workspace_id, kind)
-    row.default_model = model
+    row.default_model = (model or "").strip() or None
     session.flush()
     return {"connection": _public(row)}
 

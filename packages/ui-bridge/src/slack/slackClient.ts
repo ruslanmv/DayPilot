@@ -147,7 +147,7 @@ export function explain(error: string, status?: number): string {
     return 'The Slack workspace is not enabled on this deployment.'
   }
   if (status === 409) return 'This draft has moved on — reload the conversation.'
-  if (error === 'gateway_html_response') return 'The API gateway did not answer. Check that it is running.'
+  if (error === 'gateway_html_response' || error === 'gateway_unreachable') return 'The API gateway did not answer. Check that it is running.'
   if (error === 'network_error' || error.includes('fetch')) return "Can't reach DayPilot right now."
   return error
 }
