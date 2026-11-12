@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { AppGate, SpaceBridgeShell, initTheme } from '@daypilot/ui-bridge'
+import { AppGate, HomePilotConsent, SpaceBridgeShell, initTheme, isHomePilotConsentRoute } from '@daypilot/ui-bridge'
 import './styles.css'
 
 // Apply the persisted theme (dark by default) before first paint so light
@@ -19,7 +19,10 @@ const slackEnabled = import.meta.env.VITE_DAYPILOT_SLACK_WORKSPACE_ENABLED === '
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AppGate>
-      {(user, onSignOut) => <SpaceBridgeShell emailEnabled={emailEnabled} slackEnabled={slackEnabled} onSignOut={onSignOut} user={user} />}
+      {(user, onSignOut) => isHomePilotConsentRoute(window.location.hash)
+        // Approving a HomePilot connection request (or managing connections).
+        ? <HomePilotConsent />
+        : <SpaceBridgeShell emailEnabled={emailEnabled} slackEnabled={slackEnabled} onSignOut={onSignOut} user={user} />}
     </AppGate>
   </React.StrictMode>,
 )

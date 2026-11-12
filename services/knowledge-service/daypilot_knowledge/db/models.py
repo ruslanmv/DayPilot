@@ -1510,3 +1510,71 @@ class PresentationTemplate(Base):
     data: Mapped[bytes] = mapped_column(LargeBinary)
     report_json: Mapped[dict[str, Any]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class HomePilotPairing(Base):
+    """A pending request from a HomePilot server to read this user's workday.
+
+    Device-flow style with PKCE: HomePilot creates the request with an S256
+    ``code_challenge``; the DayPilot user approves it while signed in (choosing
+    the workspace and the scopes); only the holder of the matching
+    ``code_verifier`` can then exchange it, once, for a grant token."""
+
+    __tablename__ = "homepilot_pairings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_code: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    client_name: Mapped[str] = mapped_column(String(120), default="HomePilot")
+    client_account_ref: Mapped[str] = mapped_column(String(200), default="")
+    requested_scopes: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    code_challenge: Mapped[str] = mapped_column(String(128))
+    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|approved|denied|consumed
+    approved_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    granted_scopes: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class HomePilotGrant(Base):
+    """A scoped, revocable integration identity: one HomePilot account reading
+    one DayPilot user's workspace. Only the SHA-256 of the token is stored.
+
+    Authorization is never taken from the request: every call re-derives the
+    workspace from this row and re-checks that the user is still an active
+    member of it."""
+
+    __tablename__ = "homepilot_grants"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    token_hint: Mapped[str] = mapped_column(String(12), default="")
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    scopes: Mapped[list[Any]] = mapped_column(JSON, default=list)
+    client_name: Mapped[str] = mapped_column(String(120), default="HomePilot")
+    client_account_ref: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class HomePilotProposal(Base):
+    """An action HomePilot asked DayPilot to prepare. Durable id, idempotent per
+    grant, linked to the DayPilot task + approval that governs it."""
+
+    __tablename__ = "homepilot_proposals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    grant_id: Mapped[str] = mapped_column(String(36), index=True)
+    workspace_id: Mapped[str] = mapped_column(String(36), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128))
+    origin_ref: Mapped[str] = mapped_column(String(200), default="")
+    capability: Mapped[str] = mapped_column(String(80))
+    task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    approval_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="awaiting")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, server_default=func.now())
+
+    __table_args__ = (Index("ux_homepilot_proposal_idem", "grant_id", "idempotency_key", unique=True),)
