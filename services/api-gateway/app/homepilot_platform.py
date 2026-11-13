@@ -847,10 +847,19 @@ def on_approval_decided(session: Session, approval: Approval) -> dict[str, Any] 
     if approval is None or approval.resource_type != "task" or not approval.resource_id:
         return None
     task = session.get(Task, approval.resource_id)
-    if task is None or not task.assigned_agent_link_id:
+    if task is None:
         return None
-    if (task.remote_reference or {}).get("kind") != "action.propose":
+    rr = task.remote_reference or {}
+    if rr.get("kind") != "action.propose":
         return None
+    # Persona-agent proposals carry an agent link; HomePilot-connector proposals
+    # carry their origin. Both go through the same governed lifecycle.
+    from_connector = (rr.get("origin") or {}).get("system") == "homepilot"
+    if not task.assigned_agent_link_id and not from_connector:
+        return None
+    if from_connector:
+        from . import homepilot_connector as _hc
+        _hc.register_executors()
     if approval.status == "approved":
         return hp_actions.execute_approved(session, task.workspace_id, task)
     if approval.status == "rejected":

@@ -21,6 +21,9 @@ from .models import (
     EmailItem,
     Event,
     HomePilotAgentLink,
+    HomePilotGrant,
+    HomePilotPairing,
+    HomePilotProposal,
     InboxAccount,
     IntegrationConnection,
     Job,
@@ -51,6 +54,9 @@ from .models import (
 from .session import create_engine_from_settings, get_database_url, session_scope
 
 __all__ = [
+    "HomePilotGrant",
+    "HomePilotPairing",
+    "HomePilotProposal",
     "AgentRun",
     "Approval",
     "AssistantRun",

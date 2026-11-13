@@ -1,0 +1,163 @@
+/**
+ * HomePilotConsent — where a DayPilot user approves (or declines) a HomePilot
+ * request to read their workday, and manages existing connections.
+ *
+ *   #/connect/homepilot?code=ABCD-EFGH   approve a pending request
+ *   #/connect/homepilot                  list and revoke connections
+ *
+ * The user picks the workspace — only workspaces they belong to are offered —
+ * and can untick any permission. Weather and wellness are never offered: that
+ * data stays in this browser. Talks only to DayPilot's own API, with the
+ * session cookie and CSRF header.
+ */
+import React, { useCallback, useEffect, useState } from 'react'
+import { apiBase } from '../env'
+import { csrfToken } from '../authClient'
+
+type Consent = {
+  client: string
+  accountRef: string
+  requestedScopes: { scope: string; description: string }[]
+  workspaces: { id: string; role: string }[]
+  expiresAt: string
+}
+type Grant = { id: string; client: string; workspaceId: string; scopes: string[]; createdAt: string | null; lastUsedAt: string | null }
+
+async function call<T>(path: string, init?: RequestInit): Promise<{ ok: boolean; status: number; data?: T; error?: string }> {
+  try {
+    const res = await fetch(`${apiBase()}${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(init?.method && init.method !== 'GET' ? { 'X-CSRF-Token': csrfToken() } : {}) },
+    })
+    const body = await res.json().catch(() => undefined)
+    if (!res.ok) {
+      const detail = body?.detail
+      return { ok: false, status: res.status, error: (detail && (detail.message || detail)) || `HTTP ${res.status}` }
+    }
+    return { ok: true, status: res.status, data: body as T }
+  } catch {
+    return { ok: false, status: 0, error: 'DayPilot could not be reached.' }
+  }
+}
+
+export function codeFromHash(hash: string): string {
+  const query = hash.split('?')[1] || ''
+  return (new URLSearchParams(query).get('code') || '').toUpperCase().slice(0, 16)
+}
+
+export function isHomePilotConsentRoute(hash: string): boolean {
+  return hash.startsWith('#/connect/homepilot')
+}
+
+export function HomePilotConsent() {
+  const code = codeFromHash(window.location.hash)
+  const [consent, setConsent] = useState<Consent | null>(null)
+  const [grants, setGrants] = useState<Grant[]>([])
+  const [workspace, setWorkspace] = useState('')
+  const [scopes, setScopes] = useState<string[]>([])
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const loadGrants = useCallback(async () => {
+    const r = await call<{ grants: Grant[] }>('/v1/integrations/homepilot/grants')
+    if (r.ok && r.data) setGrants(r.data.grants)
+    else if (r.status === 401) setError('Sign in to DayPilot to manage HomePilot connections.')
+  }, [])
+
+  useEffect(() => {
+    void loadGrants()
+    if (!code) return
+    void call<Consent>(`/v1/integrations/homepilot/consent/${encodeURIComponent(code)}`).then((r) => {
+      if (r.ok && r.data) {
+        setConsent(r.data)
+        setWorkspace(r.data.workspaces[0]?.id || '')
+        setScopes(r.data.requestedScopes.map((s) => s.scope))
+      } else {
+        setError(r.status === 401 ? 'Sign in to DayPilot first, then open this link again.' : String(r.error))
+      }
+    })
+  }, [code, loadGrants])
+
+  async function decide(approve: boolean) {
+    setBusy(true)
+    setError('')
+    const r = await call<{ status: string }>(`/v1/integrations/homepilot/consent/${encodeURIComponent(code)}`, {
+      method: 'POST', body: JSON.stringify({ approve, workspaceId: workspace, scopes }),
+    })
+    setBusy(false)
+    if (!r.ok) { setError(String(r.error)); return }
+    setConsent(null)
+    setMessage(approve ? 'Connected. You can return to HomePilot.' : 'Declined. Nothing was shared.')
+    void loadGrants()
+  }
+
+  async function revoke(id: string) {
+    const r = await call(`/v1/integrations/homepilot/grants/${id}`, { method: 'DELETE' })
+    if (r.ok) setGrants((g) => g.filter((x) => x.id !== id))
+    else setError(String(r.error))
+  }
+
+  const toggle = (scope: string) =>
+    setScopes((s) => (s.includes(scope) ? s.filter((x) => x !== scope) : [...s, scope]))
+
+  return (
+    <main className="dp-hpc">
+      <div className="dp-hpc__card">
+        <h1 className="dp-hpc__title">HomePilot connections</h1>
+        <p className="dp-hpc__muted">
+          HomePilot can read the parts of your workday you choose, and ask DayPilot to prepare changes that you approve here in DayPilot.
+          It can never send email, change your calendar or approve anything by itself.
+        </p>
+
+        {error ? <p role="alert" className="dp-hpc__note dp-hpc__note--error">{error}</p> : null}
+        {message ? <p role="status" className="dp-hpc__note dp-hpc__note--ok">{message}</p> : null}
+
+        {consent ? (
+          <section className="dp-hpc__section" aria-label="Connection request">
+            <h2 className="dp-hpc__h2">{consent.client} wants access</h2>
+            <p className="dp-hpc__muted">Check that this code matches the one HomePilot shows.</p>
+            <div className="dp-hpc__code">{code}</div>
+            <label className="dp-hpc__field">
+              <span>Workspace</span>
+              <select value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
+                {consent.workspaces.map((w) => <option key={w.id} value={w.id}>{w.id} ({w.role})</option>)}
+              </select>
+            </label>
+            <fieldset className="dp-hpc__scopes">
+              <legend>What HomePilot may do</legend>
+              {consent.requestedScopes.map((s) => (
+                <label key={s.scope} className="dp-hpc__scope">
+                  <input type="checkbox" checked={scopes.includes(s.scope)} onChange={() => toggle(s.scope)} />
+                  <span>{s.description}</span>
+                </label>
+              ))}
+            </fieldset>
+            <p className="dp-hpc__hint">Weather and wellness are not shared: that data stays in this browser.</p>
+            <div className="dp-hpc__actions">
+              <button type="button" className="dp-hpc__btn dp-hpc__btn--primary" disabled={busy || !workspace || scopes.length === 0}
+                onClick={() => { void decide(true) }}>Allow</button>
+              <button type="button" className="dp-hpc__btn" disabled={busy} onClick={() => { void decide(false) }}>Decline</button>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="dp-hpc__section" aria-label="Active connections">
+          <h2 className="dp-hpc__h2">Active connections</h2>
+          {grants.length === 0 ? <p className="dp-hpc__muted">None.</p> : null}
+          {grants.map((g) => (
+            <div key={g.id} className="dp-hpc__grant">
+              <span>
+                <span className="dp-hpc__grant-name">{g.client} · {g.workspaceId}</span>
+                <span className="dp-hpc__hint">{g.scopes.join(', ')}{g.lastUsedAt ? ` · last used ${new Date(g.lastUsedAt).toLocaleString()}` : ''}</span>
+              </span>
+              <button type="button" className="dp-hpc__btn" onClick={() => { void revoke(g.id) }}>Revoke</button>
+            </div>
+          ))}
+        </section>
+        <a href="#/" className="dp-hpc__back" onClick={() => { window.setTimeout(() => window.location.reload(), 0) }}>Back to DayPilot</a>
+      </div>
+    </main>
+  )
+}

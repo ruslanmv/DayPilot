@@ -31,6 +31,7 @@ from .routers import (
     email,
     events,
     homepilot,
+    homepilot_connector,
     integrations,
     integrations_mcp,
     jobs,
@@ -80,6 +81,7 @@ for _router in (
     # HomePilot first so its specific /v1/agents/profiles* routes are matched
     # before the agents router's /v1/agents/{run_id} catch-all.
     homepilot.router,
+    homepilot_connector.router,
     tasks.router,
     projects.router,
     agents.router,
