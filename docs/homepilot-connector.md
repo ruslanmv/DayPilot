@@ -140,7 +140,12 @@ none. Roll back by setting `DAYPILOT_HOMEPILOT_CONNECTOR_ENABLED=false`, or
 `alembic downgrade 0029_presentations_extensions`. Revoking every grant:
 `UPDATE homepilot_grants SET revoked_at = CURRENT_TIMESTAMP`.
 
-Not implemented yet: the operator-web consent page at `#/connect/homepilot`
-(the API is complete; the page is the next UI step), token expiry policy
+The consent page is at `#/connect/homepilot` in operator-web: approve a code
+(choose workspace and scopes), and list or revoke active connections.
+
+![Consent](assets/homepilot-connector/03-daypilot-consent.png)
+![Connections](assets/homepilot-connector/10-daypilot-connections.png)
+
+Not implemented yet: token expiry policy
 (grants do not expire unless `expires_at` is set), and per-request rate
 limiting on the pairing endpoint.

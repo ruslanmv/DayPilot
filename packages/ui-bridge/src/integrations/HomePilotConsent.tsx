@@ -103,60 +103,61 @@ export function HomePilotConsent() {
     setScopes((s) => (s.includes(scope) ? s.filter((x) => x !== scope) : [...s, scope]))
 
   return (
-    <main className="mx-auto max-w-xl px-4 py-10 text-sm" style={{ color: 'var(--dp-text, inherit)' }}>
-      <h1 className="text-xl font-semibold">HomePilot connections</h1>
-      <p className="mt-1 opacity-70">
-        HomePilot can read the parts of your workday you choose, and ask DayPilot to prepare changes that you approve here in DayPilot.
-        It can never send email, change your calendar or approve anything by itself.
-      </p>
+    <main className="dp-hpc">
+      <div className="dp-hpc__card">
+        <h1 className="dp-hpc__title">HomePilot connections</h1>
+        <p className="dp-hpc__muted">
+          HomePilot can read the parts of your workday you choose, and ask DayPilot to prepare changes that you approve here in DayPilot.
+          It can never send email, change your calendar or approve anything by itself.
+        </p>
 
-      {error ? <p role="alert" className="mt-4 rounded-lg border border-red-400/40 p-3 text-red-400">{error}</p> : null}
-      {message ? <p role="status" className="mt-4 rounded-lg border border-emerald-400/40 p-3">{message}</p> : null}
+        {error ? <p role="alert" className="dp-hpc__note dp-hpc__note--error">{error}</p> : null}
+        {message ? <p role="status" className="dp-hpc__note dp-hpc__note--ok">{message}</p> : null}
 
-      {consent ? (
-        <section className="mt-6 rounded-xl border border-white/15 p-4" aria-label="Connection request">
-          <h2 className="text-base font-semibold">{consent.client} wants access</h2>
-          <p className="mt-1 opacity-70">Request code <b>{code}</b> — check it matches the one HomePilot shows.</p>
-          <label className="mt-4 block">
-            <span className="block opacity-70">Workspace</span>
-            <select value={workspace} onChange={(e) => setWorkspace(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-white/15 bg-transparent p-2">
-              {consent.workspaces.map((w) => <option key={w.id} value={w.id}>{w.id} ({w.role})</option>)}
-            </select>
-          </label>
-          <fieldset className="mt-4">
-            <legend className="opacity-70">What HomePilot may do</legend>
-            {consent.requestedScopes.map((s) => (
-              <label key={s.scope} className="mt-2 flex items-start gap-2">
-                <input type="checkbox" checked={scopes.includes(s.scope)} onChange={() => toggle(s.scope)} />
-                <span>{s.description}</span>
-              </label>
-            ))}
-            <p className="mt-2 text-xs opacity-60">Weather and wellness are not shared: that data stays in this browser.</p>
-          </fieldset>
-          <div className="mt-5 flex gap-2">
-            <button type="button" disabled={busy || !workspace || scopes.length === 0} onClick={() => { void decide(true) }}
-              className="rounded-full bg-white px-4 py-2 font-semibold text-black disabled:opacity-40">Allow</button>
-            <button type="button" disabled={busy} onClick={() => { void decide(false) }}
-              className="rounded-full border border-white/20 px-4 py-2">Decline</button>
-          </div>
+        {consent ? (
+          <section className="dp-hpc__section" aria-label="Connection request">
+            <h2 className="dp-hpc__h2">{consent.client} wants access</h2>
+            <p className="dp-hpc__muted">Check that this code matches the one HomePilot shows.</p>
+            <div className="dp-hpc__code">{code}</div>
+            <label className="dp-hpc__field">
+              <span>Workspace</span>
+              <select value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
+                {consent.workspaces.map((w) => <option key={w.id} value={w.id}>{w.id} ({w.role})</option>)}
+              </select>
+            </label>
+            <fieldset className="dp-hpc__scopes">
+              <legend>What HomePilot may do</legend>
+              {consent.requestedScopes.map((s) => (
+                <label key={s.scope} className="dp-hpc__scope">
+                  <input type="checkbox" checked={scopes.includes(s.scope)} onChange={() => toggle(s.scope)} />
+                  <span>{s.description}</span>
+                </label>
+              ))}
+            </fieldset>
+            <p className="dp-hpc__hint">Weather and wellness are not shared: that data stays in this browser.</p>
+            <div className="dp-hpc__actions">
+              <button type="button" className="dp-hpc__btn dp-hpc__btn--primary" disabled={busy || !workspace || scopes.length === 0}
+                onClick={() => { void decide(true) }}>Allow</button>
+              <button type="button" className="dp-hpc__btn" disabled={busy} onClick={() => { void decide(false) }}>Decline</button>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="dp-hpc__section" aria-label="Active connections">
+          <h2 className="dp-hpc__h2">Active connections</h2>
+          {grants.length === 0 ? <p className="dp-hpc__muted">None.</p> : null}
+          {grants.map((g) => (
+            <div key={g.id} className="dp-hpc__grant">
+              <span>
+                <span className="dp-hpc__grant-name">{g.client} · {g.workspaceId}</span>
+                <span className="dp-hpc__hint">{g.scopes.join(', ')}{g.lastUsedAt ? ` · last used ${new Date(g.lastUsedAt).toLocaleString()}` : ''}</span>
+              </span>
+              <button type="button" className="dp-hpc__btn" onClick={() => { void revoke(g.id) }}>Revoke</button>
+            </div>
+          ))}
         </section>
-      ) : null}
-
-      <section className="mt-8" aria-label="Active connections">
-        <h2 className="text-base font-semibold">Active connections</h2>
-        {grants.length === 0 ? <p className="mt-2 opacity-60">None.</p> : null}
-        {grants.map((g) => (
-          <div key={g.id} className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-white/10 p-3">
-            <span>
-              <span className="block">{g.client} · {g.workspaceId}</span>
-              <span className="block text-xs opacity-60">{g.scopes.join(', ')}{g.lastUsedAt ? ` · last used ${new Date(g.lastUsedAt).toLocaleString()}` : ''}</span>
-            </span>
-            <button type="button" onClick={() => { void revoke(g.id) }} className="rounded-full border border-white/20 px-3 py-1">Revoke</button>
-          </div>
-        ))}
-      </section>
-      <p className="mt-8"><a href="#/" className="underline opacity-70">Back to DayPilot</a></p>
+        <a href="#/" className="dp-hpc__back" onClick={() => { window.setTimeout(() => window.location.reload(), 0) }}>Back to DayPilot</a>
+      </div>
     </main>
   )
 }
